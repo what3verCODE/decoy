@@ -1,0 +1,37 @@
+# --- local planning docs (kept out of the repo by request) ---
+/.claude
+/docs
+/CONTEXT.md
+/DESIGN.md
+/REFERENCES.md
+
+# --- dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- build output ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- test / coverage ---
+coverage/
+.rstest/
+
+# --- env & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# --- editor / OS ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp

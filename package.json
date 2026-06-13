@@ -1,0 +1,30 @@
+{
+  "name": "decoy-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A fast, contract-first HTTP mock you point a base URL at.",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11"
+  },
+  "scripts": {
+    "build": "pnpm -r --workspace-concurrency=1 run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "check": "biome check .",
+    "fix": "biome check --write .",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@changesets/cli": "^2.31.0",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "lefthook": "^2.1.9",
+    "typescript": "^6.0.3"
+  }
+}

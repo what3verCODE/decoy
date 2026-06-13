@@ -1,0 +1,15 @@
+# Git hooks managed by lefthook (https://lefthook.dev)
+# Hooks are installed on `pnpm install` (lefthook's postinstall runs `lefthook install`).
+
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,css}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}
