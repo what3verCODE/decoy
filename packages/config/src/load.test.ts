@@ -17,6 +17,16 @@ describe('loadConfig', () => {
     expect([...service.definitions.collections.keys()]).toEqual(['happy-path'])
   })
 
+  test('resolves a configured missStatus', async () => {
+    const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
+    expect(service.missStatus).toBe(503)
+  })
+
+  test('missStatus defaults to 501 when unset', async () => {
+    const service = await loadConfig({ cwd: `${fixtures}defaults` })
+    expect(service.missStatus).toBe(501)
+  })
+
   test('resolves the admin config to a separate port and normalized prefix', async () => {
     const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
 
@@ -54,6 +64,22 @@ describe('loadConfig', () => {
     expect(issues.every((i) => i.severity === 'error')).toBe(true)
     expect(issues[0]?.file).toContain('collections.yaml')
     expect(issues[0]?.line).toBeGreaterThan(0)
+  })
+
+  test('rejects an out-of-range missStatus with file:line', async () => {
+    const error = await loadConfig({
+      configPath: `${fixtures}bad-miss-status/decoy.config.yaml`,
+    }).then(
+      () => undefined,
+      (e) => e,
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    const issues = (error as ValidationError).issues
+    const missIssue = issues.find((i) => i.message.includes('missStatus'))
+    expect(missIssue?.severity).toBe('error')
+    expect(missIssue?.file).toContain('decoy.config.yaml')
+    expect(missIssue?.line).toBe(3)
   })
 
   test('warnings (overlapping routes) do not block boot', async () => {

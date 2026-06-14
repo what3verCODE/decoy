@@ -20,6 +20,8 @@ export interface ServiceConfig {
   port: number
   /** HTTP `/admin` control API exposure; defaults to on (same port, `/admin` prefix). */
   admin?: AdminConfig
+  /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
+  missStatus?: number
   /** Directory of route definition files, scanned recursively. */
   routesDir?: string
   /** Single file holding the ordered collections. */

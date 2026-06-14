@@ -53,6 +53,14 @@ export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
   port: v.number(),
   admin: v.optional(AdminSchema),
+  missStatus: v.optional(
+    v.pipe(
+      v.number(),
+      v.integer('missStatus must be an integer'),
+      v.minValue(100, 'missStatus must be a valid HTTP status code (100-599)'),
+      v.maxValue(599, 'missStatus must be a valid HTTP status code (100-599)'),
+    ),
+  ),
   routesDir: v.optional(v.string()),
   collectionsFile: v.optional(v.string()),
   defaultCollection: v.optional(v.string()),

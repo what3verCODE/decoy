@@ -37,6 +37,7 @@ const DEFAULT_ROUTES_DIR = 'mocks/routes'
 const DEFAULT_COLLECTIONS_FILE = 'mocks/collections.yaml'
 const DEFAULT_PORT = 4000
 const DEFAULT_ADMIN_PREFIX = '/admin'
+const DEFAULT_MISS_STATUS = 501
 
 /** Resolved `/admin` control API mount: enabled flag, path prefix, and optional separate port. */
 export interface ResolvedAdmin {
@@ -52,6 +53,8 @@ export interface LoadedService {
   name: string
   port: number
   defaultCollection: string
+  /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
+  missStatus: number
   definitions: Definitions
   /** Resolved `/admin` control API mount (ADR-0010). */
   admin: ResolvedAdmin
@@ -328,6 +331,7 @@ export async function loadConfig(opts?: {
     name: service.name ?? 'decoy',
     port: service.port ?? DEFAULT_PORT,
     defaultCollection,
+    missStatus: service.missStatus ?? DEFAULT_MISS_STATUS,
     definitions,
     admin: resolveAdmin(service.admin),
   }

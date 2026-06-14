@@ -10,9 +10,6 @@ import { handleAdmin, isAdminPath } from './admin'
 import { toEnvelope } from './envelope'
 import { consoleLogger, type Logger } from './logger'
 
-/** Status returned for a fail-closed miss. Made configurable in #26. */
-const MISS_STATUS = 501
-
 export interface CreateServerOptions {
   logger?: Logger
 }
@@ -94,8 +91,8 @@ function writeResponse(res: ServerResponse, response: MockResponse): void {
   res.end(JSON.stringify(body))
 }
 
-function writeMiss(res: ServerResponse, message: string): void {
-  res.statusCode = MISS_STATUS
+function writeMiss(res: ServerResponse, message: string, status: number): void {
+  res.statusCode = status
   res.setHeader('x-mock-miss', 'true')
   res.setHeader('content-type', 'application/json')
   res.end(JSON.stringify({ error: message }))
@@ -112,6 +109,7 @@ export function createServer(
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
   const control = createController(service.definitions, service.defaultCollection)
+  const missStatus = service.missStatus
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
 
@@ -135,9 +133,9 @@ export function createServer(
             `${envelope.method} ${envelope.path} → ${route}:${preset}:${variant} ${result.response.status} ${elapsed}ms`,
           )
         } else {
-          writeMiss(res, result.message)
+          writeMiss(res, result.message, missStatus)
           logger.warn(
-            `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${MISS_STATUS} ${elapsed}ms`,
+            `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${missStatus} ${elapsed}ms`,
           )
         }
       })

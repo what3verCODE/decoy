@@ -46,6 +46,7 @@ function service(): LoadedService {
     name: 'users',
     port: 0,
     defaultCollection: 'happy-path',
+    missStatus: 501,
     admin: { enabled: true, prefix: '/admin' },
     definitions: {
       routes: new Map([
@@ -101,6 +102,19 @@ describe('createServer (HTTP)', () => {
     const body = (await response.json()) as { error: string }
     expect(body.error).toContain('route "search" matched')
     expect(body.error).toContain('with-query')
+  })
+
+  test('miss status is configurable (default 501)', async () => {
+    const custom = createServer({ ...service(), missStatus: 503 }, { logger: silent })
+    const port = await custom.listen()
+    try {
+      const response = await fetch(`http://localhost:${port}/orders`)
+      expect(response.status).toBe(503)
+      expect(response.headers.get('x-mock-miss')).toBe('true')
+      expect(await response.json()).toEqual({ error: 'no route matched GET /orders' })
+    } finally {
+      await custom.close()
+    }
   })
 
   test('method mismatch is a miss', async () => {
