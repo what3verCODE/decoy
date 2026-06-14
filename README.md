@@ -33,6 +33,22 @@ packages/
   web-panel/    web panel for configuring decoy (future)
 ```
 
+## CLI
+
+```bash
+decoy start [--config <path>] [--port <port>]   # boot a server from a config (or default mocks/)
+decoy check [--config <path>]                    # validate config + mocks, exit non-zero on error
+```
+
+`decoy check` runs the full aggregate validation (schema, `route:preset:variant` cross-reference,
+`extends` resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue with its
+`file:line`. It exits non-zero on any **error** and zero otherwise (warnings are reported but do not
+fail), so it can gate a CI merge:
+
+```yaml
+- run: pnpm decoy check
+```
+
 ## Toolchain
 
 - **proto** pins the toolchain (Node 24, pnpm 11) — run `proto install`.
