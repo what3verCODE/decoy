@@ -6,6 +6,13 @@ import { run } from './cli'
 const silent: Logger = { info() {}, warn() {}, request() {} }
 const configPath = resolve(process.cwd(), 'fixtures/basic/decoy.config.ts')
 const invalidConfigPath = resolve(process.cwd(), 'fixtures/invalid/decoy.config.ts')
+const multiConfigPath = resolve(process.cwd(), 'fixtures/multi/decoy.config.ts')
+
+/** The bound port of a running server (its raw address). */
+function portOf(server: DecoyServer | undefined): number {
+  const address = server?.raw.address()
+  return typeof address === 'object' && address ? address.port : 0
+}
 
 /** Capture CLI output so a test can assert on the printed report. */
 function capture(): { out: (message: string) => void; text: () => string } {
@@ -73,6 +80,52 @@ describe('decoy start (end-to-end through the CLI)', () => {
 
   test('rejects an unknown command', async () => {
     await expect(run(['frobnicate'], { logger: silent })).rejects.toThrow(/unknown command/)
+  })
+
+  describe('multi-instance topology (array config, ADR-0006)', () => {
+    let servers: DecoyServer[] = []
+
+    afterEach(async () => {
+      await Promise.all(servers.map((s) => s.close()))
+      servers = []
+    })
+
+    test('boots one instance per entry, each serving its own routes on its own port', async () => {
+      servers = (await run(['start', '--config', multiConfigPath], {
+        logger: silent,
+      })) as DecoyServer[]
+      expect(servers).toHaveLength(2)
+
+      const [users, orders] = servers
+      const usersPort = portOf(users)
+      const ordersPort = portOf(orders)
+      expect(usersPort).not.toBe(ordersPort)
+
+      const fromUsers = await fetch(`http://localhost:${usersPort}/users/1`)
+      expect(fromUsers.status).toBe(200)
+      expect(await fromUsers.json()).toEqual({ svc: 'users' })
+
+      const fromOrders = await fetch(`http://localhost:${ordersPort}/orders/1`)
+      expect(fromOrders.status).toBe(200)
+      expect(await fromOrders.json()).toEqual({ svc: 'orders' })
+
+      // Each instance impersonates only its own upstream: the orders route is a
+      // miss (fail-closed) on the users instance.
+      const crossMiss = await fetch(`http://localhost:${usersPort}/orders/1`)
+      expect(crossMiss.status).toBe(501)
+    })
+
+    test('rejects --port with a multi-instance config (each service sets its own)', async () => {
+      await expect(
+        run(['start', '--config', multiConfigPath, '--port', '0'], { logger: silent }),
+      ).rejects.toThrow(/multi-instance/)
+    })
+
+    test('rejects --watch with a multi-instance config (dev-only, single instance)', async () => {
+      await expect(
+        run(['start', '--config', multiConfigPath, '--watch'], { logger: silent }),
+      ).rejects.toThrow(/multi-instance/)
+    })
   })
 
   test('help returns without starting a server', async () => {

@@ -8,6 +8,7 @@ export {
 export {
   type LoadedService,
   loadConfig,
+  loadConfigs,
   type ResolvedAdmin,
   type ResolvedPassthrough,
   resolveWatchPaths,

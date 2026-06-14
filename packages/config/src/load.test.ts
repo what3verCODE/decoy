@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { describe, expect, test } from '@rstest/core'
-import { loadConfig, resolveWatchPaths, validateConfig } from './load'
+import { loadConfig, loadConfigs, resolveWatchPaths, validateConfig } from './load'
 import { ValidationError } from './validate'
 
 const fixtures = `${resolve(process.cwd(), 'fixtures')}/`
@@ -139,6 +139,56 @@ describe('loadConfig', () => {
     expect([...service.definitions.routes.keys()]).toEqual(
       expect.arrayContaining(['users-me-api', 'users-by-id-api']),
     )
+  })
+})
+
+describe('loadConfigs (multi-instance topology, ADR-0006)', () => {
+  test('loads one service per array entry, each with independent definitions', async () => {
+    const services = await loadConfigs({ configPath: `${fixtures}multi/decoy.config.ts` })
+
+    const [users, orders] = services
+    expect(services.map((s) => s.name)).toEqual(['users', 'orders'])
+    expect(services.map((s) => s.port)).toEqual([4501, 4502])
+    expect([...(users?.definitions.routes.keys() ?? [])]).toEqual(['users-route'])
+    expect([...(orders?.definitions.routes.keys() ?? [])]).toEqual(['orders-route'])
+  })
+
+  test('each entry resolves its own passthrough independently', async () => {
+    const [users, orders] = await loadConfigs({ configPath: `${fixtures}multi/decoy.config.ts` })
+
+    expect(users?.passthrough).toBeUndefined()
+    expect(orders?.passthrough).toEqual({ url: 'https://orders.real' })
+  })
+
+  test('a single-object config yields a one-element array (unchanged behavior)', async () => {
+    const services = await loadConfigs({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
+
+    expect(services).toHaveLength(1)
+    expect(services[0]?.name).toBe('users')
+  })
+
+  test('rejects two services sharing a listen port with file:line', async () => {
+    const error = await loadConfigs({
+      configPath: `${fixtures}multi-dup-port/decoy.config.yaml`,
+    }).then(
+      () => undefined,
+      (e) => e,
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    const portIssue = (error as ValidationError).issues.find((i) =>
+      i.message.includes('duplicate port 4600'),
+    )
+    expect(portIssue?.severity).toBe('error')
+    expect(portIssue?.file).toContain('decoy.config.yaml')
+    expect(portIssue?.line).toBe(4)
+  })
+
+  test('decoy check surfaces the duplicate-port error too', async () => {
+    const issues = await validateConfig({
+      configPath: `${fixtures}multi-dup-port/decoy.config.yaml`,
+    })
+    expect(issues.some((i) => i.message.includes('duplicate port 4600'))).toBe(true)
   })
 })
 

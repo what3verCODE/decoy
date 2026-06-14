@@ -235,14 +235,16 @@ interface SourceLayout {
 }
 
 /**
- * Resolve the active source: a `decoy.config.*` file or the default-path source
- * (`mocks/routes` + `mocks/collections.yaml`). Panics (throws) when neither can
- * be resolved — the one fail-fast-on-first exception to aggregate validation.
+ * Resolve the active source into **one layout per service**: a `decoy.config.*`
+ * file (single object → one layout; array → one layout per entry, ADR-0006) or
+ * the default-path source (`mocks/routes` + `mocks/collections.yaml`, always a
+ * single service). Panics (throws) when neither can be resolved — the one
+ * fail-fast-on-first exception to aggregate validation.
  */
-async function resolveSourceLayout(opts?: {
+async function resolveServiceLayouts(opts?: {
   cwd?: string
   configPath?: string
-}): Promise<SourceLayout> {
+}): Promise<SourceLayout[]> {
   const cwd = opts?.cwd ?? process.cwd()
   const configFile = opts?.configPath ? resolve(cwd, opts.configPath) : findConfigFile(cwd)
 
@@ -252,20 +254,19 @@ async function resolveSourceLayout(opts?: {
     }
     const configDoc = await loadConfigDoc(configFile)
     const loaded = configDoc.data as DecoyConfig
-    const services = Array.isArray(loaded) ? loaded : [loaded]
+    const isArray = Array.isArray(loaded)
+    const services = isArray ? loaded : [loaded]
     if (services.length === 0) {
       throw new Error('decoy config defines no services')
     }
-    if (services.length > 1) {
-      throw new Error('multi-instance config (array form) is not supported yet — see #45')
-    }
-    return {
-      service: services[0] as ServiceConfig,
-      baseDir: dirname(configFile),
+    const baseDir = dirname(configFile)
+    return services.map((service, index) => ({
+      service: service as ServiceConfig,
+      baseDir,
       configFile,
       configDoc,
-      serviceBase: Array.isArray(loaded) ? [0] : [],
-    }
+      serviceBase: isArray ? [index] : [],
+    }))
   }
 
   const baseDir = cwd
@@ -277,19 +278,15 @@ async function resolveSourceLayout(opts?: {
       `no decoy config found and no default-path source present (looked for a ${CONFIG_NAMES[0]} variant, ${DEFAULT_ROUTES_DIR}/, or ${DEFAULT_COLLECTIONS_FILE} under ${cwd})`,
     )
   }
-  return { service: { port: DEFAULT_PORT }, baseDir, serviceBase: [] }
+  return [{ service: { port: DEFAULT_PORT }, baseDir, serviceBase: [] }]
 }
 
 /**
- * Resolve the source (config file or default paths) and read every route and
- * collection into line-aware sources. Panics (throws) only when no source can be
- * resolved — the one fail-fast-on-first exception to aggregate validation.
+ * Read every route and collection of a single resolved {@link SourceLayout} into
+ * line-aware sources, ready to validate and assemble.
  */
-async function collectSources(opts?: {
-  cwd?: string
-  configPath?: string
-}): Promise<CollectedSources> {
-  const { service, baseDir, configDoc, serviceBase } = await resolveSourceLayout(opts)
+async function collectSources(layout: SourceLayout): Promise<CollectedSources> {
+  const { service, baseDir, configDoc, serviceBase } = layout
 
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
   const routes = await collectRouteSources(
@@ -332,17 +329,61 @@ function assembleDefinitions(sources: CollectedSources): Definitions {
 }
 
 /**
+ * Cross-service checks that no single service's sources can see: in a
+ * multi-instance config (ADR-0006) two services must not share a listen port, or
+ * the second instance's `listen()` fails with an opaque `EADDRINUSE`. Reported at
+ * the offending service's `port` field (`file:line`) so it surfaces in `decoy
+ * check` and blocks boot. Port `0` (ephemeral — the OS assigns a free port) never
+ * collides and is exempt. Single-service sources produce no cross-service issues.
+ */
+function crossServiceIssues(layouts: SourceLayout[]): ValidationIssue[] {
+  if (layouts.length < 2) {
+    return []
+  }
+  const issues: ValidationIssue[] = []
+  const firstByPort = new Map<number, string>()
+  for (const layout of layouts) {
+    const port = layout.service.port ?? DEFAULT_PORT
+    const name = layout.service.name ?? 'decoy'
+    if (port === 0) {
+      continue
+    }
+    const prior = firstByPort.get(port)
+    if (prior !== undefined) {
+      const lineAt = layout.configDoc
+        ? bindLineAt(layout.configDoc, [...layout.serviceBase, 'port'])
+        : () => undefined
+      issues.push({
+        severity: 'error',
+        message: `duplicate port ${port}: services "${prior}" and "${name}" cannot both listen on it`,
+        file: layout.configDoc?.file ?? '<config>',
+        line: lineAt([]),
+      })
+    } else {
+      firstByPort.set(port, name)
+    }
+  }
+  return issues
+}
+
+/**
  * Run aggregate validation over the resolved source (config or default paths)
  * and return **all** issues with `file:line`, without throwing on validation
- * errors. Reused by `decoy check` (#37) and the loader. Still panics when no
- * source can be resolved (the fail-fast startup contract).
+ * errors. Each service is validated independently (so duplicate route ids across
+ * services are fine — they impersonate different upstreams) and cross-service
+ * checks (duplicate ports) are added on top. Reused by `decoy check` (#37) and
+ * the loader. Still panics when no source can be resolved (the fail-fast startup
+ * contract).
  */
 export async function validateConfig(opts?: {
   cwd?: string
   configPath?: string
 }): Promise<ValidationIssue[]> {
-  const sources = await collectSources(opts)
-  return validateSources(sources)
+  const layouts = await resolveServiceLayouts(opts)
+  const perService = await Promise.all(
+    layouts.map(async (layout) => validateSources(await collectSources(layout))),
+  )
+  return [...crossServiceIssues(layouts), ...perService.flat()]
 }
 
 /**
@@ -356,7 +397,10 @@ export async function resolveWatchPaths(opts?: {
   cwd?: string
   configPath?: string
 }): Promise<string[]> {
-  const { service, baseDir, configFile } = await resolveSourceLayout(opts)
+  // Hot reload (#44) is dev-only and single-instance; watch the first service's
+  // source. A multi-instance config never reaches here — the CLI rejects --watch.
+  const [layout] = await resolveServiceLayouts(opts)
+  const { service, baseDir, configFile } = layout as SourceLayout
 
   const routesDir = resolve(baseDir, service.routesDir ?? DEFAULT_ROUTES_DIR)
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
@@ -368,24 +412,8 @@ export async function resolveWatchPaths(opts?: {
   return [...new Set(candidates)].filter((path) => existsSync(path))
 }
 
-/**
- * Resolve and load the active service. A request without a config file falls
- * back to the default-path source (`mocks/routes` + `mocks/collections.yaml`);
- * with neither present, this panics (throws) — the fail-fast startup contract.
- * Aggregate validation runs at load: any validation **error** throws a
- * {@link ValidationError} carrying every issue (warnings do not block boot).
- */
-export async function loadConfig(opts?: {
-  cwd?: string
-  configPath?: string
-}): Promise<LoadedService> {
-  const sources = await collectSources(opts)
-
-  const issues = validateSources(sources)
-  if (hasErrors(issues)) {
-    throw new ValidationError(issues)
-  }
-
+/** Assemble one validated service's sources into a ready-to-serve {@link LoadedService}. */
+function buildLoadedService(sources: CollectedSources): LoadedService {
   const definitions = assembleDefinitions(sources)
   const { service } = sources
 
@@ -409,4 +437,48 @@ export async function loadConfig(opts?: {
     definitions,
     admin: resolveAdmin(service.admin),
   }
+}
+
+/**
+ * Resolve and load **every** service the active source defines (ADR-0006): a
+ * single-object config yields one service; an array config yields one per entry,
+ * each fully independent (own routes/collections/port/passthrough). With no
+ * config file, the default-path source (`mocks/routes` + `mocks/collections.yaml`)
+ * yields a single service; with neither present, this panics (throws) — the
+ * fail-fast startup contract. Aggregate validation (per-service + cross-service
+ * duplicate ports) runs at load: any **error** throws a {@link ValidationError}
+ * carrying every issue (warnings do not block boot).
+ */
+export async function loadConfigs(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<LoadedService[]> {
+  const layouts = await resolveServiceLayouts(opts)
+  const collected = await Promise.all(layouts.map((layout) => collectSources(layout)))
+
+  const issues = [...crossServiceIssues(layouts), ...collected.flatMap(validateSources)]
+  if (hasErrors(issues)) {
+    throw new ValidationError(issues)
+  }
+
+  return collected.map(buildLoadedService)
+}
+
+/**
+ * Resolve and load a **single** service — the common case. Backed by
+ * {@link loadConfigs}; a config that defines more than one service throws (boot
+ * the whole group with `decoy start`, which uses {@link loadConfigs}). Aggregate
+ * validation runs at load: any **error** throws a {@link ValidationError}.
+ */
+export async function loadConfig(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<LoadedService> {
+  const services = await loadConfigs(opts)
+  if (services.length > 1) {
+    throw new Error(
+      `decoy config defines ${services.length} services — boot the group with \`decoy start\` (or use loadConfigs)`,
+    )
+  }
+  return services[0] as LoadedService
 }

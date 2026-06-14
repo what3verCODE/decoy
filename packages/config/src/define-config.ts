@@ -53,7 +53,11 @@ export interface ServiceConfig {
   collections?: Collection[]
 }
 
-/** Config is a single service (object) or many services (array). Array form lands in #45. */
+/**
+ * Config is a single service (object) or many services (array). An array boots
+ * **one instance per entry** (ADR-0006), each on its own port with independent
+ * routes/collections/passthrough — `decoy start` runs them all.
+ */
 export type DecoyConfig = ServiceConfig | ServiceConfig[]
 
 /**

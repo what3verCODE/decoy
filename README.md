@@ -50,7 +50,29 @@ message) for CI.
 `collectionsFile`, and re-parses + re-validates atomically on change (an invalid edit is rejected
 and the running definitions are kept). Sessions keep their selection **by name** across a reload; a
 collection that vanished warns and falls back to `defaultCollection`. It is **off by default** —
-never enable it in CI/e2e, where frozen definitions keep runs deterministic.
+never enable it in CI/e2e, where frozen definitions keep runs deterministic. `--port` and `--watch`
+are single-instance only.
+
+### Multi-instance topology
+
+One running instance impersonates **one** upstream (ADR-0006). To mock a group of services with the
+one tool, make the config an **array** — `decoy start` boots one instance per entry, each on its own
+port with independent routes/collections/passthrough — and point each upstream's base URL at its
+instance:
+
+```ts
+// decoy.config.ts
+import { defineConfig } from '@decoy/config'
+
+export default defineConfig([
+  { name: 'users', port: 4001, routesDir: './mocks/users', defaultCollection: 'happy-path' },
+  { name: 'orders', port: 4002, routesDir: './mocks/orders', passthrough: { url: 'https://orders.real' } },
+])
+```
+
+A single-object config is unchanged (one instance). Two services sharing a port is a load-time
+error (caught by `decoy check`); use distinct ports, or `0` for an ephemeral one. Host-based
+multiplexing on one port is explicitly out of scope (v2).
 
 `decoy check` runs the full aggregate validation (schema, `route:preset:variant` cross-reference,
 `extends` resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue with its
