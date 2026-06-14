@@ -387,20 +387,50 @@ export async function validateConfig(opts?: {
 }
 
 /**
- * Resolve the filesystem paths a dev hot reload (#44) should watch for the active
- * source: the `decoy.config.*` file (when booting from one), the `routesDir`, and
- * the `collectionsFile`. Only paths that currently exist are returned — a watcher
- * can't subscribe to a missing one, and a later-created file lands under a watched
- * dir. Panics (throws) when no source resolves, like {@link loadConfig}.
+ * Resolve the filesystem paths a dev hot reload (#44) should watch for the
+ * **first** service the active source defines: the `decoy.config.*` file (when
+ * booting from one), the `routesDir`, and the `collectionsFile`. Only paths that
+ * currently exist are returned — a watcher can't subscribe to a missing one, and a
+ * later-created file lands under a watched dir. Panics (throws) when no source
+ * resolves, like {@link loadConfig}. For a multi-instance config (ADR-0006), use
+ * {@link resolveAllWatchPaths} to watch every instance.
  */
 export async function resolveWatchPaths(opts?: {
   cwd?: string
   configPath?: string
 }): Promise<string[]> {
-  // Hot reload (#44) is dev-only and single-instance; watch the first service's
-  // source. A multi-instance config never reaches here — the CLI rejects --watch.
+  // Single-instance hot reload (#44): watch the first service's source. A
+  // multi-instance config watches each instance separately via
+  // {@link resolveAllWatchPaths} (#51).
   const [layout] = await resolveServiceLayouts(opts)
-  const { service, baseDir, configFile } = layout as SourceLayout
+  return serviceWatchPaths(layout as SourceLayout)
+}
+
+/**
+ * Resolve the watch paths for **every** service the active source defines (#51):
+ * one path set per instance, aligned one-to-one with {@link loadConfigs} order. A
+ * single-object config yields a one-element array; an array config (ADR-0006)
+ * yields one set per entry, each watching that instance's own `routesDir` and
+ * `collectionsFile` plus the shared config file — so editing one service's mocks
+ * re-loads only that instance, while a config-file edit re-loads them all. Panics
+ * (throws) when no source resolves, like {@link resolveWatchPaths}.
+ */
+export async function resolveAllWatchPaths(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<string[][]> {
+  const layouts = await resolveServiceLayouts(opts)
+  return layouts.map(serviceWatchPaths)
+}
+
+/**
+ * The existing filesystem paths to watch for one service: the `decoy.config.*`
+ * file (when booting from one), its `routesDir`, and its `collectionsFile`. Only
+ * paths that currently exist are returned — a watcher can't subscribe to a missing
+ * one, and a later-created file lands under a watched dir.
+ */
+function serviceWatchPaths(layout: SourceLayout): string[] {
+  const { service, baseDir, configFile } = layout
 
   const routesDir = resolve(baseDir, service.routesDir ?? DEFAULT_ROUTES_DIR)
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)

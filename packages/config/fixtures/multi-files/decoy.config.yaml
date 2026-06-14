@@ -1,0 +1,11 @@
+# Multi-instance config (array, ADR-0006) backed by per-service file sources, so
+# each instance resolves its OWN routesDir + collectionsFile — used to prove hot
+# reload watches each instance's source independently (#51).
+- name: users
+  port: 4701
+  routesDir: users/routes
+  collectionsFile: users/collections.yaml
+- name: orders
+  port: 4702
+  routesDir: orders/routes
+  collectionsFile: orders/collections.yaml

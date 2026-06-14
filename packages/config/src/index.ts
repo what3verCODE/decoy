@@ -11,6 +11,7 @@ export {
   loadConfigs,
   type ResolvedAdmin,
   type ResolvedPassthrough,
+  resolveAllWatchPaths,
   resolveWatchPaths,
   validateConfig,
 } from './load'

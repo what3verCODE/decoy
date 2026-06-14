@@ -4,10 +4,17 @@ import {
   hasErrors,
   loadConfig,
   loadConfigs,
+  resolveAllWatchPaths,
   resolveWatchPaths,
   validateConfig,
 } from '@decoy/config'
-import { createLogger, createServer, type DecoyServer, type Logger } from '@decoy/server'
+import {
+  type CreateServerOptions,
+  createLogger,
+  createServer,
+  type DecoyServer,
+  type Logger,
+} from '@decoy/server'
 
 export interface RunOptions {
   logger?: Logger
@@ -33,8 +40,9 @@ Options:
   --config <path>   Path to a decoy.config.{ts,js,mjs,json,yaml} file.
   --port <port>     Override the configured port (start only; single-instance only).
   --json            Emit machine-readable JSON log lines for CI (start only).
-  --watch           Dev-only hot reload: re-load on config/mocks changes (start only;
-                    single-instance only). Off by default; never enable in CI/e2e.`
+  --watch           Dev-only hot reload: re-load on config/mocks changes (start only).
+                    Works with an array config too — each instance watches its own
+                    source. Off by default; never enable in CI/e2e.`
 
 /**
  * Run the CLI. `start` resolves with the running server(s) so tests can drive and
@@ -101,24 +109,44 @@ export async function run(
     ;(services[0] as (typeof services)[number]).port = port
   }
 
-  if (values.watch && multi) {
-    throw new Error(
-      '--watch is dev-only and single-instance: not supported with a multi-instance config',
-    )
-  }
-
   const logger = options.logger ?? createLogger({ json: Boolean(values.json) })
-  // Dev-only hot reload (#44): watch the resolved source and re-load via the same
-  // loadConfig path (aggregate-validated). Off unless --watch — frozen in CI/e2e.
-  // Single-instance only (rejected above for multi), so loadConfig is correct here.
-  const watch = values.watch
-    ? {
+
+  // Dev-only hot reload (#44, #51): watch each instance's resolved source and
+  // re-load just that instance on change (aggregate-validated). Off unless
+  // --watch — frozen in CI/e2e. A single-instance config re-loads via loadConfig;
+  // a multi-instance config (ADR-0006) watches each instance's own source and
+  // re-loads it by index via loadConfigs — so editing one service's mocks re-loads
+  // only that instance, while a shared-config edit re-validates the whole config
+  // and re-loads every instance (invalid edit → each keeps current, warns).
+  let watchFor: (index: number) => CreateServerOptions['watch'] = () => undefined
+  if (values.watch) {
+    if (multi) {
+      const allPaths = await resolveAllWatchPaths({ configPath: values.config })
+      watchFor = (index) => ({
+        paths: allPaths[index] ?? [],
+        reload: async () => {
+          const reloaded = await loadConfigs({ configPath: values.config })
+          const next = reloaded[index]
+          if (next === undefined) {
+            throw new Error(
+              `instance #${index} no longer exists — restart to change the instance count`,
+            )
+          }
+          return next
+        },
+      })
+    } else {
+      const watch = {
         paths: await resolveWatchPaths({ configPath: values.config }),
         reload: () => loadConfig({ configPath: values.config }),
       }
-    : undefined
+      watchFor = () => watch
+    }
+  }
 
-  const servers = services.map((service) => createServer(service, { logger, watch }))
+  const servers = services.map((service, index) =>
+    createServer(service, { logger, watch: watchFor(index) }),
+  )
   await Promise.all(servers.map((server) => server.listen()))
   return servers.length === 1 ? (servers[0] as DecoyServer) : servers
 }

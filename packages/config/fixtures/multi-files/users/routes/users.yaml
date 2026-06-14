@@ -1,0 +1,10 @@
+id: users-route
+method: GET
+path: /users/{id}
+presets:
+  default: {}
+variants:
+  success:
+    status: 200
+    body:
+      svc: users

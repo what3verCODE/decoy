@@ -1,6 +1,12 @@
 import { resolve } from 'node:path'
 import { describe, expect, test } from '@rstest/core'
-import { loadConfig, loadConfigs, resolveWatchPaths, validateConfig } from './load'
+import {
+  loadConfig,
+  loadConfigs,
+  resolveAllWatchPaths,
+  resolveWatchPaths,
+  validateConfig,
+} from './load'
 import { ValidationError } from './validate'
 
 const fixtures = `${resolve(process.cwd(), 'fixtures')}/`
@@ -231,5 +237,41 @@ describe('resolveWatchPaths', () => {
     await expect(resolveWatchPaths({ cwd: `${fixtures}does-not-exist` })).rejects.toThrow(
       /no decoy config found/,
     )
+  })
+})
+
+describe('resolveAllWatchPaths (per-instance hot reload, #51)', () => {
+  test('returns one path set per service, each watching its OWN routesDir + the shared config', async () => {
+    const base = `${fixtures}multi-files`
+    const all = await resolveAllWatchPaths({ configPath: `${base}/decoy.config.yaml` })
+
+    expect(all).toEqual([
+      [
+        resolve(base, 'decoy.config.yaml'),
+        resolve(base, 'users/routes'),
+        resolve(base, 'users/collections.yaml'),
+      ],
+      [
+        resolve(base, 'decoy.config.yaml'),
+        resolve(base, 'orders/routes'),
+        resolve(base, 'orders/collections.yaml'),
+      ],
+    ])
+  })
+
+  test('aligns one-to-one with loadConfigs order', async () => {
+    const base = `${fixtures}multi-files`
+    const all = await resolveAllWatchPaths({ configPath: `${base}/decoy.config.yaml` })
+    const services = await loadConfigs({ configPath: `${base}/decoy.config.yaml` })
+
+    expect(all).toHaveLength(services.length)
+  })
+
+  test('a single-object config yields one set equal to resolveWatchPaths', async () => {
+    const base = `${fixtures}yaml-config`
+    const all = await resolveAllWatchPaths({ configPath: `${base}/decoy.config.yaml` })
+    const single = await resolveWatchPaths({ configPath: `${base}/decoy.config.yaml` })
+
+    expect(all).toEqual([single])
   })
 })

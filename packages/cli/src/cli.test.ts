@@ -121,10 +121,22 @@ describe('decoy start (end-to-end through the CLI)', () => {
       ).rejects.toThrow(/multi-instance/)
     })
 
-    test('rejects --watch with a multi-instance config (dev-only, single instance)', async () => {
-      await expect(
-        run(['start', '--config', multiConfigPath, '--watch'], { logger: silent }),
-      ).rejects.toThrow(/multi-instance/)
+    test('--watch installs per-instance hot reload and each instance still serves its routes (#51)', async () => {
+      servers = (await run(['start', '--config', multiConfigPath, '--watch'], {
+        logger: silent,
+      })) as DecoyServer[]
+      expect(servers).toHaveLength(2)
+
+      const [users, orders] = servers
+      // Both instances boot with their own watcher installed (resolveAllWatchPaths
+      // per service); --watch with a multi-instance config is no longer rejected.
+      const fromUsers = await fetch(`http://localhost:${portOf(users)}/users/1`)
+      expect(fromUsers.status).toBe(200)
+      expect(await fromUsers.json()).toEqual({ svc: 'users' })
+
+      const fromOrders = await fetch(`http://localhost:${portOf(orders)}/orders/1`)
+      expect(fromOrders.status).toBe(200)
+      expect(await fromOrders.json()).toEqual({ svc: 'orders' })
     })
   })
 

@@ -50,8 +50,10 @@ message) for CI.
 `collectionsFile`, and re-parses + re-validates atomically on change (an invalid edit is rejected
 and the running definitions are kept). Sessions keep their selection **by name** across a reload; a
 collection that vanished warns and falls back to `defaultCollection`. It is **off by default** —
-never enable it in CI/e2e, where frozen definitions keep runs deterministic. `--port` and `--watch`
-are single-instance only.
+never enable it in CI/e2e, where frozen definitions keep runs deterministic. With an array config
+each instance watches its own source: editing one service's mocks re-loads only that instance, while
+editing the shared config file re-validates and re-loads every instance. `--port` is single-instance
+only (each service declares its own port).
 
 ### Multi-instance topology
 
