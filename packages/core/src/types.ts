@@ -27,9 +27,11 @@ export interface Variant {
 }
 
 /**
- * Additional request-match conditions layered on a route. `{}` is the catch-all.
- * The tracer-bullet engine supports only the catch-all; the literal/JMESPath
- * matchers are implemented in later slices (#29/#30/#31).
+ * Additional request-match conditions layered on a route, evaluated against the
+ * request envelope and ANDed together. `query`/`headers` match as a subset
+ * (request must *contain* the pairs; extras ignored); `body` matches deep-partial
+ * (nested subset). `{}` is the catch-all (no conditions → always matches). The
+ * JMESPath `match:` predicate is ANDed with the literal matchers in #31.
  */
 export interface Preset {
   query?: Record<string, string>

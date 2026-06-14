@@ -259,3 +259,146 @@ describe('createEngine().match — per-route overrides', () => {
     expect(result.response.status).toBe(200)
   })
 })
+
+describe('createEngine().match — literal preset matching', () => {
+  const route: Route = {
+    id: 'users',
+    method: 'GET',
+    path: '/users',
+    presets: {
+      'with-query': { query: { page: '2' } },
+      'with-headers': { headers: { 'x-tenant': 'acme' } },
+      'with-body': { body: { filter: { active: true } } },
+      default: {},
+    },
+    variants: {
+      q: { status: 200, body: { matched: 'query' } },
+      h: { status: 200, body: { matched: 'headers' } },
+      b: { status: 200, body: { matched: 'body' } },
+      d: { status: 200, body: { matched: 'default' } },
+    },
+  }
+  const collection: Collection = {
+    id: 'c',
+    routes: ['users:with-query:q', 'users:with-headers:h', 'users:with-body:b', 'users:default:d'],
+  }
+  const sel: Selection = { collection: 'c' }
+  const engine = createEngine(definitions([route], [collection]))
+
+  function matched(req: Partial<RequestEnvelope> & Pick<RequestEnvelope, 'method' | 'path'>) {
+    const result = engine.match(envelope(req), sel)
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') throw new Error('expected match')
+    return result
+  }
+
+  test('query preset matches as a subset — extras ignored', () => {
+    const result = matched({ method: 'GET', path: '/users', query: { page: '2', sort: 'asc' } })
+    expect(result.address.preset).toBe('with-query')
+  })
+
+  test('a query value mismatch falls through to the catch-all', () => {
+    const result = matched({ method: 'GET', path: '/users', query: { page: '1' } })
+    expect(result.address.preset).toBe('default')
+  })
+
+  test('a query preset matches when the request repeats the key (array value)', () => {
+    const result = matched({ method: 'GET', path: '/users', query: { page: ['1', '2'] } })
+    expect(result.address.preset).toBe('with-query')
+  })
+
+  test('header preset matches case-insensitively on the name', () => {
+    const result = matched({ method: 'GET', path: '/users', headers: { 'X-Tenant': 'acme' } })
+    expect(result.address.preset).toBe('with-headers')
+  })
+
+  test('a header value mismatch falls through to the catch-all', () => {
+    const result = matched({ method: 'GET', path: '/users', headers: { 'x-tenant': 'globex' } })
+    expect(result.address.preset).toBe('default')
+  })
+
+  test('body preset matches deep-partial — nested + sibling keys ignored', () => {
+    const result = matched({
+      method: 'GET',
+      path: '/users',
+      body: { filter: { active: true, q: 'ada' }, page: 3 },
+    })
+    expect(result.address.preset).toBe('with-body')
+  })
+
+  test('a nested body value mismatch falls through to the catch-all', () => {
+    const result = matched({
+      method: 'GET',
+      path: '/users',
+      body: { filter: { active: false } },
+    })
+    expect(result.address.preset).toBe('default')
+  })
+
+  test('the catch-all preset matches when no conditions apply', () => {
+    const result = matched({ method: 'GET', path: '/users' })
+    expect(result.address.preset).toBe('default')
+  })
+
+  test('first matching preset wins in collection-array order', () => {
+    // satisfies both with-query and with-headers; with-query is listed first
+    const result = matched({
+      method: 'GET',
+      path: '/users',
+      query: { page: '2' },
+      headers: { 'x-tenant': 'acme' },
+    })
+    expect(result.address.preset).toBe('with-query')
+  })
+
+  test('body deep-partial matches array elements by index, ignoring extras', () => {
+    const arrRoute: Route = {
+      id: 'orders',
+      method: 'POST',
+      path: '/orders',
+      presets: { 'first-active': { body: { items: [{ status: 'active' }] } }, default: {} },
+      variants: { ok: { status: 200, body: { ok: true } }, d: { status: 200, body: {} } },
+    }
+    const arrCol: Collection = {
+      id: 'a',
+      routes: ['orders:first-active:ok', 'orders:default:d'],
+    }
+    const arrEngine = createEngine(definitions([arrRoute], [arrCol]))
+    const hit = arrEngine.match(
+      envelope({
+        method: 'POST',
+        path: '/orders',
+        body: { items: [{ status: 'active', id: 1 }, { status: 'archived' }] },
+      }),
+      { collection: 'a' },
+    )
+    expect(hit.type).toBe('matched')
+    if (hit.type !== 'matched') return
+    expect(hit.address.preset).toBe('first-active')
+
+    const miss = arrEngine.match(
+      envelope({ method: 'POST', path: '/orders', body: { items: [{ status: 'archived' }] } }),
+      { collection: 'a' },
+    )
+    expect(miss.type).toBe('matched')
+    if (miss.type !== 'matched') return
+    expect(miss.address.preset).toBe('default')
+  })
+
+  test('a preset carrying a JMESPath match: predicate is not evaluated yet (deferred to #31)', () => {
+    const matchRoute: Route = {
+      id: 'jm',
+      method: 'GET',
+      path: '/jm',
+      presets: { heavy: { match: 'length(body.items) > `0`' } },
+      variants: { ok: { status: 200, body: {} } },
+    }
+    const matchCol: Collection = { id: 'm', routes: ['jm:heavy:ok'] }
+    const matchEngine = createEngine(definitions([matchRoute], [matchCol]))
+    const result = matchEngine.match(
+      envelope({ method: 'GET', path: '/jm', body: { items: [1] } }),
+      { collection: 'm' },
+    )
+    expect(result.type).toBe('miss')
+  })
+})

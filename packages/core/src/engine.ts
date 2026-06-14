@@ -125,16 +125,85 @@ function mergeEntries(parent: string[], child: string[]): string[] {
 }
 
 /**
- * The tracer-bullet engine supports the catch-all preset (`{}`) only. Presets
- * carrying literal/JMESPath conditions are not matched yet — that is #29/#30/#31.
+ * Literal `query` match: subset semantics — the request must *contain* every
+ * specified key/value pair; extras are ignored. A repeated query key arrives as
+ * an array, in which case the request matches if the array contains the value.
  */
-function presetMatches(preset: Preset, _request: RequestEnvelope): boolean {
-  const hasConditions =
-    preset.query !== undefined ||
-    preset.headers !== undefined ||
-    preset.body !== undefined ||
-    preset.match !== undefined
-  return !hasConditions
+function queryMatches(pattern: Record<string, string>, query: RequestEnvelope['query']): boolean {
+  for (const [key, expected] of Object.entries(pattern)) {
+    const actual = query[key]
+    if (actual === undefined) {
+      return false
+    }
+    if (Array.isArray(actual) ? !actual.includes(expected) : actual !== expected) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Literal `headers` match: subset semantics with case-insensitive header *names*
+ * (HTTP headers are case-insensitive) and exact-equality values.
+ */
+function headersMatch(pattern: Record<string, string>, headers: Record<string, string>): boolean {
+  const byLowerName = new Map<string, string>()
+  for (const [name, value] of Object.entries(headers)) {
+    byLowerName.set(name.toLowerCase(), value)
+  }
+  for (const [name, expected] of Object.entries(pattern)) {
+    if (byLowerName.get(name.toLowerCase()) !== expected) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Deep-partial (nested subset) match: the request value must *contain* the
+ * pattern. Objects match when every pattern key is present and deep-partial
+ * matches (sibling keys ignored); arrays match element-wise by index (extra
+ * trailing elements ignored); every other value matches by strict equality.
+ */
+function deepPartialMatch(pattern: unknown, value: unknown): boolean {
+  if (Array.isArray(pattern)) {
+    return (
+      Array.isArray(value) && pattern.every((item, index) => deepPartialMatch(item, value[index]))
+    )
+  }
+  if (pattern !== null && typeof pattern === 'object') {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return false
+    }
+    const target = value as Record<string, unknown>
+    return Object.entries(pattern as Record<string, unknown>).every(
+      ([key, expected]) => Object.hasOwn(target, key) && deepPartialMatch(expected, target[key]),
+    )
+  }
+  return pattern === value
+}
+
+/**
+ * A preset matches when *all* of its literal conditions hold against the request
+ * envelope: `query`/`headers` as subset, `body` as deep-partial. A catch-all
+ * (`{}`) has no conditions and always matches. JMESPath `match:` predicates are
+ * evaluated and ANDed in #31; until then a preset carrying one cannot be
+ * evaluated and fails closed (never matches).
+ */
+function presetMatches(preset: Preset, request: RequestEnvelope): boolean {
+  if (preset.match !== undefined) {
+    return false
+  }
+  if (preset.query !== undefined && !queryMatches(preset.query, request.query)) {
+    return false
+  }
+  if (preset.headers !== undefined && !headersMatch(preset.headers, request.headers)) {
+    return false
+  }
+  if (preset.body !== undefined && !deepPartialMatch(preset.body, request.body)) {
+    return false
+  }
+  return true
 }
 
 /**
