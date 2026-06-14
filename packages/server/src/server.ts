@@ -1,6 +1,6 @@
 import { createServer as createHttpServer, type Server, type ServerResponse } from 'node:http'
 import type { LoadedService } from '@decoy/config'
-import { createEngine, type MockResponse, type Selection } from '@decoy/core'
+import { type Controller, createController, type MockResponse } from '@decoy/core'
 import { toEnvelope } from './envelope'
 import { consoleLogger, type Logger } from './logger'
 
@@ -16,6 +16,8 @@ export interface DecoyServer {
   listen(): Promise<number>
   /** Stop listening. */
   close(): Promise<void>
+  /** The canonical JS control API driving this server in-process (`/admin` mirrors it — #28). */
+  readonly control: Controller
   /** The underlying Node server. */
   readonly raw: Server
 }
@@ -63,14 +65,13 @@ export function createServer(
   options: CreateServerOptions = {},
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
-  const engine = createEngine(service.definitions)
-  const selection: Selection = { collection: service.defaultCollection }
+  const control = createController(service.definitions, service.defaultCollection)
 
   const raw = createHttpServer((req, res) => {
     const start = process.hrtime.bigint()
     void toEnvelope(req)
       .then((envelope) => {
-        const result = engine.match(envelope, selection)
+        const result = control.match(envelope)
         const latencyMs = Number(process.hrtime.bigint() - start) / 1e6
         const elapsed = latencyMs.toFixed(1)
 
@@ -97,6 +98,7 @@ export function createServer(
 
   return {
     raw,
+    control,
     listen() {
       return new Promise<number>((resolvePort, reject) => {
         const onError = (error: Error) => reject(error)

@@ -11,12 +11,20 @@ const usersRoute: Route = {
   method: 'GET',
   path: '/users/{id}',
   presets: { default: {} },
-  variants: { success: { status: 200, body: { id: 42, name: 'Ada' } } },
+  variants: {
+    success: { status: 200, body: { id: 42, name: 'Ada' } },
+    error: { status: 500, body: { error: 'boom' } },
+  },
 }
 
 const happyPath: Collection = {
   id: 'happy-path',
   routes: ['users-by-id:default:success'],
+}
+
+const errorState: Collection = {
+  id: 'error-state',
+  routes: ['users-by-id:default:error'],
 }
 
 function service(): LoadedService {
@@ -26,7 +34,10 @@ function service(): LoadedService {
     defaultCollection: 'happy-path',
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),
-      collections: new Map([[happyPath.id, happyPath]]),
+      collections: new Map([
+        [happyPath.id, happyPath],
+        [errorState.id, errorState],
+      ]),
     },
   }
 }
@@ -65,5 +76,18 @@ describe('createServer (HTTP)', () => {
     const response = await fetch(`${base}/users/42`, { method: 'POST' })
     expect(response.status).toBe(501)
     expect(response.headers.get('x-mock-miss')).toBe('true')
+  })
+
+  test('in-process setCollection changes the next response atomically', async () => {
+    expect((await fetch(`${base}/users/42`)).status).toBe(200)
+
+    server.control.setCollection('error-state')
+    const switched = await fetch(`${base}/users/42`)
+    expect(switched.status).toBe(500)
+    expect(await switched.json()).toEqual({ error: 'boom' })
+
+    server.control.reset()
+    server.control.useRoute('users-by-id', 'default', 'error')
+    expect((await fetch(`${base}/users/42`)).status).toBe(500)
   })
 })

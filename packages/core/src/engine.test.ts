@@ -118,3 +118,144 @@ describe('createEngine().match', () => {
     expect(result.type).toBe('miss')
   })
 })
+
+describe('createEngine().match — collection extends', () => {
+  const route: Route = {
+    id: 'users-list-api',
+    method: 'GET',
+    path: '/users/{id}',
+    presets: { default: {} },
+    variants: {
+      success: { status: 200, body: { id: 42 } },
+      error: { status: 500, body: { error: 'boom' } },
+    },
+  }
+  const orders: Route = {
+    id: 'orders-api',
+    method: 'GET',
+    path: '/orders',
+    presets: { default: {} },
+    variants: { success: { status: 200, body: [{ id: 1 }] } },
+  }
+
+  test('a child collection inherits its parent entries', () => {
+    const base: Collection = { id: 'base', routes: ['users-list-api:default:success'] }
+    const child: Collection = {
+      id: 'child',
+      extends: 'base',
+      routes: ['orders-api:default:success'],
+    }
+    const engine = createEngine(definitions([route, orders], [base, child]))
+
+    const inherited = engine.match(envelope({ method: 'GET', path: '/users/42' }), {
+      collection: 'child',
+    })
+    expect(inherited.type).toBe('matched')
+    if (inherited.type !== 'matched') return
+    expect(inherited.response.body).toEqual({ id: 42 })
+
+    const own = engine.match(envelope({ method: 'GET', path: '/orders' }), { collection: 'child' })
+    expect(own.type).toBe('matched')
+  })
+
+  test('a child overrides an inherited entry on the same route:preset slot', () => {
+    const base: Collection = { id: 'base', routes: ['users-list-api:default:success'] }
+    const child: Collection = {
+      id: 'child',
+      extends: 'base',
+      routes: ['users-list-api:default:error'],
+    }
+    const engine = createEngine(definitions([route], [base, child]))
+
+    const result = engine.match(envelope({ method: 'GET', path: '/users/42' }), {
+      collection: 'child',
+    })
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.response.status).toBe(500)
+    expect(result.address.variant).toBe('error')
+  })
+
+  test('extends chains resolve transitively', () => {
+    const a: Collection = { id: 'a', routes: ['users-list-api:default:success'] }
+    const b: Collection = { id: 'b', extends: 'a', routes: ['orders-api:default:success'] }
+    const c: Collection = { id: 'c', extends: 'b', routes: ['users-list-api:default:error'] }
+    const engine = createEngine(definitions([route, orders], [a, b, c]))
+
+    const users = engine.match(envelope({ method: 'GET', path: '/users/42' }), { collection: 'c' })
+    expect(users.type).toBe('matched')
+    if (users.type !== 'matched') return
+    expect(users.response.status).toBe(500)
+
+    const ordersResult = engine.match(envelope({ method: 'GET', path: '/orders' }), {
+      collection: 'c',
+    })
+    expect(ordersResult.type).toBe('matched')
+  })
+
+  test('a cyclic extends chain throws at engine creation', () => {
+    const a: Collection = { id: 'a', extends: 'b', routes: [] }
+    const b: Collection = { id: 'b', extends: 'a', routes: [] }
+    expect(() => createEngine(definitions([route], [a, b]))).toThrow(/cyclic/)
+  })
+
+  test('extending an undefined collection throws at engine creation', () => {
+    const child: Collection = { id: 'child', extends: 'ghost', routes: [] }
+    expect(() => createEngine(definitions([route], [child]))).toThrow(/not defined/)
+  })
+})
+
+describe('createEngine().match — per-route overrides', () => {
+  const route: Route = {
+    id: 'users-list-api',
+    method: 'GET',
+    path: '/users/{id}',
+    presets: { default: {} },
+    variants: {
+      success: { status: 200, body: { id: 42 } },
+      error: { status: 500, body: { error: 'boom' } },
+    },
+  }
+  const orders: Route = {
+    id: 'orders-api',
+    method: 'GET',
+    path: '/orders',
+    presets: { default: {} },
+    variants: { success: { status: 200, body: [{ id: 1 }] } },
+  }
+  const happy: Collection = { id: 'happy', routes: ['users-list-api:default:success'] }
+
+  test('an override swaps the variant served for an active slot', () => {
+    const engine = createEngine(definitions([route], [happy]))
+    const result = engine.match(envelope({ method: 'GET', path: '/users/42' }), {
+      collection: 'happy',
+      overrides: [{ route: 'users-list-api', preset: 'default', variant: 'error' }],
+    })
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.response.status).toBe(500)
+    expect(result.address.variant).toBe('error')
+  })
+
+  test('an override activates a slot the collection does not include', () => {
+    const engine = createEngine(definitions([route, orders], [happy]))
+    const result = engine.match(envelope({ method: 'GET', path: '/orders' }), {
+      collection: 'happy',
+      overrides: [{ route: 'orders-api', preset: 'default', variant: 'success' }],
+    })
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.address.route).toBe('orders-api')
+  })
+
+  test('no overrides leaves the collection baseline untouched', () => {
+    const engine = createEngine(definitions([route], [happy]))
+    const result = engine.match(envelope({ method: 'GET', path: '/users/42' }), {
+      collection: 'happy',
+      overrides: [],
+    })
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.response.status).toBe(200)
+  })
+})

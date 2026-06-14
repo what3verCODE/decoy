@@ -60,12 +60,22 @@ export interface Definitions {
   collections: Map<string, Collection>
 }
 
+/** A single-route override within a selection: pin a `route:preset` slot to a variant. */
+export interface RouteOverride {
+  route: string
+  preset: string
+  variant: string
+}
+
 /**
- * The only mutable state: the active collection (by name) plus, later, per-route
- * overrides (#27). Held per session (#39).
+ * The only mutable state: the active collection (by name) plus per-route
+ * overrides. Held per session (#39). An override pins the variant served for a
+ * `route:preset` slot — replacing the collection's variant for an active slot,
+ * or activating the slot if the collection does not include it.
  */
 export interface Selection {
   collection: string
+  overrides?: RouteOverride[]
 }
 
 /** A transport-agnostic response produced by the engine. */
