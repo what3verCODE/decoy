@@ -120,6 +120,34 @@ importers:
         specifier: ^24.0.0
         version: 24.13.2
 
+  examples/playwright-server:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@decoy/control':
+        specifier: workspace:*
+        version: link:../../packages/control
+    devDependencies:
+      '@decoy/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@decoy/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@playwright/test':
+        specifier: ^1.60.0
+        version: 1.60.0
+      '@rsbuild/core':
+        specifier: ^2.0.0
+        version: 2.0.12
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+
   examples/standalone-server:
     dependencies:
       '@decoy/config':
