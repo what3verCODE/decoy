@@ -13,7 +13,7 @@
     "build": "pnpm -r --workspace-concurrency=1 run build",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
-    "check": "biome check .",
+    "check": "biome check . && pnpm --filter @decoy/core-purity run guard",
     "fix": "biome check --write .",
     "changeset": "changeset",
     "version-packages": "changeset version",

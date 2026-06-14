@@ -105,6 +105,22 @@ importers:
         specifier: ^24.0.0
         version: 24.13.2
 
+  tooling/core-purity:
+    dependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+    devDependencies:
+      '@rstest/core':
+        specifier: ^0.10.4
+        version: 0.10.4
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+
 packages:
 
   '@ast-grep/napi-darwin-arm64@0.37.0':

@@ -58,9 +58,20 @@ fail), so it can gate a CI merge:
 ```bash
 proto install          # install pinned node + pnpm
 pnpm install           # install workspace deps
-pnpm check             # lint + format check (biome)
+pnpm check             # lint + format check (biome) + core purity guard
 pnpm build             # build all packages
 pnpm test              # run all package tests
+```
+
+### Core purity guard
+
+`@decoy/core` is the keystone: a pure, zero-IO engine (ADR-0002 / ADR-0014). A guard
+(`tooling/core-purity`) enforces this — it scans `packages/core/src` and **fails if any source
+imports a Node built-in** (`node:fs`, `http`, `crypto`, …), the IO surface a pure engine must never
+reach. It runs as part of `pnpm check` (and therefore in CI); run it directly with:
+
+```bash
+pnpm --filter @decoy/core-purity run guard
 ```
 
 ## License
