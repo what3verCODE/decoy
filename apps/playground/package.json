@@ -16,8 +16,11 @@
     "@decoy/server": "workspace:*"
   },
   "devDependencies": {
+    "@decoy/express": "workspace:*",
     "@decoy/playwright": "workspace:*",
+    "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
+    "express": "^5.1.0",
     "jiti": "^2.7.0"
   }
 }
