@@ -1,0 +1,7 @@
+# Scenarios the example app is developed and e2e-tested against.
+- id: happy-path
+  routes:
+    - users-by-id:default:ada
+- id: error-state
+  routes:
+    - users-by-id:default:boom

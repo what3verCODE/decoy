@@ -1,0 +1,22 @@
+{
+  "name": "@decoy/playground",
+  "version": "0.0.0",
+  "description": "Dogfood target: a real example app whose API base URL points at a Decoy instance, plus the e2e harness the Router slices assert through.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "jiti src/main.ts",
+    "test": "rstest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/core": "workspace:*",
+    "@decoy/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "jiti": "^2.7.0"
+  }
+}
