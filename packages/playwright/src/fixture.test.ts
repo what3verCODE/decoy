@@ -21,16 +21,17 @@ function defs(): Definitions {
 
 function fakeContext() {
   let handler: RouteHandler | undefined
-  const routable: PlaywrightRoutable = {
-    async route(_url, h) {
+  // A stand-in for a Playwright BrowserContext (see router.test for the cast rationale).
+  const routable = {
+    async route(_url: unknown, h: RouteHandler) {
       handler = h
     },
-    async unroute(_url, h) {
+    async unroute(_url: unknown, h?: RouteHandler) {
       if (h === undefined || h === handler) {
         handler = undefined
       }
     },
-  }
+  } as unknown as PlaywrightRoutable
   return {
     routable,
     get installed() {

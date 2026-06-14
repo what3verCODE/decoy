@@ -6,4 +6,10 @@ packages:
 allowBuilds:
   # @nestjs/core's only postinstall is an OpenCollective funding banner — no build needed.
   '@nestjs/core': false
+  # @decoy/playwright depends on @playwright/test for TYPES only (import type). Its install
+  # script downloads browser binaries — not needed here; the playwright-router example (#50)
+  # enables a Chromium install in its own workspace when it lands.
+  '@playwright/test': false
+  playwright: false
+  playwright-core: false
   lefthook: true

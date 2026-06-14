@@ -4,6 +4,7 @@ import type { DecoyMiddleware } from './middleware'
 import { DECOY_CONTROL, DECOY_MIDDLEWARE, DecoyModule } from './module'
 import type {
   DynamicModule,
+  MiddlewareConfigProxy,
   MiddlewareConsumer,
   NestModule,
   RouteTarget,
@@ -41,12 +42,17 @@ function fakeConsumer() {
   const consumer: MiddlewareConsumer = {
     apply(...middleware: unknown[]) {
       applied.push(...middleware)
-      return {
-        forRoutes(...routes: RouteTarget[]) {
-          forRoutesArgs = routes
+      const proxy: MiddlewareConfigProxy = {
+        forRoutes(...routes) {
+          forRoutesArgs = routes as RouteTarget[]
           return consumer
         },
+        // The adapter never calls exclude(); a chaining no-op satisfies the real proxy.
+        exclude() {
+          return proxy
+        },
       }
+      return proxy
     },
   }
   return {

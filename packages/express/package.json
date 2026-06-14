@@ -31,6 +31,9 @@
     "@decoy/config": "workspace:*",
     "@decoy/core": "workspace:*"
   },
+  "peerDependencies": {
+    "express": "^4 || ^5"
+  },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",

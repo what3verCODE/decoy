@@ -1,6 +1,6 @@
 import type { Collection, Definitions, Route } from '@decoy/core'
 import { describe, expect, test } from '@rstest/core'
-import type { ExpressRequest, ExpressResponse } from './express-types'
+import type { ExpressRequest, ExpressResponse, NextFunction } from './express-types'
 import { createDecoyMiddleware, fromService } from './middleware'
 
 const usersRoute: Route = {
@@ -55,6 +55,9 @@ function fakeRes(): Recorded {
     headers,
     body: undefined,
     ended: false,
+    // A minimal stand-in for an Express Response — only the surface the middleware
+    // writes through (statusCode/setHeader/end). Cast through the real ExpressResponse,
+    // whose setHeader/end return `this`; the fake's recorders return void.
     res: {
       statusCode: 200,
       setHeader(name: string, value: string) {
@@ -65,16 +68,21 @@ function fakeRes(): Recorded {
         recorded.body = chunk
         recorded.ended = true
       },
-    },
+    } as unknown as ExpressResponse,
   }
   return recorded
 }
+
+/** The middleware's call surface, narrowed to the fakes a unit test drives it with. */
+type Invoke = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => void
 
 /** Drive a request through a middleware, capturing whether it fell through. */
 function run(middleware: ReturnType<typeof createDecoyMiddleware>, request: ExpressRequest) {
   const rec = fakeRes()
   let nextArg: unknown = 'NOT_CALLED'
-  middleware(request, rec.res, (error?: unknown) => {
+  // DecoyMiddleware is a real Express RequestHandler; invoke it through the narrowed
+  // fake surface so the unit test needs only the request/response slice it exercises.
+  ;(middleware as unknown as Invoke)(request, rec.res, (error?: unknown) => {
     nextArg = error
   })
   return { rec, nextCalled: nextArg !== 'NOT_CALLED', nextArg }

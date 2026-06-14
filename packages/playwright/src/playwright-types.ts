@@ -1,32 +1,29 @@
 /**
- * Structural subsets of the Playwright API the PlaywrightRouter touches. Typed
- * structurally (like {@link import('@decoy/control').HeaderSink}) so this package
- * carries **no** Playwright runtime dependency: a real Playwright `BrowserContext`
- * / `Page` satisfies {@link PlaywrightRoutable}, a real `Route` satisfies
- * {@link PlaywrightRoute}, and a real `Request` satisfies {@link PlaywrightRequest}.
- * The structural shapes also make the router unit-testable with plain fakes — no
- * browser, no standalone server.
+ * The slice of Playwright's API the PlaywrightRouter touches, sourced from the real
+ * `@playwright/test` types via `import type` so they can never drift from upstream
+ * (the previous hand-copied {@link FulfillOptions} subset, for instance, silently
+ * lagged Playwright's real `fulfill` options). `@playwright/test` is a **required
+ * peer dependency**; `import type` keeps it type-level only, so the build emits no
+ * Playwright import and the package carries zero Playwright runtime weight. The
+ * narrowed shapes also keep the router unit-testable with plain fakes — no browser,
+ * no standalone server.
  */
 
+import type { BrowserContext, Request, Route } from '@playwright/test'
+
 /** The subset of a Playwright `Request` used to build the request envelope. */
-export interface PlaywrightRequest {
-  method(): string
-  url(): string
-  headers(): Record<string, string>
-  postData(): string | null
-}
+export type PlaywrightRequest = Pick<Request, 'method' | 'url' | 'headers' | 'postData'>
 
-/** Options accepted by {@link PlaywrightRoute.fulfill} (subset of Playwright's). */
-export interface FulfillOptions {
-  status?: number
-  headers?: Record<string, string>
-  body?: string
-}
+/** Options accepted by {@link PlaywrightRoute.fulfill} — Playwright's own `fulfill` options. */
+export type FulfillOptions = NonNullable<Parameters<Route['fulfill']>[0]>
 
-/** The subset of a Playwright `Route` the router fulfills through. */
-export interface PlaywrightRoute {
+/**
+ * The subset of a Playwright `Route` the router fulfills through. `fulfill` is taken
+ * verbatim from the real `Route`; `request()` is narrowed to {@link PlaywrightRequest}
+ * so a fake need only implement the envelope surface.
+ */
+export interface PlaywrightRoute extends Pick<Route, 'fulfill'> {
   request(): PlaywrightRequest
-  fulfill(options: FulfillOptions): Promise<void>
 }
 
 /** A handler registered for intercepted requests (Playwright's route callback). */
@@ -37,7 +34,4 @@ export type RouteHandler = (route: PlaywrightRoute) => unknown
  * request interception. Per-context interception is what gives parallel tests
  * isolation for free (each context owns its own routing + selection).
  */
-export interface PlaywrightRoutable {
-  route(url: string | RegExp, handler: RouteHandler): Promise<void>
-  unroute(url: string | RegExp, handler?: RouteHandler): Promise<void>
-}
+export type PlaywrightRoutable = Pick<BrowserContext, 'route' | 'unroute'>

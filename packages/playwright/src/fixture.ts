@@ -28,7 +28,8 @@ export type RouterFixture = (args: RouterFixtureArgs, use: Use<PlaywrightRouter>
  * })
  * ```
  *
- * Returned structurally typed so this package carries no Playwright dependency.
+ * Playwright types are referenced via `import type` only (a required peer dependency),
+ * so this package carries no Playwright *runtime* dependency.
  */
 export function createRouterFixture(options: PlaywrightRouterOptions): RouterFixture {
   return async ({ context }, use) => {

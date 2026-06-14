@@ -46,18 +46,21 @@ function fakeContext() {
   let routes = 0
   let unroutes = 0
 
-  const routable: PlaywrightRoutable = {
-    async route(_url, h) {
+  // A stand-in for a Playwright BrowserContext — only route/unroute, capturing the
+  // installed handler. Cast through the real Routable: the router registers a 1-arg
+  // handler, while Playwright types route()'s callback as (route, request).
+  const routable = {
+    async route(_url: unknown, h: RouteHandler) {
       routes += 1
       handler = h
     },
-    async unroute(_url, h) {
+    async unroute(_url: unknown, h?: RouteHandler) {
       unroutes += 1
       if (h === undefined || h === handler) {
         handler = undefined
       }
     },
-  }
+  } as unknown as PlaywrightRoutable
 
   return {
     routable,
@@ -110,7 +113,7 @@ describe('createPlaywrightRouter', () => {
     expect(ctx.routeCount).toBe(1)
     expect(fulfilled.status).toBe(200)
     expect(fulfilled.headers?.['content-type']).toBe('application/json')
-    expect(JSON.parse(fulfilled.body ?? '')).toEqual({ id: 42, name: 'Ada' })
+    expect(JSON.parse(String(fulfilled.body ?? ''))).toEqual({ id: 42, name: 'Ada' })
   })
 
   test('fails closed on a miss: configured status + x-mock-miss + diagnostic body', async () => {
@@ -125,7 +128,7 @@ describe('createPlaywrightRouter', () => {
 
     expect(fulfilled.status).toBe(503)
     expect(fulfilled.headers?.['x-mock-miss']).toBe('true')
-    expect(JSON.parse(fulfilled.body ?? '').error).toContain('no route matched GET /orders')
+    expect(JSON.parse(String(fulfilled.body ?? '')).error).toContain('no route matched GET /orders')
   })
 
   test('miss status defaults to 501 when unset', async () => {
@@ -152,7 +155,7 @@ describe('createPlaywrightRouter', () => {
 
     const after = await ctx.hit({ url: 'http://localhost/users/42' })
     expect(after.status).toBe(500)
-    expect(JSON.parse(after.body ?? '')).toEqual({ error: 'upstream exploded' })
+    expect(JSON.parse(String(after.body ?? ''))).toEqual({ error: 'upstream exploded' })
   })
 
   test('useRoute pins a variant on the next request; reset restores the baseline', async () => {
