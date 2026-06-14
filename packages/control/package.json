@@ -1,0 +1,38 @@
+{
+  "name": "@decoy/control",
+  "version": "0.0.0",
+  "description": "Decoy control SDK: a typed client for the /admin HTTP API plus the transport-agnostic Router (SessionRouter) for parallel-isolated e2e.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build",
+    "test": "rstest run",
+    "typecheck": "tsc -p tsconfig.lint.json"
+  },
+  "dependencies": {
+    "@decoy/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/server": "workspace:*",
+    "@types/node": "^24.0.0"
+  }
+}

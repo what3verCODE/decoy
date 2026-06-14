@@ -1,0 +1,21 @@
+{
+  "name": "@decoy-examples/fastify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: register @decoy/fastify as an in-process plugin in a real Fastify app — serve mocks, fall through to real routes on a miss, fail closed when nothing answers, switch scenarios in-process.",
+  "scripts": {
+    "dev": "jiti dev.ts",
+    "test:e2e": "rstest run"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/fastify": "workspace:*",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@decoy/core": "workspace:*",
+    "@types/node": "^24.0.0",
+    "jiti": "^2.7.0"
+  }
+}

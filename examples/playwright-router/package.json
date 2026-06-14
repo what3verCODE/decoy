@@ -1,0 +1,19 @@
+{
+  "name": "@decoy-examples/playwright-router",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: fake the browser→API edge entirely in-browser with @decoy/playwright over real page.route — no Decoy server.",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/playwright": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@rsbuild/core": "^2.0.0",
+    "@types/node": "^24.0.0"
+  }
+}

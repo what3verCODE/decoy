@@ -1,0 +1,10 @@
+id: orders-route
+method: GET
+path: /orders/{id}
+presets:
+  default: {}
+variants:
+  success:
+    status: 200
+    body:
+      svc: orders

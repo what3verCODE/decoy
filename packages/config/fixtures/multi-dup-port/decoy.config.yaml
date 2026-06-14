@@ -1,0 +1,4 @@
+- name: alpha
+  port: 4600
+- name: beta
+  port: 4600

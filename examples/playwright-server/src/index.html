@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Decoy · Playwright live-server example</title>
+  </head>
+  <body>
+    <h1>Decoy — Playwright live-server example</h1>
+    <p>
+      This SPA's <code>fetch</code> calls hit a real, live Decoy server (proxied under
+      <code>/api</code>). Each browser session's scenario is switched over <code>/admin</code> and
+      scoped by the <code>x-mock-session</code> header.
+    </p>
+    <button type="button" data-testid="load-user">Load user</button>
+    <button type="button" data-testid="load-missing">Load unmocked route</button>
+    <dl>
+      <dt>status</dt>
+      <dd data-testid="status"></dd>
+      <dt>x-mock-miss</dt>
+      <dd data-testid="miss"></dd>
+      <dt>body</dt>
+      <dd><pre data-testid="body"></pre></dd>
+    </dl>
+  </body>
+</html>

@@ -1,5 +1,12 @@
 name: users
 port: 4101
+missStatus: 503
+sessionIdleTtl: 60000
 routesDir: ./mocks/routes
 collectionsFile: ./mocks/collections.yaml
 defaultCollection: happy-path
+passthrough:
+  url: https://users.real/
+admin:
+  port: 5101
+  prefix: /control/

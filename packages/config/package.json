@@ -25,11 +25,14 @@
   "scripts": {
     "build": "rslib build",
     "test": "rstest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.lint.json"
   },
   "dependencies": {
     "@decoy/core": "workspace:*",
+    "@jmespath-community/jmespath": "^1.3.0",
+    "cosmiconfig": "^9.0.2",
     "jiti": "^2.7.0",
+    "valibot": "^1.4.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

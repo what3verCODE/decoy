@@ -1,0 +1,9 @@
+# The two scenarios the SPA is demoed against. Each browser session starts on
+# `happy-path` (decoy.config.ts) and flips via SessionRouter.useCollection(...) at
+# test time — without leaking into a parallel session.
+- id: happy-path
+  routes:
+    - users-by-id:default:ada
+- id: error-state
+  routes:
+    - users-by-id:default:boom

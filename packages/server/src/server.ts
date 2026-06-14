@@ -1,14 +1,41 @@
-import { createServer as createHttpServer, type Server, type ServerResponse } from 'node:http'
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
 import type { LoadedService } from '@decoy/config'
-import { createEngine, type MockResponse, type Selection } from '@decoy/core'
-import { toEnvelope } from './envelope'
+import type { Controller, MockResponse } from '@decoy/core'
+import { handleAdmin, isAdminPath } from './admin'
+import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger } from './logger'
+import { forwardPassthrough } from './passthrough'
+import { createSessionRegistry, type SessionRegistry } from './sessions'
+import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
-/** Status returned for a fail-closed miss. Made configurable in #26. */
-const MISS_STATUS = 501
+/**
+ * Dev-only hot reload wiring (#44, DESIGN §11). When present, the server watches
+ * `paths` and re-loads the service via `reload` on change, swapping the live
+ * definitions atomically (an invalid config is rejected and the old definitions
+ * kept). Omitted in CI/e2e so definitions stay frozen.
+ */
+export interface WatchSetup {
+  /** Filesystem paths (files or dirs) to watch for changes. */
+  paths: string[]
+  /** Re-load the service from disk; rejects (e.g. `ValidationError`) on an invalid config. */
+  reload: () => Promise<LoadedService>
+  /** Debounce window (ms) coalescing rapid file events into one reload. */
+  debounceMs?: number
+  /** Injectable fs watcher (defaults to a recursive `node:fs` watcher). */
+  watch?: WatchFn
+  /** Injectable debounce scheduler (defaults to an `unref`'d `setTimeout`). */
+  scheduler?: Scheduler
+}
 
 export interface CreateServerOptions {
   logger?: Logger
+  /** Enable dev-only hot reload (#44). Omit in CI/e2e to keep definitions frozen. */
+  watch?: WatchSetup
 }
 
 export interface DecoyServer {
@@ -16,8 +43,53 @@ export interface DecoyServer {
   listen(): Promise<number>
   /** Stop listening. */
   close(): Promise<void>
+  /**
+   * The canonical JS control API driving this server in-process (`/admin` mirrors
+   * it). This is the **global** session — what no-header requests resolve against.
+   */
+  readonly control: Controller
+  /**
+   * The port the HTTP `/admin` control API is reachable on once listening: the
+   * service port (same-port mount) or its dedicated port; `undefined` when admin
+   * is disabled or before `listen()`.
+   */
+  readonly adminPort: number | undefined
   /** The underlying Node server. */
   readonly raw: Server
+}
+
+function listenOn(server: Server, port: number): Promise<number> {
+  return new Promise<number>((resolvePort, reject) => {
+    const onError = (error: Error) => reject(error)
+    server.once('error', onError)
+    server.listen(port, () => {
+      server.removeListener('error', onError)
+      const address = server.address()
+      resolvePort(typeof address === 'object' && address ? address.port : port)
+    })
+  })
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise<void>((resolveClose, reject) => {
+    server.close((error) => (error ? reject(error) : resolveClose()))
+  })
+}
+
+/** Dispatch an admin request, turning an unexpected handler failure into a 500. */
+function serveAdmin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  sessions: SessionRegistry,
+  prefix: string,
+  logger: Logger,
+): void {
+  void handleAdmin(req, res, sessions, prefix, logger).catch((error: unknown) => {
+    res.statusCode = 500
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ error: 'internal decoy error' }))
+    logger.warn(`admin request failed: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }
 
 function hasHeader(headers: Record<string, string>, name: string): boolean {
@@ -46,8 +118,8 @@ function writeResponse(res: ServerResponse, response: MockResponse): void {
   res.end(JSON.stringify(body))
 }
 
-function writeMiss(res: ServerResponse, message: string): void {
-  res.statusCode = MISS_STATUS
+function writeMiss(res: ServerResponse, message: string, status: number): void {
+  res.statusCode = status
   res.setHeader('x-mock-miss', 'true')
   res.setHeader('content-type', 'application/json')
   res.end(JSON.stringify({ error: message }))
@@ -63,29 +135,69 @@ export function createServer(
   options: CreateServerOptions = {},
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
-  const engine = createEngine(service.definitions)
-  const selection: Selection = { collection: service.defaultCollection }
+  const sessions = createSessionRegistry(service.definitions, service.defaultCollection, {
+    idleTtlMs: service.sessionIdleTtlMs,
+    onReap: (ids) => logger.info(`decoy "${service.name}" reaped ${ids.length} idle session(s)`),
+  })
+  const missStatus = service.missStatus
+  const passthrough = service.passthrough
+  const admin = service.admin
+  const samePortAdmin = admin.enabled && admin.port === undefined
 
   const raw = createHttpServer((req, res) => {
+    if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
+      serveAdmin(req, res, sessions, admin.prefix, logger)
+      return
+    }
+
+    const sessionHeader = req.headers['x-mock-session']
+    const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader
+    const control = sessions.resolve(sessionId)
+    // The resolved session label: 'global' for no/empty header (matching resolve).
+    const session = sessionId ? sessionId : 'global'
     const start = process.hrtime.bigint()
-    void toEnvelope(req)
-      .then((envelope) => {
-        const result = engine.match(envelope, selection)
-        const latencyMs = Number(process.hrtime.bigint() - start) / 1e6
-        const elapsed = latencyMs.toFixed(1)
+    const elapsedMs = () => Number(process.hrtime.bigint() - start) / 1e6
+    void readRawBody(req)
+      .then(async (rawBody) => {
+        const envelope = envelopeFrom(req, rawBody)
+        const result = control.match(envelope)
 
         if (result.type === 'matched') {
           writeResponse(res, result.response)
-          const { route, preset, variant } = result.address
-          logger.info(
-            `${envelope.method} ${envelope.path} → ${route}:${preset}:${variant} ${result.response.status} ${elapsed}ms`,
-          )
-        } else {
-          writeMiss(res, result.message)
-          logger.warn(
-            `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${MISS_STATUS} ${elapsed}ms`,
-          )
+          logger.request({
+            method: envelope.method,
+            path: envelope.path,
+            outcome: { type: 'matched', address: result.address },
+            status: result.response.status,
+            latencyMs: elapsedMs(),
+            session,
+          })
+          return
         }
+
+        // No match: forward to the passthrough upstream if configured, else fail closed.
+        if (passthrough) {
+          const status = await forwardPassthrough(req, res, rawBody, passthrough.url)
+          logger.request({
+            method: envelope.method,
+            path: envelope.path,
+            outcome: { type: 'passthrough', target: passthrough.url },
+            status,
+            latencyMs: elapsedMs(),
+            session,
+          })
+          return
+        }
+
+        writeMiss(res, result.message, missStatus)
+        logger.request({
+          method: envelope.method,
+          path: envelope.path,
+          outcome: { type: 'miss', reason: result.reason.kind },
+          status: missStatus,
+          latencyMs: elapsedMs(),
+          session,
+        })
       })
       .catch((error: unknown) => {
         res.statusCode = 500
@@ -95,25 +207,78 @@ export function createServer(
       })
   })
 
+  // A dedicated admin port (the escape hatch for mocking an `/admin/*` upstream)
+  // gets its own HTTP server; otherwise admin rides the main server above.
+  const adminServer =
+    admin.enabled && admin.port !== undefined
+      ? createHttpServer((req, res) => serveAdmin(req, res, sessions, admin.prefix, logger))
+      : undefined
+
+  // Dev-only hot reload (#44): re-load the service on a watched-source change and
+  // swap every session's definitions atomically. Off (undefined) in CI/e2e.
+  const watcher: Watcher | undefined = options.watch
+    ? watchSources({
+        paths: options.watch.paths,
+        reload: options.watch.reload,
+        debounceMs: options.watch.debounceMs,
+        watch: options.watch.watch,
+        scheduler: options.watch.scheduler,
+        onReload: (next) => {
+          const results = sessions.reload(next.definitions, next.defaultCollection)
+          for (const result of results) {
+            if (result.collectionFellBack) {
+              logger.warn(
+                `decoy "${service.name}" hot reload: session "${result.session}" collection vanished — fell back to "${result.collection}"`,
+              )
+            }
+            if (result.droppedOverrides.length > 0) {
+              logger.warn(
+                `decoy "${service.name}" hot reload: session "${result.session}" dropped ${result.droppedOverrides.length} stale override(s)`,
+              )
+            }
+          }
+          logger.info(`decoy "${service.name}" hot reloaded definitions`)
+        },
+        onError: (error) => {
+          logger.warn(
+            `decoy "${service.name}" hot reload failed: ${
+              error instanceof Error ? error.message : String(error)
+            } — keeping current definitions`,
+          )
+        },
+      })
+    : undefined
+
+  let boundPort: number | undefined
+  let boundAdminPort: number | undefined
+
   return {
     raw,
-    listen() {
-      return new Promise<number>((resolvePort, reject) => {
-        const onError = (error: Error) => reject(error)
-        raw.once('error', onError)
-        raw.listen(service.port, () => {
-          raw.removeListener('error', onError)
-          const address = raw.address()
-          const port = typeof address === 'object' && address ? address.port : service.port
-          logger.info(`decoy "${service.name}" listening on http://localhost:${port}`)
-          resolvePort(port)
-        })
-      })
+    control: sessions.global,
+    get adminPort() {
+      if (!admin.enabled) {
+        return undefined
+      }
+      return adminServer ? boundAdminPort : boundPort
     },
-    close() {
-      return new Promise<void>((resolveClose, reject) => {
-        raw.close((error) => (error ? reject(error) : resolveClose()))
-      })
+    async listen() {
+      boundPort = await listenOn(raw, service.port)
+      logger.info(`decoy "${service.name}" listening on http://localhost:${boundPort}`)
+      if (adminServer && admin.port !== undefined) {
+        boundAdminPort = await listenOn(adminServer, admin.port)
+        logger.info(
+          `decoy "${service.name}" admin API on http://localhost:${boundAdminPort}${admin.prefix}`,
+        )
+      }
+      return boundPort
+    },
+    async close() {
+      watcher?.close()
+      sessions.stop()
+      if (adminServer) {
+        await closeServer(adminServer)
+      }
+      await closeServer(raw)
     },
   }
 }

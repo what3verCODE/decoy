@@ -1,0 +1,41 @@
+{
+  "name": "@decoy/playwright",
+  "version": "0.0.0",
+  "description": "Decoy PlaywrightRouter: drive the in-process engine over page.route for per-context-isolated e2e, delivered as a Playwright fixture.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build",
+    "test": "rstest run",
+    "typecheck": "tsc -p tsconfig.lint.json"
+  },
+  "dependencies": {
+    "@decoy/control": "workspace:*",
+    "@decoy/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^24.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+# GET /api/users/42 — the one endpoint the SPA calls. The browser fetches `/api/*`
+# and the Rsbuild dev server proxies that prefix to this live Decoy server, so the
+# path the server matches keeps the `/api` prefix.
+id: users-by-id
+method: GET
+path: /api/users/{id}
+presets:
+  default: {}
+variants:
+  ada:
+    status: 200
+    body:
+      id: 42
+      name: Ada
+  boom:
+    status: 500
+    body:
+      error: upstream exploded

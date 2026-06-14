@@ -1,0 +1,12 @@
+id: users-api
+method: GET
+path: bad-no-slash
+presets:
+  default: {}
+  active:
+    match: "foo["
+variants:
+  success:
+    status: 200
+    body:
+      label: "{{ bad[ }}"

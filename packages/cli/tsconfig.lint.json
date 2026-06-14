@@ -1,0 +1,9 @@
+{
+  // Type-checks EVERY file (including *.test.ts and their hand-built fakes),
+  // which the build config (./tsconfig.json) deliberately excludes from emit.
+  // `typecheck` points here; the build still emits non-test source only.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src"],
+  "exclude": []
+}

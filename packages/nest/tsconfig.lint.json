@@ -1,0 +1,17 @@
+{
+  // Type-checks EVERY file (including *.test.ts and their hand-built fakes),
+  // which the build config (./tsconfig.json) deliberately excludes from emit.
+  // `typecheck` points here; the build still emits non-test source only.
+  // experimentalDecorators/emitDecoratorMetadata: integration.test.ts boots a
+  // real NestJS app whose @Module/@Controller/@Get are TS legacy decorators —
+  // plain tsc throws TS1241/TS1270 without these (the runtime path enables the
+  // equivalent SWC transform via rstest.config.ts).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src"],
+  "exclude": []
+}

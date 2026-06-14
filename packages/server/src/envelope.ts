@@ -39,28 +39,33 @@ function queryToObject(params: URLSearchParams): Record<string, string | string[
   return query
 }
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+/** Read the raw request body bytes, or `undefined` when the request carries no body. */
+export async function readRawBody(req: IncomingMessage): Promise<Buffer | undefined> {
   const chunks: Buffer[] = []
   for await (const chunk of req) {
     chunks.push(chunk as Buffer)
   }
-  if (chunks.length === 0) {
-    return undefined
-  }
-  const raw = Buffer.concat(chunks).toString('utf8')
-  const contentType = req.headers['content-type'] ?? ''
-  if (contentType.includes('application/json')) {
-    try {
-      return JSON.parse(raw)
-    } catch {
-      return raw
-    }
-  }
-  return raw
+  return chunks.length === 0 ? undefined : Buffer.concat(chunks)
 }
 
-/** Build the documented request envelope from a Node request. */
-export async function toEnvelope(req: IncomingMessage): Promise<RequestEnvelope> {
+/** Parse the already-read raw body into the envelope's `body` (JSON when so typed, else text). */
+function parseBody(raw: Buffer | undefined, contentType: string): unknown {
+  if (raw === undefined) {
+    return undefined
+  }
+  const text = raw.toString('utf8')
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
+  }
+  return text
+}
+
+/** Build the documented request envelope from a Node request and its already-read raw body. */
+export function envelopeFrom(req: IncomingMessage, rawBody: Buffer | undefined): RequestEnvelope {
   const rawUrl = req.url ?? '/'
   const url = new URL(rawUrl, 'http://localhost')
   const headers = normalizeHeaders(req.headers)
@@ -73,6 +78,11 @@ export async function toEnvelope(req: IncomingMessage): Promise<RequestEnvelope>
     query: queryToObject(url.searchParams),
     headers,
     cookies: parseCookies(headers.cookie),
-    body: await readBody(req),
+    body: parseBody(rawBody, headers['content-type'] ?? ''),
   }
+}
+
+/** Build the documented request envelope from a Node request, reading its body first. */
+export async function toEnvelope(req: IncomingMessage): Promise<RequestEnvelope> {
+  return envelopeFrom(req, await readRawBody(req))
 }

@@ -1,0 +1,4 @@
+- id: happy-path
+  routes:
+    - users-list-api:default:success
+    - users-list-api:default:ghost

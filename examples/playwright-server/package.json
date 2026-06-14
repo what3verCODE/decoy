@@ -1,0 +1,23 @@
+{
+  "name": "@decoy-examples/playwright-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: a real SPA calls a live standalone Decoy server; @playwright/test drives Chromium and switches scenarios over /admin sessions with parallel isolation.",
+  "scripts": {
+    "dev": "jiti dev.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/control": "workspace:*"
+  },
+  "devDependencies": {
+    "@decoy/cli": "workspace:*",
+    "@decoy/server": "workspace:*",
+    "@playwright/test": "^1.60.0",
+    "@rsbuild/core": "^2.0.0",
+    "@types/node": "^24.0.0",
+    "jiti": "^2.7.0"
+  }
+}

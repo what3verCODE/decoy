@@ -27,9 +27,12 @@ export interface Variant {
 }
 
 /**
- * Additional request-match conditions layered on a route. `{}` is the catch-all.
- * The tracer-bullet engine supports only the catch-all; the literal/JMESPath
- * matchers are implemented in later slices (#29/#30/#31).
+ * Additional request-match conditions layered on a route, evaluated against the
+ * request envelope and ANDed together. `query`/`headers` match as a subset
+ * (request must *contain* the pairs; extras ignored); `body` matches deep-partial
+ * (nested subset). `{}` is the catch-all (no conditions → always matches). The
+ * JMESPath `match:` predicate is evaluated against the request envelope and ANDed
+ * with the literal matchers — every condition must hold (ADR-0008).
  */
 export interface Preset {
   query?: Record<string, string>
@@ -60,12 +63,22 @@ export interface Definitions {
   collections: Map<string, Collection>
 }
 
+/** A single-route override within a selection: pin a `route:preset` slot to a variant. */
+export interface RouteOverride {
+  route: string
+  preset: string
+  variant: string
+}
+
 /**
- * The only mutable state: the active collection (by name) plus, later, per-route
- * overrides (#27). Held per session (#39).
+ * The only mutable state: the active collection (by name) plus per-route
+ * overrides. Held per session (#39). An override pins the variant served for a
+ * `route:preset` slot — replacing the collection's variant for an active slot,
+ * or activating the slot if the collection does not include it.
  */
 export interface Selection {
   collection: string
+  overrides?: RouteOverride[]
 }
 
 /** A transport-agnostic response produced by the engine. */
@@ -82,9 +95,16 @@ export interface VariantAddress {
   variant: string
 }
 
+/** A `route:preset` entry whose route matched by method+path but whose preset did not pass. */
+export interface TriedPreset {
+  route: string
+  preset: string
+}
+
 export type MissReason =
   | { kind: 'no-collection'; collection: string }
   | { kind: 'no-route'; method: string; path: string }
+  | { kind: 'no-preset'; method: string; path: string; tried: TriedPreset[] }
 
 export type MatchResult =
   | {
