@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    // The Nest classes in app.ts use TS legacy decorators (the runtime path enables
+    // the equivalent SWC transform via rspack.config.mjs / rstest.config.ts).
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["tests", "*.ts"]
+}

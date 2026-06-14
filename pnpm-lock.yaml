@@ -61,6 +61,46 @@ importers:
         specifier: ^2.7.0
         version: 2.7.0
 
+  examples/nest:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@decoy/nest':
+        specifier: workspace:*
+        version: link:../../packages/nest
+      '@nestjs/common':
+        specifier: ^10.4.0
+        version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^10.4.0
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-express':
+        specifier: ^10.4.0
+        version: 10.4.22(@nestjs/common@10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+    devDependencies:
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@rspack/cli':
+        specifier: ^2.0.8
+        version: 2.0.8(@rspack/core@2.0.8(@swc/helpers@0.5.23))
+      '@rspack/core':
+        specifier: ^2.0.8
+        version: 2.0.8(@swc/helpers@0.5.23)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+
   examples/playwright-router:
     dependencies:
       '@decoy/config':
@@ -720,6 +760,16 @@ packages:
 
   '@rspack/binding@2.0.8':
     resolution: {integrity: sha512-3uZ+y8aQxq33ty2srMxg2Nu0XuBI6vVrG50rkDaXqwWqOohfgGUSfFuQK7EnSUNy4aFUQlCG6NHialQHJov0wg==}
+
+  '@rspack/cli@2.0.8':
+    resolution: {integrity: sha512-b7MrVE9kvCs8L7hhPdHR6AvQ5wyD3KeBYD+DZMynt+545rvJYnT11LVNjqQJqAYHrgBTmf+9CNPYmeJvEZesWw==}
+    hasBin: true
+    peerDependencies:
+      '@rspack/core': ^2.0.0-0
+      '@rspack/dev-server': ^2.0.0-0
+    peerDependenciesMeta:
+      '@rspack/dev-server':
+        optional: true
 
   '@rspack/core@2.0.8':
     resolution: {integrity: sha512-+NLGJf8gZxihDmMFzjlly3toc2SMjeDmuvz0/Cai9AMdV4F+Pqcnt2BA9V4e3SY2jmhJQtPwgyyLtR1RiJO77g==}
@@ -2479,6 +2529,10 @@ snapshots:
       '@rspack/binding-win32-arm64-msvc': 2.0.8
       '@rspack/binding-win32-ia32-msvc': 2.0.8
       '@rspack/binding-win32-x64-msvc': 2.0.8
+
+  '@rspack/cli@2.0.8(@rspack/core@2.0.8(@swc/helpers@0.5.23))':
+    dependencies:
+      '@rspack/core': 2.0.8(@swc/helpers@0.5.23)
 
   '@rspack/core@2.0.8(@swc/helpers@0.5.23)':
     dependencies:

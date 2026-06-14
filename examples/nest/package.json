@@ -1,0 +1,27 @@
+{
+  "name": "@decoy-examples/nest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: wire @decoy/nest as an in-process module in a real NestJS app — serve mocks, fall through to real controllers on a miss, switch scenarios in-process. Built and run with Rspack.",
+  "scripts": {
+    "dev": "rspack build && node dist/main.cjs",
+    "test:e2e": "rstest run"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/nest": "workspace:*",
+    "@nestjs/common": "^10.4.0",
+    "@nestjs/core": "^10.4.0",
+    "@nestjs/platform-express": "^10.4.0",
+    "jiti": "^2.7.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@decoy/core": "workspace:*",
+    "@rspack/cli": "^2.0.8",
+    "@rspack/core": "^2.0.8",
+    "@types/node": "^24.0.0"
+  }
+}
