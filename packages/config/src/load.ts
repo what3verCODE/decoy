@@ -221,6 +221,65 @@ async function collectCollectionSources(
   return sources
 }
 
+/** The resolved source layout of a service: which config file (if any) and base dir back it. */
+interface SourceLayout {
+  service: ServiceConfig
+  /** Directory the service's relative paths (`routesDir`, `collectionsFile`) resolve against. */
+  baseDir: string
+  /** The resolved config file, when booting from one (absent on the default-path source). */
+  configFile?: string
+  /** The loaded, line-aware config document (absent on the default-path source). */
+  configDoc?: SourceDoc
+  /** Where this service sits in the config doc (`[]` single form, `[0]` array form). */
+  serviceBase: ValuePath
+}
+
+/**
+ * Resolve the active source: a `decoy.config.*` file or the default-path source
+ * (`mocks/routes` + `mocks/collections.yaml`). Panics (throws) when neither can
+ * be resolved — the one fail-fast-on-first exception to aggregate validation.
+ */
+async function resolveSourceLayout(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<SourceLayout> {
+  const cwd = opts?.cwd ?? process.cwd()
+  const configFile = opts?.configPath ? resolve(cwd, opts.configPath) : findConfigFile(cwd)
+
+  if (configFile) {
+    if (!existsSync(configFile)) {
+      throw new Error(`decoy config not found: ${configFile}`)
+    }
+    const configDoc = await loadConfigDoc(configFile)
+    const loaded = configDoc.data as DecoyConfig
+    const services = Array.isArray(loaded) ? loaded : [loaded]
+    if (services.length === 0) {
+      throw new Error('decoy config defines no services')
+    }
+    if (services.length > 1) {
+      throw new Error('multi-instance config (array form) is not supported yet — see #45')
+    }
+    return {
+      service: services[0] as ServiceConfig,
+      baseDir: dirname(configFile),
+      configFile,
+      configDoc,
+      serviceBase: Array.isArray(loaded) ? [0] : [],
+    }
+  }
+
+  const baseDir = cwd
+  const hasDefaultSource =
+    existsSync(resolve(baseDir, DEFAULT_ROUTES_DIR)) ||
+    existsSync(resolve(baseDir, DEFAULT_COLLECTIONS_FILE))
+  if (!hasDefaultSource) {
+    throw new Error(
+      `no decoy config found and no default-path source present (looked for a ${CONFIG_NAMES[0]} variant, ${DEFAULT_ROUTES_DIR}/, or ${DEFAULT_COLLECTIONS_FILE} under ${cwd})`,
+    )
+  }
+  return { service: { port: DEFAULT_PORT }, baseDir, serviceBase: [] }
+}
+
 /**
  * Resolve the source (config file or default paths) and read every route and
  * collection into line-aware sources. Panics (throws) only when no source can be
@@ -230,42 +289,7 @@ async function collectSources(opts?: {
   cwd?: string
   configPath?: string
 }): Promise<CollectedSources> {
-  const cwd = opts?.cwd ?? process.cwd()
-  const configFile = opts?.configPath ? resolve(cwd, opts.configPath) : findConfigFile(cwd)
-
-  let service: ServiceConfig
-  let baseDir: string
-  let configDoc: SourceDoc | undefined
-  let serviceBase: ValuePath = []
-
-  if (configFile) {
-    if (!existsSync(configFile)) {
-      throw new Error(`decoy config not found: ${configFile}`)
-    }
-    configDoc = await loadConfigDoc(configFile)
-    const loaded = configDoc.data as DecoyConfig
-    const services = Array.isArray(loaded) ? loaded : [loaded]
-    if (services.length === 0) {
-      throw new Error('decoy config defines no services')
-    }
-    if (services.length > 1) {
-      throw new Error('multi-instance config (array form) is not supported yet — see #45')
-    }
-    service = services[0] as ServiceConfig
-    serviceBase = Array.isArray(loaded) ? [0] : []
-    baseDir = dirname(configFile)
-  } else {
-    baseDir = cwd
-    const hasDefaultSource =
-      existsSync(resolve(baseDir, DEFAULT_ROUTES_DIR)) ||
-      existsSync(resolve(baseDir, DEFAULT_COLLECTIONS_FILE))
-    if (!hasDefaultSource) {
-      throw new Error(
-        `no decoy config found and no default-path source present (looked for a ${CONFIG_NAMES[0]} variant, ${DEFAULT_ROUTES_DIR}/, or ${DEFAULT_COLLECTIONS_FILE} under ${cwd})`,
-      )
-    }
-    service = { port: DEFAULT_PORT }
-  }
+  const { service, baseDir, configDoc, serviceBase } = await resolveSourceLayout(opts)
 
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
   const routes = await collectRouteSources(
@@ -319,6 +343,29 @@ export async function validateConfig(opts?: {
 }): Promise<ValidationIssue[]> {
   const sources = await collectSources(opts)
   return validateSources(sources)
+}
+
+/**
+ * Resolve the filesystem paths a dev hot reload (#44) should watch for the active
+ * source: the `decoy.config.*` file (when booting from one), the `routesDir`, and
+ * the `collectionsFile`. Only paths that currently exist are returned — a watcher
+ * can't subscribe to a missing one, and a later-created file lands under a watched
+ * dir. Panics (throws) when no source resolves, like {@link loadConfig}.
+ */
+export async function resolveWatchPaths(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<string[]> {
+  const { service, baseDir, configFile } = await resolveSourceLayout(opts)
+
+  const routesDir = resolve(baseDir, service.routesDir ?? DEFAULT_ROUTES_DIR)
+  const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
+
+  const candidates = [configFile, routesDir, collectionsFile].filter(
+    (path): path is string => path !== undefined,
+  )
+  // De-dupe (collectionsFile can sit inside routesDir) and keep only existing paths.
+  return [...new Set(candidates)].filter((path) => existsSync(path))
 }
 
 /**

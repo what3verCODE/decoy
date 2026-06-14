@@ -57,6 +57,20 @@ describe('decoy start (end-to-end through the CLI)', () => {
     })
   })
 
+  test('start --watch boots with hot reload installed and serves a matched variant', async () => {
+    server = await run(['start', '--config', configPath, '--port', '0', '--watch'], {
+      logger: silent,
+    })
+    expect(server).toBeDefined()
+
+    const address = server?.raw.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+    const response = await fetch(`http://localhost:${port}/users/42`)
+
+    // Watcher is installed (resolveWatchPaths found the config + mocks) and boot is unaffected.
+    expect(response.status).toBe(200)
+  })
+
   test('rejects an unknown command', async () => {
     await expect(run(['frobnicate'], { logger: silent })).rejects.toThrow(/unknown command/)
   })

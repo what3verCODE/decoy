@@ -1,5 +1,11 @@
 import { parseArgs } from 'node:util'
-import { formatIssues, hasErrors, loadConfig, validateConfig } from '@decoy/config'
+import {
+  formatIssues,
+  hasErrors,
+  loadConfig,
+  resolveWatchPaths,
+  validateConfig,
+} from '@decoy/config'
 import { createLogger, createServer, type DecoyServer, type Logger } from '@decoy/server'
 
 export interface RunOptions {
@@ -11,7 +17,7 @@ export interface RunOptions {
 const HELP = `decoy — a fast, contract-first HTTP mock you point a base URL at.
 
 Usage:
-  decoy start [--config <path>] [--port <port>] [--json]
+  decoy start [--config <path>] [--port <port>] [--json] [--watch]
   decoy check [--config <path>]
   decoy help
 
@@ -23,7 +29,9 @@ Commands:
 Options:
   --config <path>   Path to a decoy.config.{ts,js,mjs,json,yaml} file.
   --port <port>     Override the configured port (start only).
-  --json            Emit machine-readable JSON log lines for CI (start only).`
+  --json            Emit machine-readable JSON log lines for CI (start only).
+  --watch           Dev-only hot reload: re-load on config/mocks changes (start only).
+                    Off by default; never enable in CI/e2e (frozen definitions).`
 
 /**
  * Run the CLI. `start` resolves with the running server (so tests can drive and
@@ -40,6 +48,7 @@ export async function run(
       config: { type: 'string' },
       port: { type: 'string' },
       json: { type: 'boolean' },
+      watch: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   })
@@ -80,7 +89,15 @@ export async function run(
   }
 
   const logger = options.logger ?? createLogger({ json: Boolean(values.json) })
-  const server = createServer(service, { logger })
+  // Dev-only hot reload (#44): watch the resolved source and re-load via the same
+  // loadConfig path (aggregate-validated). Off unless --watch — frozen in CI/e2e.
+  const watch = values.watch
+    ? {
+        paths: await resolveWatchPaths({ configPath: values.config }),
+        reload: () => loadConfig({ configPath: values.config }),
+      }
+    : undefined
+  const server = createServer(service, { logger, watch })
   await server.listen()
   return server
 }

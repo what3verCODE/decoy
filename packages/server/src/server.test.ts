@@ -4,6 +4,7 @@ import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger, RequestLog } from './logger'
 import { createServer, type DecoyServer } from './server'
+import type { Scheduler, WatchFn } from './watch'
 
 const silent: Logger = { info() {}, warn() {}, request() {} }
 
@@ -12,6 +13,33 @@ function recording(): { records: RequestLog[]; logger: Logger } {
   const records: RequestLog[] = []
   return { records, logger: { info() {}, warn() {}, request: (r) => records.push(r) } }
 }
+
+/** A logger that captures warn lines (e.g. hot-reload fallbacks). */
+function recordingWarns(): { warns: string[]; logger: Logger } {
+  const warns: string[] = []
+  return { warns, logger: { info() {}, warn: (m) => warns.push(m), request() {} } }
+}
+
+/** A fake fs watcher capturing the change callback so a test can fire it on demand. */
+function captureWatch(): { watch: WatchFn; fire: () => void } {
+  let onChange: (() => void) | undefined
+  return {
+    watch: (_path, cb) => {
+      onChange = cb
+      return { close() {} }
+    },
+    fire: () => onChange?.(),
+  }
+}
+
+/** A scheduler that runs the debounced fn immediately (deterministic reloads in tests). */
+const immediate: Scheduler = (fn) => {
+  fn()
+  return () => {}
+}
+
+/** Let the (async) reload settle after firing a watch event. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
 const usersRoute: Route = {
   id: 'users-by-id',
@@ -142,6 +170,105 @@ describe('createServer (HTTP)', () => {
     server.control.reset()
     server.control.useRoute('users-by-id', 'default', 'error')
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
+  })
+})
+
+describe('createServer (hot reload)', () => {
+  /** A copy of `service()` whose users success variant returns 201 (an observable change). */
+  function reloadedService(): LoadedService {
+    const next = service()
+    next.definitions.routes.set('users-by-id', {
+      ...usersRoute,
+      variants: {
+        success: { status: 201, body: { id: 42, name: 'Ada' } },
+        error: { status: 500, body: { error: 'boom' } },
+      },
+    })
+    return next
+  }
+
+  test('a watched-source change hot-reloads the served definitions', async () => {
+    const cap = captureWatch()
+    const server = createServer(service(), {
+      logger: silent,
+      watch: {
+        paths: ['mocks'],
+        reload: async () => reloadedService(),
+        watch: cap.watch,
+        scheduler: immediate,
+      },
+    })
+    const port = await server.listen()
+    try {
+      expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(200)
+
+      cap.fire()
+      await settle()
+
+      expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(201)
+    } finally {
+      await server.close()
+    }
+  })
+
+  test('a session whose collection vanished falls back to defaultCollection and warns', async () => {
+    const { warns, logger } = recordingWarns()
+    const cap = captureWatch()
+    const server = createServer(service(), {
+      logger,
+      // The reloaded definitions drop the error-state collection entirely.
+      watch: {
+        paths: ['mocks'],
+        reload: async () => {
+          const next = reloadedService()
+          next.definitions.collections.delete('error-state')
+          return next
+        },
+        watch: cap.watch,
+        scheduler: immediate,
+      },
+    })
+    const port = await server.listen()
+    try {
+      server.control.setCollection('error-state')
+      expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(500)
+
+      cap.fire()
+      await settle()
+
+      // Fell back to happy-path (success), now 201 from the reloaded variant.
+      expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(201)
+      expect(warns.some((w) => /global/.test(w) && /happy-path/.test(w))).toBe(true)
+    } finally {
+      await server.close()
+    }
+  })
+
+  test('an invalid-config reload keeps the current definitions and warns', async () => {
+    const { warns, logger } = recordingWarns()
+    const cap = captureWatch()
+    const server = createServer(service(), {
+      logger,
+      watch: {
+        paths: ['mocks'],
+        reload: async () => {
+          throw new Error('validation failed: 1 error(s)')
+        },
+        watch: cap.watch,
+        scheduler: immediate,
+      },
+    })
+    const port = await server.listen()
+    try {
+      cap.fire()
+      await settle()
+
+      // Unchanged — still serving the original 200.
+      expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(200)
+      expect(warns.some((w) => /reload failed/.test(w))).toBe(true)
+    } finally {
+      await server.close()
+    }
   })
 })
 

@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { type Controller, createController, type Definitions } from '@decoy/core'
+import { type Controller, createController, type Definitions, type ReloadResult } from '@decoy/core'
+
+/** One session's {@link ReloadResult}, tagged with the session label (`'global'` or its id). */
+export interface SessionReloadResult extends ReloadResult {
+  /** The reloaded session: `'global'` for the default session, otherwise its id. */
+  session: string
+}
 
 /**
  * Tuning for the session registry. All optional: a registry with no `idleTtlMs`
@@ -46,6 +52,14 @@ export interface SessionRegistry {
   has(sessionId: string): boolean
   /** Reap every session idle past the TTL; returns the reaped ids (`[]` with no TTL). */
   reapIdle(): string[]
+  /**
+   * Hot reload (#44): swap the definitions for the global session and every live
+   * session, preserving each selection by name (a vanished collection falls back
+   * to `defaultCollection`; stale overrides are dropped). Sessions created *after*
+   * this call use the reloaded definitions. Returns one {@link SessionReloadResult}
+   * per session so the caller can warn on fallbacks/dropped overrides.
+   */
+  reload(definitions: Definitions, defaultCollection: string): SessionReloadResult[]
   /** Stop the background reaper. */
   stop(): void
 }
@@ -71,9 +85,13 @@ export function createSessionRegistry(
   const { idleTtlMs } = options
   const global = createController(definitions, defaultCollection)
   const sessions = new Map<string, Session>()
+  // Latest definitions/default — swapped by reload() so sessions born after a
+  // reload start on the current definitions, not the boot-time ones.
+  let currentDefinitions = definitions
+  let currentDefault = defaultCollection
 
   const newSession = (): Session => ({
-    controller: createController(definitions, defaultCollection),
+    controller: createController(currentDefinitions, currentDefault),
     lastSeen: now(),
   })
 
@@ -138,6 +156,17 @@ export function createSessionRegistry(
       return sessions.has(sessionId)
     },
     reapIdle,
+    reload(definitions, defaultCollection) {
+      currentDefinitions = definitions
+      currentDefault = defaultCollection
+      const results: SessionReloadResult[] = [
+        { session: 'global', ...global.reload(definitions, defaultCollection) },
+      ]
+      for (const [id, session] of sessions) {
+        results.push({ session: id, ...session.controller.reload(definitions, defaultCollection) })
+      }
+      return results
+    },
     stop() {
       if (timer) {
         clearInterval(timer)

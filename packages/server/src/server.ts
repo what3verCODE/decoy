@@ -11,9 +11,31 @@ import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger } from './logger'
 import { forwardPassthrough } from './passthrough'
 import { createSessionRegistry, type SessionRegistry } from './sessions'
+import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
+
+/**
+ * Dev-only hot reload wiring (#44, DESIGN §11). When present, the server watches
+ * `paths` and re-loads the service via `reload` on change, swapping the live
+ * definitions atomically (an invalid config is rejected and the old definitions
+ * kept). Omitted in CI/e2e so definitions stay frozen.
+ */
+export interface WatchSetup {
+  /** Filesystem paths (files or dirs) to watch for changes. */
+  paths: string[]
+  /** Re-load the service from disk; rejects (e.g. `ValidationError`) on an invalid config. */
+  reload: () => Promise<LoadedService>
+  /** Debounce window (ms) coalescing rapid file events into one reload. */
+  debounceMs?: number
+  /** Injectable fs watcher (defaults to a recursive `node:fs` watcher). */
+  watch?: WatchFn
+  /** Injectable debounce scheduler (defaults to an `unref`'d `setTimeout`). */
+  scheduler?: Scheduler
+}
 
 export interface CreateServerOptions {
   logger?: Logger
+  /** Enable dev-only hot reload (#44). Omit in CI/e2e to keep definitions frozen. */
+  watch?: WatchSetup
 }
 
 export interface DecoyServer {
@@ -192,6 +214,41 @@ export function createServer(
       ? createHttpServer((req, res) => serveAdmin(req, res, sessions, admin.prefix, logger))
       : undefined
 
+  // Dev-only hot reload (#44): re-load the service on a watched-source change and
+  // swap every session's definitions atomically. Off (undefined) in CI/e2e.
+  const watcher: Watcher | undefined = options.watch
+    ? watchSources({
+        paths: options.watch.paths,
+        reload: options.watch.reload,
+        debounceMs: options.watch.debounceMs,
+        watch: options.watch.watch,
+        scheduler: options.watch.scheduler,
+        onReload: (next) => {
+          const results = sessions.reload(next.definitions, next.defaultCollection)
+          for (const result of results) {
+            if (result.collectionFellBack) {
+              logger.warn(
+                `decoy "${service.name}" hot reload: session "${result.session}" collection vanished — fell back to "${result.collection}"`,
+              )
+            }
+            if (result.droppedOverrides.length > 0) {
+              logger.warn(
+                `decoy "${service.name}" hot reload: session "${result.session}" dropped ${result.droppedOverrides.length} stale override(s)`,
+              )
+            }
+          }
+          logger.info(`decoy "${service.name}" hot reloaded definitions`)
+        },
+        onError: (error) => {
+          logger.warn(
+            `decoy "${service.name}" hot reload failed: ${
+              error instanceof Error ? error.message : String(error)
+            } — keeping current definitions`,
+          )
+        },
+      })
+    : undefined
+
   let boundPort: number | undefined
   let boundAdminPort: number | undefined
 
@@ -216,6 +273,7 @@ export function createServer(
       return boundPort
     },
     async close() {
+      watcher?.close()
       sessions.stop()
       if (adminServer) {
         await closeServer(adminServer)

@@ -127,3 +127,112 @@ describe('createController', () => {
     expect(() => createController(defs(), 'ghost')).toThrow(/not defined/)
   })
 })
+
+describe('createController.reload', () => {
+  /** Definitions where the success variant now returns 201 instead of 200. */
+  function changedDefs(): Definitions {
+    const route: Route = {
+      ...usersRoute,
+      variants: {
+        success: { status: 201, body: { id: 42 } },
+        error: { status: 500, body: { error: 'boom' } },
+      },
+    }
+    return {
+      routes: new Map([[route.id, route]]),
+      collections: new Map([
+        [happyPath.id, happyPath],
+        [errorState.id, errorState],
+      ]),
+    }
+  }
+
+  test('the next match reflects the swapped definitions', () => {
+    const control = createController(defs(), 'happy-path')
+    expect((control.match(get) as { response: { status: number } }).response.status).toBe(200)
+
+    control.reload(changedDefs(), 'happy-path')
+
+    expect((control.match(get) as { response: { status: number } }).response.status).toBe(201)
+  })
+
+  test('preserves the active collection by name across a reload', () => {
+    const control = createController(defs(), 'happy-path')
+    control.setCollection('error-state')
+
+    const result = control.reload(changedDefs(), 'happy-path')
+
+    expect(result.collectionFellBack).toBe(false)
+    expect(control.selection.collection).toBe('error-state')
+    expect((control.match(get) as { response: { status: number } }).response.status).toBe(500)
+  })
+
+  test('preserves overrides that still resolve against the new definitions', () => {
+    const control = createController(defs(), 'happy-path')
+    control.useRoute('users-list-api', 'default', 'error')
+
+    const result = control.reload(changedDefs(), 'happy-path')
+
+    expect(result.droppedOverrides).toEqual([])
+    expect(control.selection.overrides).toEqual([
+      { route: 'users-list-api', preset: 'default', variant: 'error' },
+    ])
+    expect((control.match(get) as { response: { status: number } }).response.status).toBe(500)
+  })
+
+  test('falls back to the default collection when the active one vanished', () => {
+    const control = createController(defs(), 'happy-path')
+    control.setCollection('error-state')
+
+    // New definitions drop error-state entirely.
+    const next: Definitions = {
+      routes: new Map([[usersRoute.id, usersRoute]]),
+      collections: new Map([[happyPath.id, happyPath]]),
+    }
+    const result = control.reload(next, 'happy-path')
+
+    expect(result.collectionFellBack).toBe(true)
+    expect(result.collection).toBe('happy-path')
+    expect(control.selection.collection).toBe('happy-path')
+  })
+
+  test('drops overrides whose route:preset:variant no longer resolves', () => {
+    const control = createController(defs(), 'happy-path')
+    control.useRoute('users-list-api', 'default', 'error')
+
+    // New definitions keep the route but drop the error variant.
+    const route: Route = {
+      ...usersRoute,
+      variants: { success: { status: 200, body: { id: 42 } } },
+    }
+    const next: Definitions = {
+      routes: new Map([[route.id, route]]),
+      collections: new Map([[happyPath.id, happyPath]]),
+    }
+    const result = control.reload(next, 'happy-path')
+
+    expect(result.droppedOverrides).toEqual([
+      { route: 'users-list-api', preset: 'default', variant: 'error' },
+    ])
+    expect(control.selection.overrides).toEqual([])
+  })
+
+  test('useRoute validates against the reloaded definitions', () => {
+    const control = createController(defs(), 'happy-path')
+    const route: Route = {
+      ...usersRoute,
+      variants: { success: { status: 200, body: { id: 42 } } },
+    }
+    control.reload(
+      { routes: new Map([[route.id, route]]), collections: new Map([[happyPath.id, happyPath]]) },
+      'happy-path',
+    )
+    // The error variant is gone after reload.
+    expect(() => control.useRoute('users-list-api', 'default', 'error')).toThrow(/variant "error"/)
+  })
+
+  test('throws when the new default collection is not defined', () => {
+    const control = createController(defs(), 'happy-path')
+    expect(() => control.reload(defs(), 'ghost')).toThrow(/not defined/)
+  })
+})

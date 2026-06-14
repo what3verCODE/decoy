@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { describe, expect, test } from '@rstest/core'
-import { loadConfig, validateConfig } from './load'
+import { loadConfig, resolveWatchPaths, validateConfig } from './load'
 import { ValidationError } from './validate'
 
 const fixtures = `${resolve(process.cwd(), 'fixtures')}/`
@@ -154,5 +154,32 @@ describe('validateConfig', () => {
   test('returns no issues for a valid project', async () => {
     const issues = await validateConfig({ cwd: `${fixtures}defaults` })
     expect(issues).toEqual([])
+  })
+})
+
+describe('resolveWatchPaths', () => {
+  test('watches the config file, routesDir and collectionsFile', async () => {
+    const base = `${fixtures}yaml-config`
+    const paths = await resolveWatchPaths({ configPath: `${base}/decoy.config.yaml` })
+
+    expect(paths).toEqual([
+      resolve(base, 'decoy.config.yaml'),
+      resolve(base, 'mocks/routes'),
+      resolve(base, 'mocks/collections.yaml'),
+    ])
+  })
+
+  test('watches the default-path source when booting without a config file', async () => {
+    const base = `${fixtures}defaults`
+    const paths = await resolveWatchPaths({ cwd: base })
+
+    // No config file present — only the default routesDir + collectionsFile.
+    expect(paths).toEqual([resolve(base, 'mocks/routes'), resolve(base, 'mocks/collections.yaml')])
+  })
+
+  test('panics when no source can be resolved', async () => {
+    await expect(resolveWatchPaths({ cwd: `${fixtures}does-not-exist` })).rejects.toThrow(
+      /no decoy config found/,
+    )
   })
 })

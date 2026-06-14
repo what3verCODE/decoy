@@ -10,6 +10,7 @@ export {
   loadConfig,
   type ResolvedAdmin,
   type ResolvedPassthrough,
+  resolveWatchPaths,
   validateConfig,
 } from './load'
 export { MOCK_EXTENSIONS, parseDataFile } from './parse'

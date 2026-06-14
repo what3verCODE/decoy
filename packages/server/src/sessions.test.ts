@@ -26,6 +26,21 @@ function definitions(): Definitions {
   }
 }
 
+/** Definitions where the success variant returns 201 instead of 200, and error-state is gone. */
+function reloadedDefinitions(): Definitions {
+  const route: Route = {
+    ...usersRoute,
+    variants: {
+      success: { status: 201, body: { id: 42, name: 'Ada' } },
+      error: { status: 500, body: { error: 'boom' } },
+    },
+  }
+  return {
+    routes: new Map([[route.id, route]]),
+    collections: new Map([[happyPath.id, happyPath]]),
+  }
+}
+
 const request = { method: 'GET', url: '/users/42', path: '/users/42' } as never
 
 describe('session registry', () => {
@@ -112,6 +127,47 @@ describe('session registry', () => {
     expect(registry.reapIdle()).toEqual([])
     expect(registry.global.selection.collection).toBe('happy-path')
     expect(registry.has('x')).toBe(true)
+  })
+
+  test('reload swaps definitions for the global session and every created session', () => {
+    const registry = createSessionRegistry(definitions(), 'happy-path')
+    const id = registry.create()
+
+    registry.reload(reloadedDefinitions(), 'happy-path')
+
+    expect(
+      (registry.global.match(request) as { response: { status: number } }).response.status,
+    ).toBe(201)
+    expect(
+      (registry.resolve(id).match(request) as { response: { status: number } }).response.status,
+    ).toBe(201)
+  })
+
+  test('reload preserves each session selection by name and reports fallbacks', () => {
+    const registry = createSessionRegistry(definitions(), 'happy-path')
+    const kept = registry.create()
+    const fellBack = registry.create()
+    registry.resolve(kept) // touch (no collection change) — stays on happy-path
+    registry.resolve(fellBack).setCollection('error-state')
+
+    const results = registry.reload(reloadedDefinitions(), 'happy-path')
+
+    // error-state vanished → that session fell back; happy-path sessions did not.
+    const byId = new Map(results.map((r) => [r.session, r]))
+    expect(byId.get('global')?.collectionFellBack).toBe(false)
+    expect(byId.get(kept)?.collectionFellBack).toBe(false)
+    expect(byId.get(fellBack)?.collectionFellBack).toBe(true)
+    expect(registry.resolve(fellBack).selection.collection).toBe('happy-path')
+  })
+
+  test('a session created after reload uses the reloaded definitions', () => {
+    const registry = createSessionRegistry(definitions(), 'happy-path')
+    registry.reload(reloadedDefinitions(), 'happy-path')
+
+    const fresh = registry.resolve('born-after')
+    expect((fresh.match(request) as { response: { status: number } }).response.status).toBe(201)
+    // error-state is gone post-reload, so switching to it fails loud.
+    expect(() => fresh.setCollection('error-state')).toThrow(/not defined/)
   })
 
   test('the background reaper invokes onReap with the reaped ids', async () => {

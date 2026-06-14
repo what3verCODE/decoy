@@ -1,4 +1,4 @@
-export { type Controller, createController } from './control'
+export { type Controller, createController, type ReloadResult } from './control'
 export { createEngine } from './engine'
 export { type CompiledPath, compilePath, matchPath } from './path'
 export { buildResponse } from './response'

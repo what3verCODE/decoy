@@ -12,4 +12,5 @@ export {
   createSessionRegistry,
   type SessionRegistry,
   type SessionRegistryOptions,
+  type SessionReloadResult,
 } from './sessions'

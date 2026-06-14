@@ -36,8 +36,8 @@ packages/
 ## CLI
 
 ```bash
-decoy start [--config <path>] [--port <port>] [--json]   # boot a server from a config (or default mocks/)
-decoy check [--config <path>]                            # validate config + mocks, exit non-zero on error
+decoy start [--config <path>] [--port <port>] [--json] [--watch]   # boot a server from a config (or default mocks/)
+decoy check [--config <path>]                                      # validate config + mocks, exit non-zero on error
 ```
 
 `decoy start` emits one structured log line per request —
@@ -45,6 +45,12 @@ decoy check [--config <path>]                            # validate config + moc
 the resolved session (`global` or the `x-mock-session` id). Misses log at `warn`. Output is pretty
 text by default; `--json` emits one machine-readable JSON line per request (and per lifecycle
 message) for CI.
+
+`--watch` enables **dev-only hot reload**: Decoy watches the config file, `routesDir`, and
+`collectionsFile`, and re-parses + re-validates atomically on change (an invalid edit is rejected
+and the running definitions are kept). Sessions keep their selection **by name** across a reload; a
+collection that vanished warns and falls back to `defaultCollection`. It is **off by default** —
+never enable it in CI/e2e, where frozen definitions keep runs deterministic.
 
 `decoy check` runs the full aggregate validation (schema, `route:preset:variant` cross-reference,
 `extends` resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue with its
