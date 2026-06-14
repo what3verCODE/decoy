@@ -137,6 +137,19 @@ importers:
         specifier: ^24.0.0
         version: 24.13.2
 
+  packages/nest:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../config
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+
   packages/playwright:
     dependencies:
       '@decoy/control':

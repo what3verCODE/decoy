@@ -115,6 +115,28 @@ decoy.control.reset()
 Mount the middleware **before** the routes you want to mock. Because a miss calls `next()` (rather
 than the server's `501 + x-mock-miss`), unmatched requests reach the rest of the app untouched.
 
+`@decoy/nest` is the same capability as a **NestJS module** — `DecoyModule.forService(service)` (or
+`forRoot({ definitions, defaultCollection })`) embeds the engine, auto-applies the middleware on all
+routes, and exports the control API under the `DECOY_CONTROL` token. Nest's default platform parses
+the body before middleware, so `body:` matching needs no extra wiring.
+
+```ts
+import { Module } from '@nestjs/common'
+import { loadConfig } from '@decoy/config'
+import { DECOY_CONTROL, DecoyModule } from '@decoy/nest'
+
+const service = await loadConfig()
+
+@Module({
+  imports: [DecoyModule.forService(service)], // matched routes mocked, everything else hits your controllers
+})
+export class AppModule {}
+
+// Inject the embedded control API anywhere to drive scenarios in-process:
+//   constructor(@Inject(DECOY_CONTROL) private readonly control: Controller) {}
+//   this.control.setCollection('checkout-fails')
+```
+
 ## Toolchain
 
 - **proto** pins the toolchain (Node 24, pnpm 11) — run `proto install`.
