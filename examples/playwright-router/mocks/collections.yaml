@@ -1,0 +1,8 @@
+# Two scenarios the SPA is demoed against. The router starts on `happy-path`
+# (decoy.config.ts) and switches via router.useCollection(...) at test time.
+- id: happy-path
+  routes:
+    - users-by-id:default:ada
+- id: error-state
+  routes:
+    - users-by-id:default:boom

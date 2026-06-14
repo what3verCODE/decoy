@@ -36,35 +36,49 @@ jobs:
         run: pnpm test
 
   # Discover example workspaces so each gets its own e2e job (the e2e tier lives in
-  # examples/*, exposed as `test:e2e`). Emits an empty matrix when no example exists
-  # yet, so the e2e job below simply skips rather than failing.
+  # examples/*, exposed as `test:e2e`). Browser examples (those depending on
+  # @playwright/test) are split out so they can install Chromium in a dedicated job;
+  # the rest run a plain job. Each list is empty when no such example exists, so the
+  # corresponding job simply skips rather than failing.
   discover-examples:
     runs-on: ubuntu-latest
     outputs:
       examples: ${{ steps.find.outputs.examples }}
       has-examples: ${{ steps.find.outputs.has-examples }}
+      browser-examples: ${{ steps.find.outputs.browser-examples }}
+      has-browser-examples: ${{ steps.find.outputs.has-browser-examples }}
     steps:
       - uses: actions/checkout@v4
       - id: find
         run: |
           shopt -s nullglob
-          names=()
+          plain=()
+          browser=()
           for dir in examples/*/; do
-            [ -f "${dir}package.json" ] || continue
-            names+=("$(basename "$dir")")
+            pkg="${dir}package.json"
+            [ -f "$pkg" ] || continue
+            name="$(basename "$dir")"
+            # @playwright/test ⇒ real Chromium ⇒ the dedicated browser job.
+            if jq -e '(.devDependencies["@playwright/test"] // .dependencies["@playwright/test"]) != null' "$pkg" >/dev/null; then
+              browser+=("$name")
+            else
+              plain+=("$name")
+            fi
           done
-          if [ ${#names[@]} -eq 0 ]; then
-            echo "has-examples=false" >> "$GITHUB_OUTPUT"
-            echo "examples=[]" >> "$GITHUB_OUTPUT"
-          else
-            json=$(printf '%s\n' "${names[@]}" | jq -R . | jq -cs .)
-            echo "has-examples=true" >> "$GITHUB_OUTPUT"
-            echo "examples=$json" >> "$GITHUB_OUTPUT"
-          fi
+          emit() {
+            local key="$1"; shift
+            if [ "$#" -eq 0 ]; then
+              echo "has-$key=false" >> "$GITHUB_OUTPUT"
+              echo "$key=[]" >> "$GITHUB_OUTPUT"
+            else
+              echo "has-$key=true" >> "$GITHUB_OUTPUT"
+              echo "$key=$(printf '%s\n' "$@" | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          emit examples "${plain[@]}"
+          emit browser-examples "${browser[@]}"
 
-  # One job per example, running just that example's `test:e2e`. Browser-based
-  # examples add their own `playwright install --with-deps chromium` step in their
-  # own issue; non-browser examples need no browser install.
+  # One job per non-browser example, running just that example's `test:e2e`.
   example-e2e:
     needs: discover-examples
     if: needs.discover-examples.outputs.has-examples == 'true'
@@ -84,6 +98,35 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: e2e
+        run: pnpm --filter "./examples/${{ matrix.example }}" run test:e2e
+
+  # One job per browser example. The root install scripts skip Playwright's browser
+  # download (pnpm-workspace.yaml), so we install Chromium + its system deps here —
+  # never in the default `pnpm test`.
+  example-e2e-browser:
+    needs: discover-examples
+    if: needs.discover-examples.outputs.has-browser-examples == 'true'
+    runs-on: ubuntu-latest
+    name: e2e-browser (${{ matrix.example }})
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.discover-examples.outputs.browser-examples) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup toolchain (proto reads .prototools)
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium (+ system deps)
+        run: pnpm --filter "./examples/${{ matrix.example }}" exec playwright install --with-deps chromium
 
       - name: e2e
         run: pnpm --filter "./examples/${{ matrix.example }}" run test:e2e

@@ -36,6 +36,25 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  examples/playwright-router:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@decoy/playwright':
+        specifier: workspace:*
+        version: link:../../packages/playwright
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.60.0
+        version: 1.60.0
+      '@rsbuild/core':
+        specifier: ^2.0.0
+        version: 2.0.12
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+
   packages/cli:
     dependencies:
       '@decoy/config':

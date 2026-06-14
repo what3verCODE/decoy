@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Decoy · Playwright router example</title>
+  </head>
+  <body>
+    <h1>Decoy — Playwright router example</h1>
+    <p>This SPA's <code>fetch</code> calls are faked in-browser by @decoy/playwright. No server runs.</p>
+    <button type="button" data-testid="load-user">Load user</button>
+    <button type="button" data-testid="load-missing">Load unmocked route</button>
+    <dl>
+      <dt>status</dt>
+      <dd data-testid="status"></dd>
+      <dt>x-mock-miss</dt>
+      <dd data-testid="miss"></dd>
+      <dt>body</dt>
+      <dd><pre data-testid="body"></pre></dd>
+    </dl>
+  </body>
+</html>
