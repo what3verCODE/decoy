@@ -5,7 +5,23 @@ import { pathToFileURL } from 'node:url'
 import type { Collection, Definitions, Route } from '@decoy/core'
 import { createJiti } from 'jiti'
 import type { AdminConfig, DecoyConfig, ServiceConfig } from './define-config'
-import { MOCK_EXTENSIONS, parseDataFile } from './parse'
+import { MOCK_EXTENSIONS } from './parse'
+import {
+  bindLineAt,
+  inlineSourceDoc,
+  loadSourceDoc,
+  type SourceDoc,
+  type ValuePath,
+} from './source'
+import {
+  hasErrors,
+  type RawCollection,
+  type RawRoute,
+  ValidationError,
+  type ValidationInput,
+  type ValidationIssue,
+  validateSources,
+} from './validate'
 
 /** Candidate config file names, in resolution order. */
 const CONFIG_NAMES = [
@@ -75,14 +91,16 @@ function findConfigFile(cwd: string): string | undefined {
   return undefined
 }
 
-async function loadConfigFile(filePath: string): Promise<DecoyConfig> {
+/** Load the config file into a line-aware {@link SourceDoc} (declarative formats keep lines; TS/JS do not). */
+async function loadConfigDoc(filePath: string): Promise<SourceDoc> {
   const ext = extname(filePath).toLowerCase()
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    return (await parseDataFile(filePath)) as DecoyConfig
+    return loadSourceDoc(filePath)
   }
-  // .ts / .js / .mjs — loaded via jiti so configs may carry typed JS.
+  // .ts / .js / .mjs — loaded via jiti so configs may carry typed JS (no source lines).
   const jiti = createJiti(pathToFileURL(filePath).href)
-  return (await jiti.import(filePath, { default: true })) as DecoyConfig
+  const data = (await jiti.import(filePath, { default: true })) as DecoyConfig
+  return inlineSourceDoc(filePath, data)
 }
 
 async function walk(dir: string): Promise<string[]> {
@@ -99,68 +117,105 @@ async function walk(dir: string): Promise<string[]> {
   return files
 }
 
-async function loadRoutes(
+/** The collected, line-aware sources of one service — ready to validate and assemble. */
+interface CollectedSources {
+  service: ServiceConfig
+  /** Config source for schema validation; absent when booting from default paths. */
+  config?: ValidationInput['config']
+  routes: RawRoute[]
+  collections: RawCollection[]
+}
+
+async function collectRouteSources(
   service: ServiceConfig,
   baseDir: string,
   collectionsFile: string,
-): Promise<Map<string, Route>> {
-  const routes = new Map<string, Route>()
-  for (const route of service.routes ?? []) {
-    routes.set(route.id, route)
-  }
+  configDoc: SourceDoc | undefined,
+  serviceBase: ValuePath,
+): Promise<RawRoute[]> {
+  const sources: RawRoute[] = []
 
+  // Inline routes declared in the config entry.
+  ;(service.routes ?? []).forEach((route, index) => {
+    sources.push({
+      data: route,
+      file: configDoc?.file ?? '<inline>',
+      lineAt: configDoc
+        ? bindLineAt(configDoc, [...serviceBase, 'routes', index])
+        : () => undefined,
+    })
+  })
+
+  // File-based routes under routesDir (recursive).
   const routesDir = resolve(baseDir, service.routesDir ?? DEFAULT_ROUTES_DIR)
   if (existsSync(routesDir)) {
     for (const file of await walk(routesDir)) {
       if (resolve(file) === collectionsFile) {
         continue
       }
-      const route = (await parseDataFile(file)) as Route
-      routes.set(route.id, route)
+      const doc = await loadSourceDoc(file)
+      sources.push({ data: doc.data, file, lineAt: bindLineAt(doc) })
     }
   }
-  return routes
+  return sources
 }
 
-async function loadCollections(
+async function collectCollectionSources(
   service: ServiceConfig,
   collectionsFile: string,
-): Promise<Map<string, Collection>> {
-  const collections = new Map<string, Collection>()
-  for (const collection of service.collections ?? []) {
-    collections.set(collection.id, collection)
-  }
+  configDoc: SourceDoc | undefined,
+  serviceBase: ValuePath,
+): Promise<RawCollection[]> {
+  const sources: RawCollection[] = []
 
+  // Inline collections declared in the config entry.
+  ;(service.collections ?? []).forEach((collection, index) => {
+    sources.push({
+      data: collection,
+      file: configDoc?.file ?? '<inline>',
+      lineAt: configDoc
+        ? bindLineAt(configDoc, [...serviceBase, 'collections', index])
+        : () => undefined,
+    })
+  })
+
+  // The single collections file (an array of collections, or a lone collection).
   if (existsSync(collectionsFile)) {
-    const data = await parseDataFile(collectionsFile)
-    const list = Array.isArray(data) ? (data as Collection[]) : [data as Collection]
-    for (const collection of list) {
-      collections.set(collection.id, collection)
+    const doc = await loadSourceDoc(collectionsFile)
+    if (Array.isArray(doc.data)) {
+      doc.data.forEach((collection, index) => {
+        sources.push({ data: collection, file: collectionsFile, lineAt: bindLineAt(doc, [index]) })
+      })
+    } else {
+      sources.push({ data: doc.data, file: collectionsFile, lineAt: bindLineAt(doc) })
     }
   }
-  return collections
+  return sources
 }
 
 /**
- * Resolve and load the active service. A request without a config file falls
- * back to the default-path source (`mocks/routes` + `mocks/collections.yaml`);
- * with neither present, this panics (throws) — the fail-fast startup contract.
+ * Resolve the source (config file or default paths) and read every route and
+ * collection into line-aware sources. Panics (throws) only when no source can be
+ * resolved — the one fail-fast-on-first exception to aggregate validation.
  */
-export async function loadConfig(opts?: {
+async function collectSources(opts?: {
   cwd?: string
   configPath?: string
-}): Promise<LoadedService> {
+}): Promise<CollectedSources> {
   const cwd = opts?.cwd ?? process.cwd()
   const configFile = opts?.configPath ? resolve(cwd, opts.configPath) : findConfigFile(cwd)
 
   let service: ServiceConfig
   let baseDir: string
+  let configDoc: SourceDoc | undefined
+  let serviceBase: ValuePath = []
 
   if (configFile) {
     if (!existsSync(configFile)) {
       throw new Error(`decoy config not found: ${configFile}`)
     }
-    const loaded = await loadConfigFile(configFile)
+    configDoc = await loadConfigDoc(configFile)
+    const loaded = configDoc.data as DecoyConfig
     const services = Array.isArray(loaded) ? loaded : [loaded]
     if (services.length === 0) {
       throw new Error('decoy config defines no services')
@@ -169,6 +224,7 @@ export async function loadConfig(opts?: {
       throw new Error('multi-instance config (array form) is not supported yet — see #45')
     }
     service = services[0] as ServiceConfig
+    serviceBase = Array.isArray(loaded) ? [0] : []
     baseDir = dirname(configFile)
   } else {
     baseDir = cwd
@@ -184,16 +240,87 @@ export async function loadConfig(opts?: {
   }
 
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
-  const routes = await loadRoutes(service, baseDir, collectionsFile)
-  const collections = await loadCollections(service, collectionsFile)
+  const routes = await collectRouteSources(
+    service,
+    baseDir,
+    collectionsFile,
+    configDoc,
+    serviceBase,
+  )
+  const collections = await collectCollectionSources(
+    service,
+    collectionsFile,
+    configDoc,
+    serviceBase,
+  )
 
-  if (collections.size === 0) {
+  return {
+    service,
+    config: configDoc
+      ? { data: service, file: configDoc.file, lineAt: bindLineAt(configDoc, serviceBase) }
+      : undefined,
+    routes,
+    collections,
+  }
+}
+
+/** Build the engine definitions from validated sources (last definition wins, matching the engine). */
+function assembleDefinitions(sources: CollectedSources): Definitions {
+  const routes = new Map<string, Route>()
+  for (const source of sources.routes) {
+    const route = source.data as Route
+    routes.set(route.id, route)
+  }
+  const collections = new Map<string, Collection>()
+  for (const source of sources.collections) {
+    const collection = source.data as Collection
+    collections.set(collection.id, collection)
+  }
+  return { routes, collections }
+}
+
+/**
+ * Run aggregate validation over the resolved source (config or default paths)
+ * and return **all** issues with `file:line`, without throwing on validation
+ * errors. Reused by `decoy check` (#37) and the loader. Still panics when no
+ * source can be resolved (the fail-fast startup contract).
+ */
+export async function validateConfig(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<ValidationIssue[]> {
+  const sources = await collectSources(opts)
+  return validateSources(sources)
+}
+
+/**
+ * Resolve and load the active service. A request without a config file falls
+ * back to the default-path source (`mocks/routes` + `mocks/collections.yaml`);
+ * with neither present, this panics (throws) — the fail-fast startup contract.
+ * Aggregate validation runs at load: any validation **error** throws a
+ * {@link ValidationError} carrying every issue (warnings do not block boot).
+ */
+export async function loadConfig(opts?: {
+  cwd?: string
+  configPath?: string
+}): Promise<LoadedService> {
+  const sources = await collectSources(opts)
+
+  const issues = validateSources(sources)
+  if (hasErrors(issues)) {
+    throw new ValidationError(issues)
+  }
+
+  const definitions = assembleDefinitions(sources)
+  const { service } = sources
+
+  if (definitions.collections.size === 0) {
     throw new Error('decoy: no collections defined — at least one collection is required to boot')
   }
 
-  const firstCollection = collections.keys().next().value
+  const firstCollection = definitions.collections.keys().next().value
   const defaultCollection = service.defaultCollection ?? firstCollection
-  if (defaultCollection === undefined || !collections.has(defaultCollection)) {
+  if (defaultCollection === undefined || !definitions.collections.has(defaultCollection)) {
     throw new Error(`decoy: defaultCollection "${defaultCollection}" is not defined`)
   }
 
@@ -201,7 +328,7 @@ export async function loadConfig(opts?: {
     name: service.name ?? 'decoy',
     port: service.port ?? DEFAULT_PORT,
     defaultCollection,
-    definitions: { routes, collections },
+    definitions,
     admin: resolveAdmin(service.admin),
   }
 }

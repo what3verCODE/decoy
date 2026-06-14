@@ -1,0 +1,11 @@
+id: users-me-api
+method: GET
+path: /users/me
+presets:
+  default: {}
+variants:
+  success:
+    status: 200
+    body:
+      id: 0
+      name: me

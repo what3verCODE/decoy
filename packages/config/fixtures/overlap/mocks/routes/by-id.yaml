@@ -1,0 +1,11 @@
+id: users-by-id-api
+method: GET
+path: /users/{id}
+presets:
+  default: {}
+variants:
+  success:
+    status: 200
+    body:
+      id: 1
+      name: Ada
