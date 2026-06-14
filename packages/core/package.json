@@ -22,6 +22,9 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "@jmespath-community/jmespath": "^1.3.0"
+  },
   "scripts": {
     "build": "rslib build",
     "test": "rstest run",

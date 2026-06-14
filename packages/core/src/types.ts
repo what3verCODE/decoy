@@ -31,7 +31,8 @@ export interface Variant {
  * request envelope and ANDed together. `query`/`headers` match as a subset
  * (request must *contain* the pairs; extras ignored); `body` matches deep-partial
  * (nested subset). `{}` is the catch-all (no conditions → always matches). The
- * JMESPath `match:` predicate is ANDed with the literal matchers in #31.
+ * JMESPath `match:` predicate is evaluated against the request envelope and ANDed
+ * with the literal matchers — every condition must hold (ADR-0008).
  */
 export interface Preset {
   query?: Record<string, string>

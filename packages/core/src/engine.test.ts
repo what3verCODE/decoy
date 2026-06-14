@@ -442,21 +442,208 @@ describe('createEngine().match — literal preset matching', () => {
     if (noRoute.type !== 'miss') return
     expect(noRoute.reason.kind).toBe('no-route')
   })
+})
 
-  test('a preset carrying a JMESPath match: predicate is not evaluated yet (deferred to #31)', () => {
-    const matchRoute: Route = {
-      id: 'jm',
+describe('createEngine().match — JMESPath match: predicates', () => {
+  // a "heavy" condition: serve only when the body carries ≥1 active item
+  const orders: Route = {
+    id: 'orders',
+    method: 'POST',
+    path: '/orders',
+    presets: {
+      'has-active': { match: "length(body.items[?status=='active']) > `0`" },
+      default: {},
+    },
+    variants: {
+      active: { status: 200, body: { matched: 'has-active' } },
+      d: { status: 200, body: { matched: 'default' } },
+    },
+  }
+  const collection: Collection = {
+    id: 'c',
+    routes: ['orders:has-active:active', 'orders:default:d'],
+  }
+  const engine = createEngine(definitions([orders], [collection]))
+  const sel: Selection = { collection: 'c' }
+
+  test('a truthy predicate serves the variant', () => {
+    const result = engine.match(
+      envelope({
+        method: 'POST',
+        path: '/orders',
+        body: { items: [{ status: 'archived' }, { status: 'active' }] },
+      }),
+      sel,
+    )
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.address.preset).toBe('has-active')
+  })
+
+  test('a falsy predicate falls through to the catch-all', () => {
+    const result = engine.match(
+      envelope({ method: 'POST', path: '/orders', body: { items: [{ status: 'archived' }] } }),
+      sel,
+    )
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.address.preset).toBe('default')
+  })
+
+  test('match: is ANDed with literal matchers — both must hold', () => {
+    const route: Route = {
+      id: 'search',
       method: 'GET',
-      path: '/jm',
-      presets: { heavy: { match: 'length(body.items) > `0`' } },
+      path: '/search',
+      presets: {
+        // literal query AND a JMESPath predicate over the body
+        both: { query: { tenant: 'acme' }, match: 'length(body.terms) > `1`' },
+        default: {},
+      },
+      variants: { ok: { status: 200, body: { matched: 'both' } }, d: { status: 200, body: {} } },
+    }
+    const col: Collection = { id: 's', routes: ['search:both:ok', 'search:default:d'] }
+    const e = createEngine(definitions([route], [col]))
+
+    // both literal + predicate satisfied
+    const hit = e.match(
+      envelope({
+        method: 'GET',
+        path: '/search',
+        query: { tenant: 'acme' },
+        body: { terms: ['a', 'b'] },
+      }),
+      { collection: 's' },
+    )
+    expect(hit.type === 'matched' && hit.address.preset).toBe('both')
+
+    // predicate holds but the literal query does not → falls through
+    const queryFails = e.match(
+      envelope({
+        method: 'GET',
+        path: '/search',
+        query: { tenant: 'globex' },
+        body: { terms: ['a', 'b'] },
+      }),
+      { collection: 's' },
+    )
+    expect(queryFails.type === 'matched' && queryFails.address.preset).toBe('default')
+
+    // literal query holds but the predicate does not → falls through
+    const predicateFails = e.match(
+      envelope({
+        method: 'GET',
+        path: '/search',
+        query: { tenant: 'acme' },
+        body: { terms: ['a'] },
+      }),
+      { collection: 's' },
+    )
+    expect(predicateFails.type === 'matched' && predicateFails.address.preset).toBe('default')
+  })
+
+  test('GraphQL works through match: — operationName selects the variant (no special code)', () => {
+    const gql: Route = {
+      id: 'graphql',
+      method: 'POST',
+      path: '/graphql',
+      presets: {
+        'get-user': { match: "body.operationName == 'GetUser'" },
+        'list-orders': { match: "body.operationName == 'ListOrders'" },
+      },
+      variants: {
+        user: { status: 200, body: { data: { user: { id: 1 } } } },
+        orders: { status: 200, body: { data: { orders: [] } } },
+      },
+    }
+    const col: Collection = {
+      id: 'g',
+      routes: ['graphql:get-user:user', 'graphql:list-orders:orders'],
+    }
+    const e = createEngine(definitions([gql], [col]))
+
+    const user = e.match(
+      envelope({ method: 'POST', path: '/graphql', body: { operationName: 'GetUser' } }),
+      { collection: 'g' },
+    )
+    expect(user.type).toBe('matched')
+    if (user.type !== 'matched') return
+    expect(user.address.variant).toBe('user')
+
+    const orders2 = e.match(
+      envelope({ method: 'POST', path: '/graphql', body: { operationName: 'ListOrders' } }),
+      { collection: 'g' },
+    )
+    expect(orders2.type).toBe('matched')
+    if (orders2.type !== 'matched') return
+    expect(orders2.address.variant).toBe('orders')
+
+    // an unknown operation matches neither predicate → no-preset miss
+    const unknown = e.match(
+      envelope({ method: 'POST', path: '/graphql', body: { operationName: 'DeleteUser' } }),
+      { collection: 'g' },
+    )
+    expect(unknown.type).toBe('miss')
+    if (unknown.type !== 'miss') return
+    expect(unknown.reason.kind).toBe('no-preset')
+  })
+
+  test('predicate truthiness follows JMESPath — a present, non-empty path is truthy', () => {
+    const route: Route = {
+      id: 'flagged',
+      method: 'GET',
+      path: '/flagged',
+      // a bare path predicate: truthy when body.flag is present and non-empty
+      presets: { 'has-flag': { match: 'body.flag' }, default: {} },
+      variants: { y: { status: 200, body: { matched: 'has-flag' } }, d: { status: 200, body: {} } },
+    }
+    const col: Collection = { id: 'f', routes: ['flagged:has-flag:y', 'flagged:default:d'] }
+    const e = createEngine(definitions([route], [col]))
+
+    const present = e.match(envelope({ method: 'GET', path: '/flagged', body: { flag: 'on' } }), {
+      collection: 'f',
+    })
+    expect(present.type === 'matched' && present.address.preset).toBe('has-flag')
+
+    // absent → null → falsy → falls through
+    const absent = e.match(envelope({ method: 'GET', path: '/flagged', body: {} }), {
+      collection: 'f',
+    })
+    expect(absent.type === 'matched' && absent.address.preset).toBe('default')
+
+    // present but empty string → falsy (JMESPath truthiness) → falls through
+    const empty = e.match(envelope({ method: 'GET', path: '/flagged', body: { flag: '' } }), {
+      collection: 'f',
+    })
+    expect(empty.type === 'matched' && empty.address.preset).toBe('default')
+  })
+
+  test('a failing predicate on the only active preset is a no-preset miss', () => {
+    // a collection activating only the predicate preset — no catch-all to fall through to
+    const predicateOnly: Collection = { id: 'p', routes: ['orders:has-active:active'] }
+    const e = createEngine(definitions([orders], [collection, predicateOnly]))
+    const result = e.match(envelope({ method: 'POST', path: '/orders', body: { items: [] } }), {
+      collection: 'p',
+    })
+    expect(result.type).toBe('miss')
+    if (result.type !== 'miss') return
+    expect(result.reason).toEqual({
+      kind: 'no-preset',
+      method: 'POST',
+      path: '/orders',
+      tried: [{ route: 'orders', preset: 'has-active' }],
+    })
+  })
+
+  test('an invalid JMESPath match: predicate throws at engine creation', () => {
+    const bad: Route = {
+      id: 'bad',
+      method: 'GET',
+      path: '/bad',
+      presets: { broken: { match: 'length(' } },
       variants: { ok: { status: 200, body: {} } },
     }
-    const matchCol: Collection = { id: 'm', routes: ['jm:heavy:ok'] }
-    const matchEngine = createEngine(definitions([matchRoute], [matchCol]))
-    const result = matchEngine.match(
-      envelope({ method: 'GET', path: '/jm', body: { items: [1] } }),
-      { collection: 'm' },
-    )
-    expect(result.type).toBe('miss')
+    const col: Collection = { id: 'b', routes: ['bad:broken:ok'] }
+    expect(() => createEngine(definitions([bad], [col]))).toThrow(/match:/)
   })
 })
