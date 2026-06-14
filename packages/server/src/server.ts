@@ -5,10 +5,11 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { LoadedService } from '@decoy/config'
-import { type Controller, createController, type MockResponse } from '@decoy/core'
+import type { Controller, MockResponse } from '@decoy/core'
 import { handleAdmin, isAdminPath } from './admin'
 import { toEnvelope } from './envelope'
 import { consoleLogger, type Logger } from './logger'
+import { createSessionRegistry, type SessionRegistry } from './sessions'
 
 export interface CreateServerOptions {
   logger?: Logger
@@ -19,7 +20,10 @@ export interface DecoyServer {
   listen(): Promise<number>
   /** Stop listening. */
   close(): Promise<void>
-  /** The canonical JS control API driving this server in-process (`/admin` mirrors it). */
+  /**
+   * The canonical JS control API driving this server in-process (`/admin` mirrors
+   * it). This is the **global** session — what no-header requests resolve against.
+   */
   readonly control: Controller
   /**
    * The port the HTTP `/admin` control API is reachable on once listening: the
@@ -53,11 +57,11 @@ function closeServer(server: Server): Promise<void> {
 function serveAdmin(
   req: IncomingMessage,
   res: ServerResponse,
-  control: Controller,
+  sessions: SessionRegistry,
   prefix: string,
   logger: Logger,
 ): void {
-  void handleAdmin(req, res, control, prefix, logger).catch((error: unknown) => {
+  void handleAdmin(req, res, sessions, prefix, logger).catch((error: unknown) => {
     res.statusCode = 500
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify({ error: 'internal decoy error' }))
@@ -108,17 +112,24 @@ export function createServer(
   options: CreateServerOptions = {},
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
-  const control = createController(service.definitions, service.defaultCollection)
+  const sessions = createSessionRegistry(service.definitions, service.defaultCollection, {
+    idleTtlMs: service.sessionIdleTtlMs,
+    onReap: (ids) => logger.info(`decoy "${service.name}" reaped ${ids.length} idle session(s)`),
+  })
   const missStatus = service.missStatus
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
 
   const raw = createHttpServer((req, res) => {
     if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
-      serveAdmin(req, res, control, admin.prefix, logger)
+      serveAdmin(req, res, sessions, admin.prefix, logger)
       return
     }
 
+    const sessionHeader = req.headers['x-mock-session']
+    const control = sessions.resolve(
+      Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader,
+    )
     const start = process.hrtime.bigint()
     void toEnvelope(req)
       .then((envelope) => {
@@ -151,7 +162,7 @@ export function createServer(
   // gets its own HTTP server; otherwise admin rides the main server above.
   const adminServer =
     admin.enabled && admin.port !== undefined
-      ? createHttpServer((req, res) => serveAdmin(req, res, control, admin.prefix, logger))
+      ? createHttpServer((req, res) => serveAdmin(req, res, sessions, admin.prefix, logger))
       : undefined
 
   let boundPort: number | undefined
@@ -159,7 +170,7 @@ export function createServer(
 
   return {
     raw,
-    control,
+    control: sessions.global,
     get adminPort() {
       if (!admin.enabled) {
         return undefined
@@ -178,6 +189,7 @@ export function createServer(
       return boundPort
     },
     async close() {
+      sessions.stop()
       if (adminServer) {
         await closeServer(adminServer)
       }

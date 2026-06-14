@@ -38,6 +38,8 @@ const DEFAULT_COLLECTIONS_FILE = 'mocks/collections.yaml'
 const DEFAULT_PORT = 4000
 const DEFAULT_ADMIN_PREFIX = '/admin'
 const DEFAULT_MISS_STATUS = 501
+/** 30 minutes — long enough to outlive a slow e2e test, short enough to reclaim abandoned sessions. */
+const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60 * 1000
 
 /** Resolved `/admin` control API mount: enabled flag, path prefix, and optional separate port. */
 export interface ResolvedAdmin {
@@ -55,6 +57,8 @@ export interface LoadedService {
   defaultCollection: string
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
   missStatus: number
+  /** Idle TTL (ms) after which an abandoned session is reaped (ADR-0011); defaults to 30 min. */
+  sessionIdleTtlMs: number
   definitions: Definitions
   /** Resolved `/admin` control API mount (ADR-0010). */
   admin: ResolvedAdmin
@@ -332,6 +336,7 @@ export async function loadConfig(opts?: {
     port: service.port ?? DEFAULT_PORT,
     defaultCollection,
     missStatus: service.missStatus ?? DEFAULT_MISS_STATUS,
+    sessionIdleTtlMs: service.sessionIdleTtl ?? DEFAULT_SESSION_IDLE_TTL_MS,
     definitions,
     admin: resolveAdmin(service.admin),
   }

@@ -26,6 +26,7 @@ function service(admin: ResolvedAdmin = { enabled: true, prefix: '/admin' }): Lo
     port: 0,
     defaultCollection: 'happy-path',
     missStatus: 501,
+    sessionIdleTtlMs: 1_800_000,
     admin,
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),

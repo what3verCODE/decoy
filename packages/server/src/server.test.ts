@@ -47,6 +47,7 @@ function service(): LoadedService {
     port: 0,
     defaultCollection: 'happy-path',
     missStatus: 501,
+    sessionIdleTtlMs: 1_800_000,
     admin: { enabled: true, prefix: '/admin' },
     definitions: {
       routes: new Map([

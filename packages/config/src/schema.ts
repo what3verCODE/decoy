@@ -61,6 +61,13 @@ export const ServiceConfigSchema = v.object({
       v.maxValue(599, 'missStatus must be a valid HTTP status code (100-599)'),
     ),
   ),
+  sessionIdleTtl: v.optional(
+    v.pipe(
+      v.number(),
+      v.integer('sessionIdleTtl must be an integer (ms)'),
+      v.minValue(1, 'sessionIdleTtl must be a positive number of ms'),
+    ),
+  ),
   routesDir: v.optional(v.string()),
   collectionsFile: v.optional(v.string()),
   defaultCollection: v.optional(v.string()),

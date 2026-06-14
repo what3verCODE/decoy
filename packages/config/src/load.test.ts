@@ -27,6 +27,32 @@ describe('loadConfig', () => {
     expect(service.missStatus).toBe(501)
   })
 
+  test('resolves a configured sessionIdleTtl', async () => {
+    const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
+    expect(service.sessionIdleTtlMs).toBe(60000)
+  })
+
+  test('sessionIdleTtl defaults to 30 minutes when unset', async () => {
+    const service = await loadConfig({ cwd: `${fixtures}defaults` })
+    expect(service.sessionIdleTtlMs).toBe(30 * 60 * 1000)
+  })
+
+  test('rejects a non-positive sessionIdleTtl with file:line', async () => {
+    const error = await loadConfig({
+      configPath: `${fixtures}bad-session-ttl/decoy.config.yaml`,
+    }).then(
+      () => undefined,
+      (e) => e,
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    const issues = (error as ValidationError).issues
+    const ttlIssue = issues.find((i) => i.message.includes('sessionIdleTtl'))
+    expect(ttlIssue?.severity).toBe('error')
+    expect(ttlIssue?.file).toContain('decoy.config.yaml')
+    expect(ttlIssue?.line).toBe(3)
+  })
+
   test('resolves the admin config to a separate port and normalized prefix', async () => {
     const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
 

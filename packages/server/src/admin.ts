@@ -1,6 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Controller } from '@decoy/core'
 import type { Logger } from './logger'
+import type { SessionRegistry } from './sessions'
+
+/** The `x-mock-session` header value, if present (first value wins for a repeated header). */
+function sessionIdOf(req: IncomingMessage): string | undefined {
+  const value = req.headers['x-mock-session']
+  return Array.isArray(value) ? value[0] : value
+}
 
 /** Path of a request, ignoring the query string. */
 function pathOf(url: string | undefined): string {
@@ -42,6 +48,12 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/collection` `{ name }`               → `setCollection(name)`.
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
+ * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
+ * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
+ *
+ * Control endpoints are **session-scoped** by the `x-mock-session` header (ADR-0011):
+ * with no header they target the global (dev) session; with one they target (and
+ * lazily create) that session, isolating parallel tests on a shared server.
  *
  * Each mutating call returns the resulting selection (`200`), so a switch is
  * confirmable. Control mutations are atomic — the next mocked request sees the
@@ -51,7 +63,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 export async function handleAdmin(
   req: IncomingMessage,
   res: ServerResponse,
-  control: Controller,
+  sessions: SessionRegistry,
   prefix: string,
   logger: Logger,
 ): Promise<void> {
@@ -63,8 +75,28 @@ export async function handleAdmin(
     return
   }
   const sub = path.slice(prefix.length) || '/'
+  const sessionId = sessionIdOf(req)
+  const control = sessions.resolve(sessionId)
 
   try {
+    if (method === 'POST' && sub === '/sessions') {
+      const id = sessions.create()
+      logger.info(`admin: createSession ${id}`)
+      sendJson(res, 201, { id })
+      return
+    }
+
+    if (method === 'DELETE' && sub.startsWith('/sessions/')) {
+      const id = decodeURIComponent(sub.slice('/sessions/'.length))
+      if (!sessions.destroy(id)) {
+        sendJson(res, 404, { error: `admin: no such session "${id}"` })
+        return
+      }
+      logger.info(`admin: destroySession ${id}`)
+      sendJson(res, 200, { destroyed: id })
+      return
+    }
+
     if (method === 'GET' && (sub === '/' || sub === '/selection')) {
       sendJson(res, 200, control.selection)
       return

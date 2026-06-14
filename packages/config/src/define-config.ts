@@ -22,6 +22,11 @@ export interface ServiceConfig {
   admin?: AdminConfig
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
   missStatus?: number
+  /**
+   * Idle TTL in ms after which an abandoned **session** is reaped (ADR-0011);
+   * defaults to 30 minutes. Sessions are a tests-only concern.
+   */
+  sessionIdleTtl?: number
   /** Directory of route definition files, scanned recursively. */
   routesDir?: string
   /** Single file holding the ordered collections. */
