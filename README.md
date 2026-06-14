@@ -30,6 +30,7 @@ packages/
   testplane/    TestplaneRouter + fixtures
   express/      middleware adapter
   nest/         module adapter
+  fastify/      plugin adapter
   web-panel/    web panel for configuring decoy (future)
 ```
 
@@ -151,6 +152,28 @@ export class AppModule {}
 // Inject the embedded control API anywhere to drive scenarios in-process:
 //   constructor(@Inject(DECOY_CONTROL) private readonly control: Controller) {}
 //   this.control.setCollection('checkout-fails')
+```
+
+`@decoy/fastify` is the same capability as a **Fastify plugin** — `fastify.register(fromService(service))`
+(or `createDecoyPlugin({ definitions, defaultCollection })`) embeds the engine via a `preHandler` hook and
+carries the control API on `.control`. A matched route is served from its mock; a miss **falls through**
+to a real Fastify route if one owns the path, and otherwise **fails closed** (`501 + x-mock-miss`, via the
+plugin's not-found handler). Fastify parses `application/json` out of the box, so `body:` matching needs no
+extra wiring.
+
+```ts
+import Fastify from 'fastify'
+import { loadConfig } from '@decoy/config'
+import { fromService } from '@decoy/fastify'
+
+const app = Fastify()
+const service = await loadConfig()
+const decoy = fromService(service)
+await app.register(decoy)                     // serve matched routes; fall through / fail closed otherwise
+
+app.get('/users/:id', realHandler)            // reached only when no mock matches (fallthrough)
+
+decoy.control.setCollection('checkout-fails') // drive scenarios in-process (ADR-0010)
 ```
 
 ## Toolchain
