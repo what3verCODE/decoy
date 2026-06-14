@@ -15,6 +15,18 @@ function portOf(server: DecoyServer | undefined): number {
   return typeof address === 'object' && address ? address.port : 0
 }
 
+/**
+ * Narrow `run`'s `DecoyServer | DecoyServer[] | undefined` union to the single
+ * server a single-instance (object) config yields, failing loud if an array
+ * slipped through — so single-instance tests assert that contract too.
+ */
+function single(result: DecoyServer | DecoyServer[] | undefined): DecoyServer | undefined {
+  if (Array.isArray(result)) {
+    throw new Error('expected a single-instance server, got an array')
+  }
+  return result
+}
+
 /** Capture CLI output so a test can assert on the printed report. */
 function capture(): { out: (message: string) => void; text: () => string } {
   const lines: string[] = []
@@ -30,7 +42,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
   })
 
   test('boots from a TS config and serves a matched variant', async () => {
-    server = await run(['start', '--config', configPath, '--port', '0'], { logger: silent })
+    server = single(await run(['start', '--config', configPath, '--port', '0'], { logger: silent }))
     expect(server).toBeDefined()
 
     const address = server?.raw.address()
@@ -46,7 +58,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
     const original = console.log
     console.log = (message?: unknown) => lines.push(String(message))
     try {
-      server = await run(['start', '--config', configPath, '--port', '0', '--json'])
+      server = single(await run(['start', '--config', configPath, '--port', '0', '--json']))
       const address = server?.raw.address()
       const port = typeof address === 'object' && address ? address.port : 0
       await fetch(`http://localhost:${port}/users/42`)
@@ -66,9 +78,11 @@ describe('decoy start (end-to-end through the CLI)', () => {
   })
 
   test('start --watch boots with hot reload installed and serves a matched variant', async () => {
-    server = await run(['start', '--config', configPath, '--port', '0', '--watch'], {
-      logger: silent,
-    })
+    server = single(
+      await run(['start', '--config', configPath, '--port', '0', '--watch'], {
+        logger: silent,
+      }),
+    )
     expect(server).toBeDefined()
 
     const address = server?.raw.address()
