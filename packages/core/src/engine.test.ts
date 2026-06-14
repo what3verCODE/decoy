@@ -282,8 +282,14 @@ describe('createEngine().match — literal preset matching', () => {
     id: 'c',
     routes: ['users:with-query:q', 'users:with-headers:h', 'users:with-body:b', 'users:default:d'],
   }
+  // a collection with no catch-all preset active — used to exercise the no-preset miss
+  const qonly: Collection = { id: 'qonly', routes: ['users:with-query:q'] }
+  const noCatchAll: Collection = {
+    id: 'noCatchAll',
+    routes: ['users:with-query:q', 'users:with-headers:h', 'users:with-body:b'],
+  }
   const sel: Selection = { collection: 'c' }
-  const engine = createEngine(definitions([route], [collection]))
+  const engine = createEngine(definitions([route], [collection, qonly, noCatchAll]))
 
   function matched(req: Partial<RequestEnvelope> & Pick<RequestEnvelope, 'method' | 'path'>) {
     const result = engine.match(envelope(req), sel)
@@ -383,6 +389,58 @@ describe('createEngine().match — literal preset matching', () => {
     expect(miss.type).toBe('matched')
     if (miss.type !== 'matched') return
     expect(miss.address.preset).toBe('default')
+  })
+
+  test('route matched but no active preset matched is a distinct no-preset miss', () => {
+    // request carries no query → the only active preset (with-query) fails
+    const result = engine.match(envelope({ method: 'GET', path: '/users' }), {
+      collection: 'qonly',
+    })
+    expect(result.type).toBe('miss')
+    if (result.type !== 'miss') return
+    expect(result.reason).toEqual({
+      kind: 'no-preset',
+      method: 'GET',
+      path: '/users',
+      tried: [{ route: 'users', preset: 'with-query' }],
+    })
+    expect(result.message).toContain('users')
+    expect(result.message).toContain('with-query')
+  })
+
+  test('the no-preset diagnostic lists every active preset tried, in array order', () => {
+    const result = engine.match(envelope({ method: 'GET', path: '/users', query: { page: '9' } }), {
+      collection: 'noCatchAll',
+    })
+    expect(result.type).toBe('miss')
+    if (result.type !== 'miss') return
+    if (result.reason.kind !== 'no-preset') throw new Error('expected no-preset miss')
+    expect(result.reason.tried).toEqual([
+      { route: 'users', preset: 'with-query' },
+      { route: 'users', preset: 'with-headers' },
+      { route: 'users', preset: 'with-body' },
+    ])
+    expect(result.message).toContain('with-query')
+    expect(result.message).toContain('with-headers')
+    expect(result.message).toContain('with-body')
+  })
+
+  test('no-preset wins over no-route when the method+path matched', () => {
+    // /users matches by method+path; only no-query preset is active and it fails
+    const noMatch = engine.match(envelope({ method: 'GET', path: '/users' }), {
+      collection: 'qonly',
+    })
+    expect(noMatch.type).toBe('miss')
+    if (noMatch.type !== 'miss') return
+    expect(noMatch.reason.kind).toBe('no-preset')
+
+    // a path no route matches at all stays a no-route miss
+    const noRoute = engine.match(envelope({ method: 'GET', path: '/ghost' }), {
+      collection: 'qonly',
+    })
+    expect(noRoute.type).toBe('miss')
+    if (noRoute.type !== 'miss') return
+    expect(noRoute.reason.kind).toBe('no-route')
   })
 
   test('a preset carrying a JMESPath match: predicate is not evaluated yet (deferred to #31)', () => {

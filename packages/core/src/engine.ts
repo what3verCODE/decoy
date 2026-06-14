@@ -9,6 +9,7 @@ import type {
   RequestEnvelope,
   RouteOverride,
   Selection,
+  TriedPreset,
   VariantAddress,
 } from './types'
 
@@ -207,10 +208,36 @@ function presetMatches(preset: Preset, request: RequestEnvelope): boolean {
 }
 
 /**
+ * Build the human diagnostic for a "route matched but no active preset matched"
+ * miss. It names the matched route(s) and lists, in array order, the presets the
+ * engine tried — the second miss type distinguishing a misfiring matcher from a
+ * route that simply isn't activated (ADR-0005, DESIGN §6).
+ */
+function describeNoPresetMiss(
+  method: string,
+  request: RequestEnvelope,
+  tried: TriedPreset[],
+): string {
+  const routes = [...new Set(tried.map((t) => t.route))]
+  const hint =
+    Object.keys(request.query).length > 0 ? ` (query ${JSON.stringify(request.query)})` : ''
+  if (routes.length === 1) {
+    const presets = tried.map((t) => t.preset).join(', ')
+    return `route "${routes[0]}" matched ${method} ${request.path}${hint} but no active preset matched; presets tried: ${presets}`
+  }
+  const slots = tried.map((t) => `${t.route}:${t.preset}`).join(', ')
+  return `routes matched ${method} ${request.path}${hint} but no active preset matched; presets tried: ${slots}`
+}
+
+/**
  * Create the pure matching engine over an immutable set of definitions. The
  * returned `match(request, selection)` performs zero IO and is deterministic:
  * it walks the active collection's entries in array order and serves the first
- * whose route (method + path) and preset match — first match wins (ADR-0004).
+ * whose route (method + path) and preset match — first match wins (ADR-0004),
+ * with no specificity scoring. A miss is one of three kinds: the collection is
+ * undefined, no entry's route matched by method+path (`no-route`), or a route
+ * matched but none of its active presets passed (`no-preset`, listing the
+ * presets tried).
  */
 export function createEngine(definitions: Definitions): Engine {
   const compiled = new Map<string, CompiledPath>()
@@ -231,6 +258,9 @@ export function createEngine(definitions: Definitions): Engine {
       }
 
       const method = request.method.toUpperCase()
+      // Entries whose route matched by method+path but whose preset (or variant)
+      // did not yield a response — the basis for the no-preset miss diagnostic.
+      const tried: TriedPreset[] = []
       for (const entry of applyOverrides(entries, selection.overrides)) {
         const address = parseAddress(entry)
         if (!address) {
@@ -248,12 +278,16 @@ export function createEngine(definitions: Definitions): Engine {
         if (!pathParams) {
           continue
         }
+        // The route matched by method+path: from here, any failure to serve is a
+        // no-preset miss, not a no-route miss.
         const preset = route.presets[address.preset]
         if (!preset || !presetMatches(preset, request)) {
+          tried.push({ route: address.route, preset: address.preset })
           continue
         }
         const variant = route.variants[address.variant]
         if (!variant) {
+          tried.push({ route: address.route, preset: address.preset })
           continue
         }
         return {
@@ -261,6 +295,14 @@ export function createEngine(definitions: Definitions): Engine {
           address,
           pathParams,
           response: buildResponse(variant),
+        }
+      }
+
+      if (tried.length > 0) {
+        return {
+          type: 'miss',
+          reason: { kind: 'no-preset', method, path: request.path, tried },
+          message: describeNoPresetMiss(method, request, tried),
         }
       }
 

@@ -94,9 +94,16 @@ export interface VariantAddress {
   variant: string
 }
 
+/** A `route:preset` entry whose route matched by method+path but whose preset did not pass. */
+export interface TriedPreset {
+  route: string
+  preset: string
+}
+
 export type MissReason =
   | { kind: 'no-collection'; collection: string }
   | { kind: 'no-route'; method: string; path: string }
+  | { kind: 'no-preset'; method: string; path: string; tried: TriedPreset[] }
 
 export type MatchResult =
   | {

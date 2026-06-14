@@ -14,6 +14,7 @@ export type {
   Route,
   RouteOverride,
   Selection,
+  TriedPreset,
   Variant,
   VariantAddress,
 } from './types'
