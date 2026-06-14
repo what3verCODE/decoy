@@ -3,4 +3,6 @@ packages:
   - "apps/*"
   - "tooling/*"
 allowBuilds:
+  # @nestjs/core's only postinstall is an OpenCollective funding banner — no build needed.
+  '@nestjs/core': false
   lefthook: true
