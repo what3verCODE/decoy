@@ -92,6 +92,34 @@ function dottedPath(issue: v.BaseIssue<unknown>): string {
 }
 
 /**
+ * Schema-validate a service config object against {@link ServiceConfigSchema},
+ * mapping every valibot issue to a **service-scoped** {@link ValidationIssue}:
+ * `error in <service>: <message> at <value.path>` (the ` at <path>` is omitted for
+ * a root-level issue). Unlike mock files, the config file carries no `file:line` —
+ * its discovery/loading is owned by cosmiconfig — so issues are located by the
+ * service identifier (`service "name"`, `service [index]`, or `service`) and the
+ * offending value path instead. `file` is still the resolved config file path.
+ */
+export function validateServiceConfig(
+  data: unknown,
+  file: string,
+  service: string,
+): ValidationIssue[] {
+  const result = v.safeParse(ServiceConfigSchema, data, { abortPipeEarly: false })
+  if (result.success) {
+    return []
+  }
+  return result.issues.map((issue) => {
+    const dotted = dottedPath(issue)
+    return {
+      severity: 'error' as const,
+      message: `error in ${service}: ${issue.message}${dotted ? ` at ${dotted}` : ''}`,
+      file,
+    }
+  })
+}
+
+/**
  * Schema-validate `data` against `schema`, mapping every valibot issue to a
  * {@link ValidationIssue} with the offending field's `file:line`. The line is the
  * field path's own line when resolvable, falling back to the document root.

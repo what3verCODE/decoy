@@ -3,16 +3,11 @@ import { readdir } from 'node:fs/promises'
 import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Collection, Definitions, Route } from '@decoy/core'
+import { cosmiconfig, defaultLoaders, type Loader, type PublicExplorer } from 'cosmiconfig'
 import { createJiti } from 'jiti'
 import type { AdminConfig, DecoyConfig, PassthroughConfig, ServiceConfig } from './define-config'
 import { MOCK_EXTENSIONS } from './parse'
-import {
-  bindLineAt,
-  inlineSourceDoc,
-  loadSourceDoc,
-  type SourceDoc,
-  type ValuePath,
-} from './source'
+import { bindLineAt, loadSourceDoc, type ValuePath } from './source'
 import {
   hasErrors,
   type RawCollection,
@@ -23,10 +18,15 @@ import {
   validateSources,
 } from './validate'
 
-/** Candidate config file names, in resolution order. */
-const CONFIG_NAMES = [
+/**
+ * The config file names cosmiconfig searches, in resolution order. `.ts/.js/.mjs/
+ * .cjs` are loaded through a jiti-backed loader (see {@link createConfigExplorer});
+ * `.json/.yaml/.yml` use cosmiconfig's bundled declarative loaders.
+ */
+const CONFIG_SEARCH_PLACES = [
   'decoy.config.ts',
   'decoy.config.mjs',
+  'decoy.config.cjs',
   'decoy.config.js',
   'decoy.config.json',
   'decoy.config.yaml',
@@ -109,26 +109,33 @@ function resolvePassthrough(
   return { url: passthrough.url.replace(/\/+$/, '') }
 }
 
-function findConfigFile(cwd: string): string | undefined {
-  for (const name of CONFIG_NAMES) {
-    const candidate = join(cwd, name)
-    if (existsSync(candidate)) {
-      return candidate
-    }
-  }
-  return undefined
+/** Load a `.ts/.js/.mjs/.cjs` config through jiti so configs may carry typed JS. */
+const jitiLoader: Loader = (filepath) => {
+  const jiti = createJiti(pathToFileURL(filepath).href)
+  return jiti.import(filepath, { default: true })
 }
 
-/** Load the config file into a line-aware {@link SourceDoc} (declarative formats keep lines; TS/JS do not). */
-async function loadConfigDoc(filePath: string): Promise<SourceDoc> {
-  const ext = extname(filePath).toLowerCase()
-  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    return loadSourceDoc(filePath)
-  }
-  // .ts / .js / .mjs — loaded via jiti so configs may carry typed JS (no source lines).
-  const jiti = createJiti(pathToFileURL(filePath).href)
-  const data = (await jiti.import(filePath, { default: true })) as DecoyConfig
-  return inlineSourceDoc(filePath, data)
+/**
+ * A cosmiconfig explorer for the `decoy` module: discovery + reading of the config
+ * file (the existing `decoy.config.*` names). `.ts/.js/.mjs/.cjs` load through
+ * {@link jitiLoader} (cosmiconfig cannot transpile TS itself); declarative formats
+ * use the bundled loaders. `searchStrategy: 'none'` searches only the start dir
+ * (matching the previous cwd-only discovery), and `cache: false` keeps a hot
+ * reload (#44/#51) re-reading the file from disk rather than serving a stale load.
+ */
+function createConfigExplorer(): PublicExplorer {
+  return cosmiconfig('decoy', {
+    searchStrategy: 'none',
+    searchPlaces: CONFIG_SEARCH_PLACES,
+    cache: false,
+    loaders: {
+      ...defaultLoaders,
+      '.ts': jitiLoader,
+      '.js': jitiLoader,
+      '.mjs': jitiLoader,
+      '.cjs': jitiLoader,
+    },
+  })
 }
 
 async function walk(dir: string): Promise<string[]> {
@@ -158,20 +165,14 @@ async function collectRouteSources(
   service: ServiceConfig,
   baseDir: string,
   collectionsFile: string,
-  configDoc: SourceDoc | undefined,
-  serviceBase: ValuePath,
+  configFile: string | undefined,
 ): Promise<RawRoute[]> {
   const sources: RawRoute[] = []
 
-  // Inline routes declared in the config entry.
-  ;(service.routes ?? []).forEach((route, index) => {
-    sources.push({
-      data: route,
-      file: configDoc?.file ?? '<inline>',
-      lineAt: configDoc
-        ? bindLineAt(configDoc, [...serviceBase, 'routes', index])
-        : () => undefined,
-    })
+  // Inline routes declared in the config entry — located by the config file, no line
+  // (config-file line tracking was dropped with the move to cosmiconfig).
+  ;(service.routes ?? []).forEach((route) => {
+    sources.push({ data: route, file: configFile ?? '<inline>', lineAt: () => undefined })
   })
 
   // File-based routes under routesDir (recursive).
@@ -191,20 +192,13 @@ async function collectRouteSources(
 async function collectCollectionSources(
   service: ServiceConfig,
   collectionsFile: string,
-  configDoc: SourceDoc | undefined,
-  serviceBase: ValuePath,
+  configFile: string | undefined,
 ): Promise<RawCollection[]> {
   const sources: RawCollection[] = []
 
-  // Inline collections declared in the config entry.
-  ;(service.collections ?? []).forEach((collection, index) => {
-    sources.push({
-      data: collection,
-      file: configDoc?.file ?? '<inline>',
-      lineAt: configDoc
-        ? bindLineAt(configDoc, [...serviceBase, 'collections', index])
-        : () => undefined,
-    })
+  // Inline collections declared in the config entry — located by the config file, no line.
+  ;(service.collections ?? []).forEach((collection) => {
+    sources.push({ data: collection, file: configFile ?? '<inline>', lineAt: () => undefined })
   })
 
   // The single collections file (an array of collections, or a lone collection).
@@ -228,43 +222,66 @@ interface SourceLayout {
   baseDir: string
   /** The resolved config file, when booting from one (absent on the default-path source). */
   configFile?: string
-  /** The loaded, line-aware config document (absent on the default-path source). */
-  configDoc?: SourceDoc
-  /** Where this service sits in the config doc (`[]` single form, `[0]` array form). */
+  /** Where this service sits in the config (`[]` single form, `[0]` array form). */
   serviceBase: ValuePath
+}
+
+/** A service identifier for service-scoped config errors: `service "name"`, `service [index]`, or `service`. */
+function describeService(service: ServiceConfig, serviceBase: ValuePath): string {
+  if (typeof service.name === 'string' && service.name.length > 0) {
+    return `service "${service.name}"`
+  }
+  if (serviceBase.length > 0) {
+    return `service [${serviceBase[0]}]`
+  }
+  return 'service'
 }
 
 /**
  * Resolve the active source into **one layout per service**: a `decoy.config.*`
  * file (single object → one layout; array → one layout per entry, ADR-0006) or
  * the default-path source (`mocks/routes` + `mocks/collections.yaml`, always a
- * single service). Panics (throws) when neither can be resolved — the one
- * fail-fast-on-first exception to aggregate validation.
+ * single service). Discovery + reading of the config file is owned by cosmiconfig
+ * (see {@link createConfigExplorer}). Panics (throws) when neither can be resolved
+ * — the one fail-fast-on-first exception to aggregate validation.
  */
 async function resolveServiceLayouts(opts?: {
   cwd?: string
   configPath?: string
 }): Promise<SourceLayout[]> {
   const cwd = opts?.cwd ?? process.cwd()
-  const configFile = opts?.configPath ? resolve(cwd, opts.configPath) : findConfigFile(cwd)
+  const explorer = createConfigExplorer()
 
-  if (configFile) {
+  let found: { config: unknown; filepath: string } | undefined
+  if (opts?.configPath) {
+    const configFile = resolve(cwd, opts.configPath)
     if (!existsSync(configFile)) {
       throw new Error(`decoy config not found: ${configFile}`)
     }
-    const configDoc = await loadConfigDoc(configFile)
-    const loaded = configDoc.data as DecoyConfig
+    const result = await explorer.load(configFile)
+    if (result) {
+      found = { config: result.config, filepath: result.filepath }
+    }
+  } else {
+    const result = await explorer.search(cwd)
+    if (result) {
+      found = { config: result.config, filepath: result.filepath }
+    }
+  }
+
+  if (found) {
+    const loaded = found.config as DecoyConfig
     const isArray = Array.isArray(loaded)
     const services = isArray ? loaded : [loaded]
     if (services.length === 0) {
       throw new Error('decoy config defines no services')
     }
+    const configFile = found.filepath
     const baseDir = dirname(configFile)
     return services.map((service, index) => ({
       service: service as ServiceConfig,
       baseDir,
       configFile,
-      configDoc,
       serviceBase: isArray ? [index] : [],
     }))
   }
@@ -275,7 +292,7 @@ async function resolveServiceLayouts(opts?: {
     existsSync(resolve(baseDir, DEFAULT_COLLECTIONS_FILE))
   if (!hasDefaultSource) {
     throw new Error(
-      `no decoy config found and no default-path source present (looked for a ${CONFIG_NAMES[0]} variant, ${DEFAULT_ROUTES_DIR}/, or ${DEFAULT_COLLECTIONS_FILE} under ${cwd})`,
+      `no decoy config found and no default-path source present (looked for a decoy.config.* file, ${DEFAULT_ROUTES_DIR}/, or ${DEFAULT_COLLECTIONS_FILE} under ${cwd})`,
     )
   }
   return [{ service: { port: DEFAULT_PORT }, baseDir, serviceBase: [] }]
@@ -286,27 +303,16 @@ async function resolveServiceLayouts(opts?: {
  * line-aware sources, ready to validate and assemble.
  */
 async function collectSources(layout: SourceLayout): Promise<CollectedSources> {
-  const { service, baseDir, configDoc, serviceBase } = layout
+  const { service, baseDir, configFile, serviceBase } = layout
 
   const collectionsFile = resolve(baseDir, service.collectionsFile ?? DEFAULT_COLLECTIONS_FILE)
-  const routes = await collectRouteSources(
-    service,
-    baseDir,
-    collectionsFile,
-    configDoc,
-    serviceBase,
-  )
-  const collections = await collectCollectionSources(
-    service,
-    collectionsFile,
-    configDoc,
-    serviceBase,
-  )
+  const routes = await collectRouteSources(service, baseDir, collectionsFile, configFile)
+  const collections = await collectCollectionSources(service, collectionsFile, configFile)
 
   return {
     service,
-    config: configDoc
-      ? { data: service, file: configDoc.file, lineAt: bindLineAt(configDoc, serviceBase) }
+    config: configFile
+      ? { data: service, file: configFile, service: describeService(service, serviceBase) }
       : undefined,
     routes,
     collections,
@@ -331,10 +337,11 @@ function assembleDefinitions(sources: CollectedSources): Definitions {
 /**
  * Cross-service checks that no single service's sources can see: in a
  * multi-instance config (ADR-0006) two services must not share a listen port, or
- * the second instance's `listen()` fails with an opaque `EADDRINUSE`. Reported at
- * the offending service's `port` field (`file:line`) so it surfaces in `decoy
- * check` and blocks boot. Port `0` (ephemeral — the OS assigns a free port) never
- * collides and is exempt. Single-service sources produce no cross-service issues.
+ * the second instance's `listen()` fails with an opaque `EADDRINUSE`. The message
+ * names both offending services so it surfaces in `decoy check` and blocks boot
+ * (located by the config file, no line). Port `0` (ephemeral — the OS assigns a
+ * free port) never collides and is exempt. Single-service sources produce no
+ * cross-service issues.
  */
 function crossServiceIssues(layouts: SourceLayout[]): ValidationIssue[] {
   if (layouts.length < 2) {
@@ -350,14 +357,10 @@ function crossServiceIssues(layouts: SourceLayout[]): ValidationIssue[] {
     }
     const prior = firstByPort.get(port)
     if (prior !== undefined) {
-      const lineAt = layout.configDoc
-        ? bindLineAt(layout.configDoc, [...layout.serviceBase, 'port'])
-        : () => undefined
       issues.push({
         severity: 'error',
         message: `duplicate port ${port}: services "${prior}" and "${name}" cannot both listen on it`,
-        file: layout.configDoc?.file ?? '<config>',
-        line: lineAt([]),
+        file: layout.configFile ?? '<config>',
       })
     } else {
       firstByPort.set(port, name)

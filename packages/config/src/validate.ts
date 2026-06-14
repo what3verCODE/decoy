@@ -1,5 +1,5 @@
 import { compile as compileJmespath } from '@jmespath-community/jmespath'
-import { CollectionSchema, RouteSchema, ServiceConfigSchema, validateWithSchema } from './schema'
+import { CollectionSchema, RouteSchema, validateServiceConfig, validateWithSchema } from './schema'
 import type { LineAt, ValuePath } from './source'
 
 /** Severity of a validation issue: an `error` blocks boot; a `warning` does not. */
@@ -29,8 +29,13 @@ export interface RawCollection {
 
 /** Everything aggregate validation needs: the (optional) config plus every route/collection source. */
 export interface ValidationInput {
-  /** The resolved service config object, present only when a config file was loaded. */
-  config?: { data: unknown; file: string; lineAt: LineAt }
+  /**
+   * The resolved service config object, present only when a config file was
+   * loaded. `service` is the identifier used in service-scoped error messages
+   * (`service "name"`, `service [index]`, or `service`); the config file carries
+   * no `file:line` (cosmiconfig owns its loading), only `file`.
+   */
+  config?: { data: unknown; file: string; service: string }
   routes: RawRoute[]
   collections: RawCollection[]
 }
@@ -171,15 +176,10 @@ function jmespathError(expression: string): string | undefined {
 export function validateSources(input: ValidationInput): ValidationIssue[] {
   const issues: ValidationIssue[] = []
 
-  // 1. Schema validation — config, then every route and collection file.
+  // 1. Schema validation — config (service-scoped), then every route and collection file.
   if (input.config) {
     issues.push(
-      ...validateWithSchema(
-        ServiceConfigSchema,
-        input.config.data,
-        input.config.file,
-        input.config.lineAt,
-      ),
+      ...validateServiceConfig(input.config.data, input.config.file, input.config.service),
     )
   }
   for (const route of input.routes) {

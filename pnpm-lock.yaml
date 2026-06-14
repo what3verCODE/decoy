@@ -79,6 +79,9 @@ importers:
       '@jmespath-community/jmespath':
         specifier: ^1.3.0
         version: 1.3.0
+      cosmiconfig:
+        specifier: ^9.0.2
+        version: 9.0.2(typescript@6.0.3)
       jiti:
         specifier: ^2.7.0
         version: 2.7.0

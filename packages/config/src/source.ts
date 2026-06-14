@@ -1,16 +1,17 @@
 import { readFile } from 'node:fs/promises'
-import { extname } from 'node:path'
 import { LineCounter, parseDocument } from 'yaml'
 
 /** A path into a parsed value: object keys (strings) and array indices (numbers). */
 export type ValuePath = ReadonlyArray<string | number>
 
 /**
- * A parsed source file that can resolve a value path back to the 1-based line it
- * was authored on — the basis for every validation issue's `file:line`. YAML and
- * JSON (a YAML 1.2 subset) are parsed through the `yaml` document model so node
- * ranges are available; TS/JS configs loaded via jiti have no source map, so
- * their {@link lineAt} always returns `undefined` (the issue still carries the file).
+ * A parsed **mock** source file (a `routesDir` route or the `collectionsFile`)
+ * that can resolve a value path back to the 1-based line it was authored on — the
+ * basis for every mock-file validation issue's `file:line`. YAML and JSON (a YAML
+ * 1.2 subset) are parsed through the `yaml` document model so node ranges are
+ * available. The config file itself no longer flows through here: its discovery
+ * and loading are owned by cosmiconfig, and its validation reports a
+ * service-scoped message rather than `file:line`.
  */
 export interface SourceDoc {
   /** Absolute path of the file this document came from. */
@@ -21,22 +22,13 @@ export interface SourceDoc {
   lineAt(path: ValuePath): number | undefined
 }
 
-/** Extensions whose source can be parsed for line positions via the `yaml` model. */
-const LINE_AWARE_EXTENSIONS = new Set(['.yaml', '.yml', '.json'])
-
 /**
- * Read and parse a declarative source file (YAML/JSON) into a {@link SourceDoc}
- * that retains line positions. JSON is parsed through the same YAML document
- * model since YAML 1.2 is a superset of JSON, giving both formats `file:line`.
+ * Read and parse a declarative mock file (YAML/JSON) into a {@link SourceDoc} that
+ * retains line positions. JSON is parsed through the same YAML document model
+ * since YAML 1.2 is a superset of JSON, giving both formats `file:line`.
  */
 export async function loadSourceDoc(file: string): Promise<SourceDoc> {
   const raw = await readFile(file, 'utf8')
-  const ext = extname(file).toLowerCase()
-  if (!LINE_AWARE_EXTENSIONS.has(ext)) {
-    // Should not happen for mock files; fall back to a line-less doc to be safe.
-    return inlineSourceDoc(file, undefined)
-  }
-
   const lineCounter = new LineCounter()
   const doc = parseDocument(raw, { lineCounter })
   const data = doc.toJS()
@@ -51,15 +43,6 @@ export async function loadSourceDoc(file: string): Promise<SourceDoc> {
       return undefined
     },
   }
-}
-
-/**
- * Wrap an already-parsed value (e.g. a TS/JS config object loaded via jiti, or an
- * inline route/collection) as a {@link SourceDoc}. Line positions are unavailable,
- * so {@link SourceDoc.lineAt} returns `undefined`.
- */
-export function inlineSourceDoc(file: string, data: unknown): SourceDoc {
-  return { file, data, lineAt: () => undefined }
 }
 
 /** A `lineAt` bound to a sub-path of a {@link SourceDoc} — relative paths resolve under `base`. */

@@ -43,7 +43,7 @@ describe('loadConfig', () => {
     expect(service.passthrough).toBeUndefined()
   })
 
-  test('rejects an invalid passthrough.url with file:line', async () => {
+  test('rejects an invalid passthrough.url with a service-scoped message', async () => {
     const error = await loadConfig({
       configPath: `${fixtures}bad-passthrough/decoy.config.yaml`,
     }).then(
@@ -56,7 +56,10 @@ describe('loadConfig', () => {
     const urlIssue = issues.find((i) => i.message.includes('passthrough.url'))
     expect(urlIssue?.severity).toBe('error')
     expect(urlIssue?.file).toContain('decoy.config.yaml')
-    expect(urlIssue?.line).toBe(4)
+    // No config-file file:line; instead the message names the service + value path.
+    expect(urlIssue?.line).toBeUndefined()
+    expect(urlIssue?.message).toContain('service "users"')
+    expect(urlIssue?.message).toContain('at passthrough.url')
   })
 
   test('resolves a configured sessionIdleTtl', async () => {
@@ -69,7 +72,7 @@ describe('loadConfig', () => {
     expect(service.sessionIdleTtlMs).toBe(30 * 60 * 1000)
   })
 
-  test('rejects a non-positive sessionIdleTtl with file:line', async () => {
+  test('rejects a non-positive sessionIdleTtl with a service-scoped message', async () => {
     const error = await loadConfig({
       configPath: `${fixtures}bad-session-ttl/decoy.config.yaml`,
     }).then(
@@ -82,7 +85,9 @@ describe('loadConfig', () => {
     const ttlIssue = issues.find((i) => i.message.includes('sessionIdleTtl'))
     expect(ttlIssue?.severity).toBe('error')
     expect(ttlIssue?.file).toContain('decoy.config.yaml')
-    expect(ttlIssue?.line).toBe(3)
+    expect(ttlIssue?.line).toBeUndefined()
+    expect(ttlIssue?.message).toContain('service "users"')
+    expect(ttlIssue?.message).toContain('at sessionIdleTtl')
   })
 
   test('resolves the admin config to a separate port and normalized prefix', async () => {
@@ -124,7 +129,7 @@ describe('loadConfig', () => {
     expect(issues[0]?.line).toBeGreaterThan(0)
   })
 
-  test('rejects an out-of-range missStatus with file:line', async () => {
+  test('rejects an out-of-range missStatus with a service-scoped message', async () => {
     const error = await loadConfig({
       configPath: `${fixtures}bad-miss-status/decoy.config.yaml`,
     }).then(
@@ -137,7 +142,9 @@ describe('loadConfig', () => {
     const missIssue = issues.find((i) => i.message.includes('missStatus'))
     expect(missIssue?.severity).toBe('error')
     expect(missIssue?.file).toContain('decoy.config.yaml')
-    expect(missIssue?.line).toBe(3)
+    expect(missIssue?.line).toBeUndefined()
+    expect(missIssue?.message).toContain('service "users"')
+    expect(missIssue?.message).toContain('at missStatus')
   })
 
   test('warnings (overlapping routes) do not block boot', async () => {
@@ -173,7 +180,7 @@ describe('loadConfigs (multi-instance topology, ADR-0006)', () => {
     expect(services[0]?.name).toBe('users')
   })
 
-  test('rejects two services sharing a listen port with file:line', async () => {
+  test('rejects two services sharing a listen port, naming both services', async () => {
     const error = await loadConfigs({
       configPath: `${fixtures}multi-dup-port/decoy.config.yaml`,
     }).then(
@@ -187,7 +194,10 @@ describe('loadConfigs (multi-instance topology, ADR-0006)', () => {
     )
     expect(portIssue?.severity).toBe('error')
     expect(portIssue?.file).toContain('decoy.config.yaml')
-    expect(portIssue?.line).toBe(4)
+    // The offending services are named in the message; no config-file line.
+    expect(portIssue?.message).toContain('"alpha"')
+    expect(portIssue?.message).toContain('"beta"')
+    expect(portIssue?.line).toBeUndefined()
   })
 
   test('decoy check surfaces the duplicate-port error too', async () => {
