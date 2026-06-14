@@ -61,6 +61,28 @@ importers:
         specifier: ^2.7.0
         version: 2.7.0
 
+  examples/fastify:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@decoy/fastify':
+        specifier: workspace:*
+        version: link:../../packages/fastify
+      fastify:
+        specifier: ^5.0.0
+        version: 5.8.5
+    devDependencies:
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+
   examples/nest:
     dependencies:
       '@decoy/config':
