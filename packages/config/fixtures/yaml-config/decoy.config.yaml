@@ -3,3 +3,6 @@ port: 4101
 routesDir: ./mocks/routes
 collectionsFile: ./mocks/collections.yaml
 defaultCollection: happy-path
+admin:
+  port: 5101
+  prefix: /control/

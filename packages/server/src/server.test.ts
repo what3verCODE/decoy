@@ -46,6 +46,7 @@ function service(): LoadedService {
     name: 'users',
     port: 0,
     defaultCollection: 'happy-path',
+    admin: { enabled: true, prefix: '/admin' },
     definitions: {
       routes: new Map([
         [usersRoute.id, usersRoute],

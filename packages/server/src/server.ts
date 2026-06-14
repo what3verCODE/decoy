@@ -1,6 +1,12 @@
-import { createServer as createHttpServer, type Server, type ServerResponse } from 'node:http'
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
 import type { LoadedService } from '@decoy/config'
 import { type Controller, createController, type MockResponse } from '@decoy/core'
+import { handleAdmin, isAdminPath } from './admin'
 import { toEnvelope } from './envelope'
 import { consoleLogger, type Logger } from './logger'
 
@@ -16,10 +22,50 @@ export interface DecoyServer {
   listen(): Promise<number>
   /** Stop listening. */
   close(): Promise<void>
-  /** The canonical JS control API driving this server in-process (`/admin` mirrors it — #28). */
+  /** The canonical JS control API driving this server in-process (`/admin` mirrors it). */
   readonly control: Controller
+  /**
+   * The port the HTTP `/admin` control API is reachable on once listening: the
+   * service port (same-port mount) or its dedicated port; `undefined` when admin
+   * is disabled or before `listen()`.
+   */
+  readonly adminPort: number | undefined
   /** The underlying Node server. */
   readonly raw: Server
+}
+
+function listenOn(server: Server, port: number): Promise<number> {
+  return new Promise<number>((resolvePort, reject) => {
+    const onError = (error: Error) => reject(error)
+    server.once('error', onError)
+    server.listen(port, () => {
+      server.removeListener('error', onError)
+      const address = server.address()
+      resolvePort(typeof address === 'object' && address ? address.port : port)
+    })
+  })
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise<void>((resolveClose, reject) => {
+    server.close((error) => (error ? reject(error) : resolveClose()))
+  })
+}
+
+/** Dispatch an admin request, turning an unexpected handler failure into a 500. */
+function serveAdmin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  control: Controller,
+  prefix: string,
+  logger: Logger,
+): void {
+  void handleAdmin(req, res, control, prefix, logger).catch((error: unknown) => {
+    res.statusCode = 500
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ error: 'internal decoy error' }))
+    logger.warn(`admin request failed: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }
 
 function hasHeader(headers: Record<string, string>, name: string): boolean {
@@ -66,8 +112,15 @@ export function createServer(
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
   const control = createController(service.definitions, service.defaultCollection)
+  const admin = service.admin
+  const samePortAdmin = admin.enabled && admin.port === undefined
 
   const raw = createHttpServer((req, res) => {
+    if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
+      serveAdmin(req, res, control, admin.prefix, logger)
+      return
+    }
+
     const start = process.hrtime.bigint()
     void toEnvelope(req)
       .then((envelope) => {
@@ -96,26 +149,41 @@ export function createServer(
       })
   })
 
+  // A dedicated admin port (the escape hatch for mocking an `/admin/*` upstream)
+  // gets its own HTTP server; otherwise admin rides the main server above.
+  const adminServer =
+    admin.enabled && admin.port !== undefined
+      ? createHttpServer((req, res) => serveAdmin(req, res, control, admin.prefix, logger))
+      : undefined
+
+  let boundPort: number | undefined
+  let boundAdminPort: number | undefined
+
   return {
     raw,
     control,
-    listen() {
-      return new Promise<number>((resolvePort, reject) => {
-        const onError = (error: Error) => reject(error)
-        raw.once('error', onError)
-        raw.listen(service.port, () => {
-          raw.removeListener('error', onError)
-          const address = raw.address()
-          const port = typeof address === 'object' && address ? address.port : service.port
-          logger.info(`decoy "${service.name}" listening on http://localhost:${port}`)
-          resolvePort(port)
-        })
-      })
+    get adminPort() {
+      if (!admin.enabled) {
+        return undefined
+      }
+      return adminServer ? boundAdminPort : boundPort
     },
-    close() {
-      return new Promise<void>((resolveClose, reject) => {
-        raw.close((error) => (error ? reject(error) : resolveClose()))
-      })
+    async listen() {
+      boundPort = await listenOn(raw, service.port)
+      logger.info(`decoy "${service.name}" listening on http://localhost:${boundPort}`)
+      if (adminServer && admin.port !== undefined) {
+        boundAdminPort = await listenOn(adminServer, admin.port)
+        logger.info(
+          `decoy "${service.name}" admin API on http://localhost:${boundAdminPort}${admin.prefix}`,
+        )
+      }
+      return boundPort
+    },
+    async close() {
+      if (adminServer) {
+        await closeServer(adminServer)
+      }
+      await closeServer(raw)
     },
   }
 }

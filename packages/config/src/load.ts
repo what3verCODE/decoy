@@ -4,7 +4,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Collection, Definitions, Route } from '@decoy/core'
 import { createJiti } from 'jiti'
-import type { DecoyConfig, ServiceConfig } from './define-config'
+import type { AdminConfig, DecoyConfig, ServiceConfig } from './define-config'
 import { MOCK_EXTENSIONS, parseDataFile } from './parse'
 
 /** Candidate config file names, in resolution order. */
@@ -20,6 +20,16 @@ const CONFIG_NAMES = [
 const DEFAULT_ROUTES_DIR = 'mocks/routes'
 const DEFAULT_COLLECTIONS_FILE = 'mocks/collections.yaml'
 const DEFAULT_PORT = 4000
+const DEFAULT_ADMIN_PREFIX = '/admin'
+
+/** Resolved `/admin` control API mount: enabled flag, path prefix, and optional separate port. */
+export interface ResolvedAdmin {
+  enabled: boolean
+  /** Path prefix the admin API is mounted under, leading `/`, no trailing `/` (e.g. `/admin`). */
+  prefix: string
+  /** When set, the admin API listens on this dedicated port instead of the service port. */
+  port?: number
+}
 
 /** A fully resolved, ready-to-serve service. */
 export interface LoadedService {
@@ -27,6 +37,32 @@ export interface LoadedService {
   port: number
   defaultCollection: string
   definitions: Definitions
+  /** Resolved `/admin` control API mount (ADR-0010). */
+  admin: ResolvedAdmin
+}
+
+/** Normalize a path prefix to a leading `/` and no trailing `/`. */
+function normalizePrefix(prefix: string): string {
+  const trimmed = prefix.trim().replace(/\/+$/, '')
+  if (trimmed === '') {
+    return DEFAULT_ADMIN_PREFIX
+  }
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+}
+
+/** Resolve the authoring `admin` config into a {@link ResolvedAdmin} (default: on, same port, `/admin`). */
+function resolveAdmin(admin: AdminConfig | undefined): ResolvedAdmin {
+  if (admin === undefined || admin === true) {
+    return { enabled: true, prefix: DEFAULT_ADMIN_PREFIX }
+  }
+  if (admin === false) {
+    return { enabled: false, prefix: DEFAULT_ADMIN_PREFIX }
+  }
+  return {
+    enabled: true,
+    prefix: normalizePrefix(admin.prefix ?? DEFAULT_ADMIN_PREFIX),
+    port: admin.port,
+  }
 }
 
 function findConfigFile(cwd: string): string | undefined {
@@ -166,5 +202,6 @@ export async function loadConfig(opts?: {
     port: service.port ?? DEFAULT_PORT,
     defaultCollection,
     definitions: { routes, collections },
+    admin: resolveAdmin(service.admin),
   }
 }
