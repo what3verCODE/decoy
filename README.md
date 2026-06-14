@@ -85,6 +85,36 @@ fail), so it can gate a CI merge:
 - run: pnpm decoy check
 ```
 
+## Adapters (in-process)
+
+The standalone server is the centerpiece (ADR-0001), but the same pure engine can be **embedded in a
+real app** for partial mocking: matched routes are served from mocks, everything else falls through to
+the host app's own handlers. `@decoy/express` is the in-process alternative to running the server —
+identical matching/templating semantics, **fallthrough instead of fail-closed**.
+
+```ts
+import express from 'express'
+import { loadConfig } from '@decoy/config'
+import { fromService } from '@decoy/express'
+
+const app = express()
+app.use(express.json()) // a body parser before decoy enables `body:` matching
+
+const service = await loadConfig()           // resolves decoy.config.* + mocks/
+const decoy = fromService(service)           // or createDecoyMiddleware({ definitions, defaultCollection })
+app.use(decoy)                               // serve matched routes from mocks
+
+app.get('/users/:id', realHandler)           // reached only when no mock matches (fallthrough)
+
+// Drive scenarios in-process via the canonical JS control API (ADR-0010):
+decoy.control.setCollection('checkout-fails')
+decoy.control.useRoute('users-by-id', 'default', 'boom')
+decoy.control.reset()
+```
+
+Mount the middleware **before** the routes you want to mock. Because a miss calls `next()` (rather
+than the server's `501 + x-mock-miss`), unmatched requests reach the rest of the app untouched.
+
 ## Toolchain
 
 - **proto** pins the toolchain (Node 24, pnpm 11) — run `proto install`.
