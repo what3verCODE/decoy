@@ -48,6 +48,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
+      '@decoy/playwright':
+        specifier: workspace:*
+        version: link:../../packages/playwright
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.2
@@ -107,6 +110,19 @@ importers:
         version: 24.13.2
 
   packages/core: {}
+
+  packages/playwright:
+    dependencies:
+      '@decoy/control':
+        specifier: workspace:*
+        version: link:../control
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
 
   packages/server:
     dependencies:
