@@ -48,6 +48,15 @@ const AdminSchema = v.union([
   v.object({ port: v.optional(v.number()), prefix: v.optional(v.string()) }),
 ])
 
+/** Global passthrough target (ADR-0005): a single upstream base URL. */
+const PassthroughSchema = v.object({
+  url: v.pipe(
+    v.string(),
+    v.nonEmpty('passthrough.url must not be empty'),
+    v.url('passthrough.url must be a valid URL'),
+  ),
+})
+
 /** One service entry of a Decoy config. */
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
@@ -61,6 +70,7 @@ export const ServiceConfigSchema = v.object({
       v.maxValue(599, 'missStatus must be a valid HTTP status code (100-599)'),
     ),
   ),
+  passthrough: v.optional(PassthroughSchema),
   sessionIdleTtl: v.optional(
     v.pipe(
       v.number(),

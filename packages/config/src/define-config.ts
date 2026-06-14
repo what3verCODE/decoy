@@ -9,6 +9,15 @@ import type { Collection, Route } from '@decoy/core'
 export type AdminConfig = boolean | { port?: number; prefix?: string }
 
 /**
+ * Global passthrough (ADR-0005): when set, **unmatched** requests are forwarded
+ * verbatim to this single upstream (`{url}{path}{query}`, method/headers/body
+ * forwarded, response returned as-is) instead of failing closed. Off by default —
+ * a test can never silently reach the real API. Global per instance; no
+ * per-route/per-variant targets.
+ */
+export type PassthroughConfig = { url: string }
+
+/**
  * One Decoy service: a single upstream impersonated on one port. `routesDir`
  * (recursive) and `collectionsFile` are resolved relative to the config file
  * (or cwd). Routes/collections may also be supplied inline.
@@ -22,6 +31,11 @@ export interface ServiceConfig {
   admin?: AdminConfig
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
   missStatus?: number
+  /**
+   * Global passthrough target (ADR-0005). When set, unmatched requests are
+   * forwarded verbatim to this upstream instead of failing closed. Off by default.
+   */
+  passthrough?: PassthroughConfig
   /**
    * Idle TTL in ms after which an abandoned **session** is reaped (ADR-0011);
    * defaults to 30 minutes. Sessions are a tests-only concern.

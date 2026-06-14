@@ -27,6 +27,32 @@ describe('loadConfig', () => {
     expect(service.missStatus).toBe(501)
   })
 
+  test('resolves a configured passthrough target with a trimmed trailing slash', async () => {
+    const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
+    expect(service.passthrough).toEqual({ url: 'https://users.real' })
+  })
+
+  test('passthrough is off (undefined) when unset', async () => {
+    const service = await loadConfig({ cwd: `${fixtures}defaults` })
+    expect(service.passthrough).toBeUndefined()
+  })
+
+  test('rejects an invalid passthrough.url with file:line', async () => {
+    const error = await loadConfig({
+      configPath: `${fixtures}bad-passthrough/decoy.config.yaml`,
+    }).then(
+      () => undefined,
+      (e) => e,
+    )
+
+    expect(error).toBeInstanceOf(ValidationError)
+    const issues = (error as ValidationError).issues
+    const urlIssue = issues.find((i) => i.message.includes('passthrough.url'))
+    expect(urlIssue?.severity).toBe('error')
+    expect(urlIssue?.file).toContain('decoy.config.yaml')
+    expect(urlIssue?.line).toBe(4)
+  })
+
   test('resolves a configured sessionIdleTtl', async () => {
     const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
     expect(service.sessionIdleTtlMs).toBe(60000)

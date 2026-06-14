@@ -7,8 +7,9 @@ import {
 import type { LoadedService } from '@decoy/config'
 import type { Controller, MockResponse } from '@decoy/core'
 import { handleAdmin, isAdminPath } from './admin'
-import { toEnvelope } from './envelope'
+import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger } from './logger'
+import { forwardPassthrough } from './passthrough'
 import { createSessionRegistry, type SessionRegistry } from './sessions'
 
 export interface CreateServerOptions {
@@ -117,6 +118,7 @@ export function createServer(
     onReap: (ids) => logger.info(`decoy "${service.name}" reaped ${ids.length} idle session(s)`),
   })
   const missStatus = service.missStatus
+  const passthrough = service.passthrough
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
 
@@ -131,24 +133,34 @@ export function createServer(
       Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader,
     )
     const start = process.hrtime.bigint()
-    void toEnvelope(req)
-      .then((envelope) => {
+    const elapsed = () => (Number(process.hrtime.bigint() - start) / 1e6).toFixed(1)
+    void readRawBody(req)
+      .then(async (rawBody) => {
+        const envelope = envelopeFrom(req, rawBody)
         const result = control.match(envelope)
-        const latencyMs = Number(process.hrtime.bigint() - start) / 1e6
-        const elapsed = latencyMs.toFixed(1)
 
         if (result.type === 'matched') {
           writeResponse(res, result.response)
           const { route, preset, variant } = result.address
           logger.info(
-            `${envelope.method} ${envelope.path} → ${route}:${preset}:${variant} ${result.response.status} ${elapsed}ms`,
+            `${envelope.method} ${envelope.path} → ${route}:${preset}:${variant} ${result.response.status} ${elapsed()}ms`,
           )
-        } else {
-          writeMiss(res, result.message, missStatus)
-          logger.warn(
-            `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${missStatus} ${elapsed}ms`,
-          )
+          return
         }
+
+        // No match: forward to the passthrough upstream if configured, else fail closed.
+        if (passthrough) {
+          const status = await forwardPassthrough(req, res, rawBody, passthrough.url)
+          logger.info(
+            `${envelope.method} ${envelope.path} → PASSTHROUGH(${passthrough.url}) ${status} ${elapsed()}ms`,
+          )
+          return
+        }
+
+        writeMiss(res, result.message, missStatus)
+        logger.warn(
+          `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${missStatus} ${elapsed()}ms`,
+        )
       })
       .catch((error: unknown) => {
         res.statusCode = 500

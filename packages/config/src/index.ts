@@ -2,12 +2,14 @@ export {
   type AdminConfig,
   type DecoyConfig,
   defineConfig,
+  type PassthroughConfig,
   type ServiceConfig,
 } from './define-config'
 export {
   type LoadedService,
   loadConfig,
   type ResolvedAdmin,
+  type ResolvedPassthrough,
   validateConfig,
 } from './load'
 export { MOCK_EXTENSIONS, parseDataFile } from './parse'

@@ -4,7 +4,7 @@ import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Collection, Definitions, Route } from '@decoy/core'
 import { createJiti } from 'jiti'
-import type { AdminConfig, DecoyConfig, ServiceConfig } from './define-config'
+import type { AdminConfig, DecoyConfig, PassthroughConfig, ServiceConfig } from './define-config'
 import { MOCK_EXTENSIONS } from './parse'
 import {
   bindLineAt,
@@ -50,6 +50,12 @@ export interface ResolvedAdmin {
   port?: number
 }
 
+/** Resolved global passthrough target (ADR-0005): a normalized upstream base URL. */
+export interface ResolvedPassthrough {
+  /** Upstream base URL with any trailing slash trimmed, ready to prefix `{path}{query}`. */
+  url: string
+}
+
 /** A fully resolved, ready-to-serve service. */
 export interface LoadedService {
   name: string
@@ -57,6 +63,11 @@ export interface LoadedService {
   defaultCollection: string
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
   missStatus: number
+  /**
+   * Global passthrough target (ADR-0005): when set, unmatched requests are
+   * forwarded verbatim here instead of failing closed. Absent = off (the default).
+   */
+  passthrough?: ResolvedPassthrough
   /** Idle TTL (ms) after which an abandoned session is reaped (ADR-0011); defaults to 30 min. */
   sessionIdleTtlMs: number
   definitions: Definitions
@@ -86,6 +97,16 @@ function resolveAdmin(admin: AdminConfig | undefined): ResolvedAdmin {
     prefix: normalizePrefix(admin.prefix ?? DEFAULT_ADMIN_PREFIX),
     port: admin.port,
   }
+}
+
+/** Resolve the authoring `passthrough` config into a {@link ResolvedPassthrough} (trailing slash trimmed); `undefined` = off. */
+function resolvePassthrough(
+  passthrough: PassthroughConfig | undefined,
+): ResolvedPassthrough | undefined {
+  if (passthrough === undefined) {
+    return undefined
+  }
+  return { url: passthrough.url.replace(/\/+$/, '') }
 }
 
 function findConfigFile(cwd: string): string | undefined {
@@ -336,6 +357,7 @@ export async function loadConfig(opts?: {
     port: service.port ?? DEFAULT_PORT,
     defaultCollection,
     missStatus: service.missStatus ?? DEFAULT_MISS_STATUS,
+    passthrough: resolvePassthrough(service.passthrough),
     sessionIdleTtlMs: service.sessionIdleTtl ?? DEFAULT_SESSION_IDLE_TTL_MS,
     definitions,
     admin: resolveAdmin(service.admin),
