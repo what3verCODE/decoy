@@ -1,0 +1,11 @@
+id: users-list-api
+method: GET
+path: /users
+presets:
+  default: {}
+variants:
+  success:
+    status: 200
+    body:
+      - id: 1
+        name: Ada

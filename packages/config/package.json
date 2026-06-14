@@ -1,0 +1,38 @@
+{
+  "name": "@decoy/config",
+  "version": "0.0.0",
+  "description": "Decoy config: defineConfig, config loaders (TS/JS/YAML/JSON), routesDir + collectionsFile resolution.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build",
+    "test": "rstest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@decoy/core": "workspace:*",
+    "jiti": "^2.7.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}
