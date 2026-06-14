@@ -34,3 +34,56 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Discover example workspaces so each gets its own e2e job (the e2e tier lives in
+  # examples/*, exposed as `test:e2e`). Emits an empty matrix when no example exists
+  # yet, so the e2e job below simply skips rather than failing.
+  discover-examples:
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.find.outputs.examples }}
+      has-examples: ${{ steps.find.outputs.has-examples }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: |
+          shopt -s nullglob
+          names=()
+          for dir in examples/*/; do
+            [ -f "${dir}package.json" ] || continue
+            names+=("$(basename "$dir")")
+          done
+          if [ ${#names[@]} -eq 0 ]; then
+            echo "has-examples=false" >> "$GITHUB_OUTPUT"
+            echo "examples=[]" >> "$GITHUB_OUTPUT"
+          else
+            json=$(printf '%s\n' "${names[@]}" | jq -R . | jq -cs .)
+            echo "has-examples=true" >> "$GITHUB_OUTPUT"
+            echo "examples=$json" >> "$GITHUB_OUTPUT"
+          fi
+
+  # One job per example, running just that example's `test:e2e`. Browser-based
+  # examples add their own `playwright install --with-deps chromium` step in their
+  # own issue; non-browser examples need no browser install.
+  example-e2e:
+    needs: discover-examples
+    if: needs.discover-examples.outputs.has-examples == 'true'
+    runs-on: ubuntu-latest
+    name: e2e (${{ matrix.example }})
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.discover-examples.outputs.examples) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup toolchain (proto reads .prototools)
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: e2e
+        run: pnpm --filter "./examples/${{ matrix.example }}" run test:e2e

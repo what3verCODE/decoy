@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+  - "examples/*"
   - "tooling/*"
 allowBuilds:
   # @nestjs/core's only postinstall is an OpenCollective funding banner — no build needed.

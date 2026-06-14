@@ -19,7 +19,7 @@ skeleton; packages are being built out.
 ```
 apps/
   docs/         documentation site
-  playground/   example app + server (dogfood e2e target)
+examples/       per-surface showcases — the e2e tier (`test:e2e` only)
 packages/
   core/         types · engine · JMESPath templating · std fns · Router interface  (pure, no IO)
   config/       defineConfig · valibot schema · loaders
