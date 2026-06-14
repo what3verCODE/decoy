@@ -3,7 +3,7 @@ import type { DecoyServer, Logger } from '@decoy/server'
 import { afterEach, describe, expect, test } from '@rstest/core'
 import { run } from './cli'
 
-const silent: Logger = { info() {}, warn() {} }
+const silent: Logger = { info() {}, warn() {}, request() {} }
 const configPath = resolve(process.cwd(), 'fixtures/basic/decoy.config.ts')
 const invalidConfigPath = resolve(process.cwd(), 'fixtures/invalid/decoy.config.ts')
 
@@ -31,6 +31,30 @@ describe('decoy start (end-to-end through the CLI)', () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ id: 42, name: 'Ada' })
+  })
+
+  test('start --json emits machine-readable request lines (no injected logger)', async () => {
+    const lines: string[] = []
+    const original = console.log
+    console.log = (message?: unknown) => lines.push(String(message))
+    try {
+      server = await run(['start', '--config', configPath, '--port', '0', '--json'])
+      const address = server?.raw.address()
+      const port = typeof address === 'object' && address ? address.port : 0
+      await fetch(`http://localhost:${port}/users/42`)
+    } finally {
+      console.log = original
+    }
+
+    const requestLine = lines.find((l) => l.includes('"outcome"'))
+    expect(requestLine).toBeDefined()
+    expect(JSON.parse(requestLine ?? '')).toMatchObject({
+      method: 'GET',
+      path: '/users/42',
+      outcome: 'matched',
+      status: 200,
+      session: 'global',
+    })
   })
 
   test('rejects an unknown command', async () => {

@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util'
 import { formatIssues, hasErrors, loadConfig, validateConfig } from '@decoy/config'
-import { createServer, type DecoyServer, type Logger } from '@decoy/server'
+import { createLogger, createServer, type DecoyServer, type Logger } from '@decoy/server'
 
 export interface RunOptions {
   logger?: Logger
@@ -11,7 +11,7 @@ export interface RunOptions {
 const HELP = `decoy — a fast, contract-first HTTP mock you point a base URL at.
 
 Usage:
-  decoy start [--config <path>] [--port <port>]
+  decoy start [--config <path>] [--port <port>] [--json]
   decoy check [--config <path>]
   decoy help
 
@@ -22,7 +22,8 @@ Commands:
 
 Options:
   --config <path>   Path to a decoy.config.{ts,js,mjs,json,yaml} file.
-  --port <port>     Override the configured port (start only).`
+  --port <port>     Override the configured port (start only).
+  --json            Emit machine-readable JSON log lines for CI (start only).`
 
 /**
  * Run the CLI. `start` resolves with the running server (so tests can drive and
@@ -38,6 +39,7 @@ export async function run(
     options: {
       config: { type: 'string' },
       port: { type: 'string' },
+      json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   })
@@ -77,7 +79,8 @@ export async function run(
     service.port = port
   }
 
-  const server = createServer(service, { logger: options.logger })
+  const logger = options.logger ?? createLogger({ json: Boolean(values.json) })
+  const server = createServer(service, { logger })
   await server.listen()
   return server
 }

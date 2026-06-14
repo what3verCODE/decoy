@@ -36,9 +36,15 @@ packages/
 ## CLI
 
 ```bash
-decoy start [--config <path>] [--port <port>]   # boot a server from a config (or default mocks/)
-decoy check [--config <path>]                    # validate config + mocks, exit non-zero on error
+decoy start [--config <path>] [--port <port>] [--json]   # boot a server from a config (or default mocks/)
+decoy check [--config <path>]                            # validate config + mocks, exit non-zero on error
 ```
+
+`decoy start` emits one structured log line per request —
+`method path → route:preset:variant | MISS(reason) | PASSTHROUGH(target)` plus status, latency, and
+the resolved session (`global` or the `x-mock-session` id). Misses log at `warn`. Output is pretty
+text by default; `--json` emits one machine-readable JSON line per request (and per lifecycle
+message) for CI.
 
 `decoy check` runs the full aggregate validation (schema, `route:preset:variant` cross-reference,
 `extends` resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue with its

@@ -2,7 +2,7 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { createServer, type DecoyServer, type Logger } from '@decoy/server'
 
-const silent: Logger = { info() {}, warn() {} }
+const silent: Logger = { info() {}, warn() {}, request() {} }
 
 const usersRoute: Route = {
   id: 'users-by-id',

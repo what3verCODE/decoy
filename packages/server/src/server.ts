@@ -129,11 +129,12 @@ export function createServer(
     }
 
     const sessionHeader = req.headers['x-mock-session']
-    const control = sessions.resolve(
-      Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader,
-    )
+    const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader
+    const control = sessions.resolve(sessionId)
+    // The resolved session label: 'global' for no/empty header (matching resolve).
+    const session = sessionId ? sessionId : 'global'
     const start = process.hrtime.bigint()
-    const elapsed = () => (Number(process.hrtime.bigint() - start) / 1e6).toFixed(1)
+    const elapsedMs = () => Number(process.hrtime.bigint() - start) / 1e6
     void readRawBody(req)
       .then(async (rawBody) => {
         const envelope = envelopeFrom(req, rawBody)
@@ -141,26 +142,40 @@ export function createServer(
 
         if (result.type === 'matched') {
           writeResponse(res, result.response)
-          const { route, preset, variant } = result.address
-          logger.info(
-            `${envelope.method} ${envelope.path} → ${route}:${preset}:${variant} ${result.response.status} ${elapsed()}ms`,
-          )
+          logger.request({
+            method: envelope.method,
+            path: envelope.path,
+            outcome: { type: 'matched', address: result.address },
+            status: result.response.status,
+            latencyMs: elapsedMs(),
+            session,
+          })
           return
         }
 
         // No match: forward to the passthrough upstream if configured, else fail closed.
         if (passthrough) {
           const status = await forwardPassthrough(req, res, rawBody, passthrough.url)
-          logger.info(
-            `${envelope.method} ${envelope.path} → PASSTHROUGH(${passthrough.url}) ${status} ${elapsed()}ms`,
-          )
+          logger.request({
+            method: envelope.method,
+            path: envelope.path,
+            outcome: { type: 'passthrough', target: passthrough.url },
+            status,
+            latencyMs: elapsedMs(),
+            session,
+          })
           return
         }
 
         writeMiss(res, result.message, missStatus)
-        logger.warn(
-          `${envelope.method} ${envelope.path} → MISS(${result.reason.kind}) ${missStatus} ${elapsed()}ms`,
-        )
+        logger.request({
+          method: envelope.method,
+          path: envelope.path,
+          outcome: { type: 'miss', reason: result.reason.kind },
+          status: missStatus,
+          latencyMs: elapsedMs(),
+          session,
+        })
       })
       .catch((error: unknown) => {
         res.statusCode = 500

@@ -2,10 +2,16 @@ import { createServer as createHttpServer, type Server } from 'node:http'
 import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
-import type { Logger } from './logger'
+import type { Logger, RequestLog } from './logger'
 import { createServer, type DecoyServer } from './server'
 
-const silent: Logger = { info() {}, warn() {} }
+const silent: Logger = { info() {}, warn() {}, request() {} }
+
+/** A logger that captures the structured per-request records for assertion. */
+function recording(): { records: RequestLog[]; logger: Logger } {
+  const records: RequestLog[] = []
+  return { records, logger: { info() {}, warn() {}, request: (r) => records.push(r) } }
+}
 
 const usersRoute: Route = {
   id: 'users-by-id',
@@ -139,6 +145,59 @@ describe('createServer (HTTP)', () => {
   })
 })
 
+describe('createServer (structured per-request logging)', () => {
+  test('emits exactly one matched record carrying status, latency and the global session', async () => {
+    const { records, logger } = recording()
+    const server = createServer(service(), { logger })
+    const port = await server.listen()
+    try {
+      await fetch(`http://localhost:${port}/users/42`)
+
+      expect(records).toHaveLength(1)
+      const record = records[0]
+      expect(record?.method).toBe('GET')
+      expect(record?.path).toBe('/users/42')
+      expect(record?.outcome).toEqual({
+        type: 'matched',
+        address: { route: 'users-by-id', preset: 'default', variant: 'success' },
+      })
+      expect(record?.status).toBe(200)
+      expect(record?.latencyMs).toBeGreaterThanOrEqual(0)
+      expect(record?.session).toBe('global')
+    } finally {
+      await server.close()
+    }
+  })
+
+  test('records the session id from x-mock-session for an isolated request', async () => {
+    const { records, logger } = recording()
+    const server = createServer(service(), { logger })
+    const port = await server.listen()
+    try {
+      await fetch(`http://localhost:${port}/users/42`, { headers: { 'x-mock-session': 'sess-7' } })
+
+      expect(records[0]?.session).toBe('sess-7')
+    } finally {
+      await server.close()
+    }
+  })
+
+  test('a miss is recorded with a miss outcome and the configured status', async () => {
+    const { records, logger } = recording()
+    const server = createServer(service(), { logger })
+    const port = await server.listen()
+    try {
+      await fetch(`http://localhost:${port}/orders`)
+
+      expect(records).toHaveLength(1)
+      expect(records[0]?.outcome).toEqual({ type: 'miss', reason: 'no-route' })
+      expect(records[0]?.status).toBe(501)
+    } finally {
+      await server.close()
+    }
+  })
+})
+
 describe('createServer (passthrough)', () => {
   let upstream: Server
   let upstreamUrl: string
@@ -180,8 +239,7 @@ describe('createServer (passthrough)', () => {
   })
 
   test('forwards an unmatched request verbatim to the upstream and returns its response', async () => {
-    const lines: string[] = []
-    const logger: Logger = { info: (m) => lines.push(m), warn: (m) => lines.push(m) }
+    const { records, logger } = recording()
     const server = createServer({ ...service(), passthrough: { url: upstreamUrl } }, { logger })
     const port = await server.listen()
     try {
@@ -201,7 +259,9 @@ describe('createServer (passthrough)', () => {
       expect(received[0]?.url).toBe('/orders?page=2')
       expect(received[0]?.body).toBe('{"item":"x"}')
 
-      expect(lines.some((l) => l.includes(`PASSTHROUGH(${upstreamUrl})`))).toBe(true)
+      expect(records).toHaveLength(1)
+      expect(records[0]?.outcome).toEqual({ type: 'passthrough', target: upstreamUrl })
+      expect(records[0]?.status).toBe(200)
     } finally {
       await server.close()
     }

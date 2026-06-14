@@ -19,7 +19,7 @@ export interface Harness {
   stop(): Promise<void>
 }
 
-const silent: Logger = { info() {}, warn() {} }
+const silent: Logger = { info() {}, warn() {}, request() {} }
 
 /**
  * Boot the dogfood stack: load the playground's `decoy.config.ts`, start a Decoy

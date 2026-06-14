@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger } from './logger'
 import { createServer, type DecoyServer } from './server'
 
-const silent: Logger = { info() {}, warn() {} }
+const silent: Logger = { info() {}, warn() {}, request() {} }
 
 const usersRoute: Route = {
   id: 'users-by-id',
