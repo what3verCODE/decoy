@@ -1,0 +1,22 @@
+{
+  "name": "@decoy-examples/express",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: mount @decoy/express as in-process middleware in a real Express app — serve mocks, fall through to real handlers on a miss, switch scenarios in-process.",
+  "scripts": {
+    "dev": "jiti dev.ts",
+    "test:e2e": "rstest run"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*",
+    "@decoy/express": "workspace:*",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@decoy/core": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "jiti": "^2.7.0"
+  }
+}

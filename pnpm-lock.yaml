@@ -36,6 +36,31 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  examples/express:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@decoy/express':
+        specifier: workspace:*
+        version: link:../../packages/express
+      express:
+        specifier: ^5.1.0
+        version: 5.2.1
+    devDependencies:
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/express':
+        specifier: ^5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+
   examples/playwright-router:
     dependencies:
       '@decoy/config':
