@@ -1,0 +1,20 @@
+{
+  "name": "@decoy-examples/standalone-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example: run Decoy as a standalone server via the `decoy` CLI and switch scenarios over the /admin HTTP API.",
+  "scripts": {
+    "dev": "jiti dev.ts",
+    "test:e2e": "rstest run"
+  },
+  "dependencies": {
+    "@decoy/config": "workspace:*"
+  },
+  "devDependencies": {
+    "@decoy/cli": "workspace:*",
+    "@decoy/server": "workspace:*",
+    "@types/node": "^24.0.0",
+    "jiti": "^2.7.0"
+  }
+}

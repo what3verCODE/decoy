@@ -55,6 +55,25 @@ importers:
         specifier: ^24.0.0
         version: 24.13.2
 
+  examples/standalone-server:
+    dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+    devDependencies:
+      '@decoy/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@decoy/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
+
   packages/cli:
     dependencies:
       '@decoy/config':

@@ -1,0 +1,7 @@
+# Scenarios this standalone server can switch between over /admin.
+- id: happy-path
+  routes:
+    - users-by-id:default:ada
+- id: error-state
+  routes:
+    - users-by-id:default:boom
