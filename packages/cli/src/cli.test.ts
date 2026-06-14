@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import type { DecoyServer, Logger } from '@decoy/server'
 import { afterEach, describe, expect, test } from '@rstest/core'
 import { run } from './cli'
+import type { CommandContext, Tui } from './tui'
 
 const silent: Logger = { info() {}, warn() {}, request() {} }
 const configPath = resolve(process.cwd(), 'fixtures/basic/decoy.config.ts')
@@ -143,6 +144,91 @@ describe('decoy start (end-to-end through the CLI)', () => {
   test('help returns without starting a server', async () => {
     const result = await run(['help'], { logger: silent })
     expect(result).toBeUndefined()
+  })
+
+  describe('interactive TUI (--tui, #48)', () => {
+    /** A fake TUI that captures the session it is handed and resolves immediately. */
+    function fakeTui(): { tui: Tui; session: () => CommandContext | undefined } {
+      let captured: CommandContext | undefined
+      return {
+        tui: {
+          logger: silent,
+          run: async (ctx) => {
+            captured = ctx
+          },
+        },
+        session: () => captured,
+      }
+    }
+
+    test('boots one in-process server and hands the TUI the live engine + definitions', async () => {
+      const fake = fakeTui()
+      const result = await run(['start', '--config', configPath, '--port', '0', '--tui'], {
+        tui: fake.tui,
+      })
+
+      // --tui drives the loop then closes the server, so run resolves with undefined.
+      expect(result).toBeUndefined()
+
+      const session = fake.session()
+      expect(session).toBeDefined()
+      // The definitions handed to the TUI are the fixture's (for /collections, /routes).
+      expect(session?.definitions.collections.has('happy-path')).toBe(true)
+      expect(session?.definitions.routes.has('users-by-id')).toBe(true)
+      expect(session?.control.selection.collection).toBe('happy-path')
+
+      // The controller is the real in-process engine: it matches the fixture variant.
+      const match = session?.control.match({
+        method: 'GET',
+        url: '/users/42',
+        path: '/users/42',
+        pathParams: { id: '42' },
+        query: {},
+        headers: {},
+        cookies: {},
+        body: undefined,
+      })
+      expect(match?.type).toBe('matched')
+      if (match?.type === 'matched') {
+        expect(match.response.body).toEqual({ id: 42, name: 'Ada' })
+      }
+    })
+
+    test('--watch installs single-instance hot reload under the TUI and still serves', async () => {
+      const fake = fakeTui()
+      const result = await run(
+        ['start', '--config', configPath, '--port', '0', '--tui', '--watch'],
+        { tui: fake.tui },
+      )
+
+      expect(result).toBeUndefined()
+      const session = fake.session()
+      const match = session?.control.match({
+        method: 'GET',
+        url: '/users/42',
+        path: '/users/42',
+        pathParams: { id: '42' },
+        query: {},
+        headers: {},
+        cookies: {},
+        body: undefined,
+      })
+      expect(match?.type).toBe('matched')
+    })
+
+    test('rejects a multi-instance config (the TUI drives one engine)', async () => {
+      const fake = fakeTui()
+      await expect(
+        run(['start', '--config', multiConfigPath, '--tui'], { tui: fake.tui }),
+      ).rejects.toThrow(/multi-instance/)
+    })
+
+    test('rejects --json (non-interactive CI output conflicts with the TUI)', async () => {
+      const fake = fakeTui()
+      await expect(
+        run(['start', '--config', configPath, '--port', '0', '--tui', '--json'], { tui: fake.tui }),
+      ).rejects.toThrow(/--json/)
+    })
   })
 })
 

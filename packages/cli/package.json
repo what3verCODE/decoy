@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@decoy/config": "workspace:*",
+    "@decoy/core": "workspace:*",
     "@decoy/server": "workspace:*"
   },
   "devDependencies": {

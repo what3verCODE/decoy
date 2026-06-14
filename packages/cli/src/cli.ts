@@ -15,17 +15,24 @@ import {
   type DecoyServer,
   type Logger,
 } from '@decoy/server'
+import { createTui, type Tui } from './tui'
 
 export interface RunOptions {
   logger?: Logger
   /** Sink for CLI output (help text, the `check` report). Defaults to `console.log`. */
   out?: (message: string) => void
+  /**
+   * Injectable interactive TUI (`--tui`), for tests. Defaults to the real
+   * stdin/stdout runtime ({@link createTui}). The TUI owns the display, so its
+   * own logger renders live request lines — `logger` above is ignored in `--tui`.
+   */
+  tui?: Tui
 }
 
 const HELP = `decoy — a fast, contract-first HTTP mock you point a base URL at.
 
 Usage:
-  decoy start [--config <path>] [--port <port>] [--json] [--watch]
+  decoy start [--config <path>] [--port <port>] [--json] [--watch] [--tui]
   decoy check [--config <path>]
   decoy help
 
@@ -42,7 +49,10 @@ Options:
   --json            Emit machine-readable JSON log lines for CI (start only).
   --watch           Dev-only hot reload: re-load on config/mocks changes (start only).
                     Works with an array config too — each instance watches its own
-                    source. Off by default; never enable in CI/e2e.`
+                    source. Off by default; never enable in CI/e2e.
+  --tui             Launch an interactive TUI (Claude-Code-style slash commands:
+                    /collection, /route, …) driving the in-process engine, with
+                    live request logs (start only; single-instance only).`
 
 /**
  * Run the CLI. `start` resolves with the running server(s) so tests can drive and
@@ -62,6 +72,7 @@ export async function run(
       port: { type: 'string' },
       json: { type: 'boolean' },
       watch: { type: 'boolean' },
+      tui: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   })
@@ -107,6 +118,40 @@ export async function run(
       throw new Error(`invalid --port: ${values.port}`)
     }
     ;(services[0] as (typeof services)[number]).port = port
+  }
+
+  // Interactive TUI (#48, DESIGN §12): drive the single in-process engine through
+  // slash commands with live request logs. The TUI owns the display, so it serves
+  // exactly one engine — a multi-instance config (ADR-0006) is rejected (boot the
+  // group with plain `start`) — and --json (non-interactive CI output) conflicts.
+  if (values.tui) {
+    if (multi) {
+      throw new Error(
+        'invalid --tui: cannot drive a multi-instance config interactively — the TUI drives one in-process engine (start without --tui to boot the group)',
+      )
+    }
+    if (values.json) {
+      throw new Error(
+        'invalid --tui: --json is non-interactive CI output and conflicts with the interactive TUI',
+      )
+    }
+
+    const service = services[0] as (typeof services)[number]
+    // --watch still hot-reloads under the TUI (single-instance path), with reload
+    // warnings flowing through the TUI logger like every other line.
+    const watch: CreateServerOptions['watch'] = values.watch
+      ? {
+          paths: await resolveWatchPaths({ configPath: values.config }),
+          reload: () => loadConfig({ configPath: values.config }),
+        }
+      : undefined
+
+    const tui = options.tui ?? createTui()
+    const server = createServer(service, { logger: tui.logger, watch })
+    await server.listen()
+    await tui.run({ control: server.control, definitions: service.definitions })
+    await server.close()
+    return undefined
   }
 
   const logger = options.logger ?? createLogger({ json: Boolean(values.json) })

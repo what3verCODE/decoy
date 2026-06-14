@@ -36,8 +36,8 @@ packages/
 ## CLI
 
 ```bash
-decoy start [--config <path>] [--port <port>] [--json] [--watch]   # boot a server from a config (or default mocks/)
-decoy check [--config <path>]                                      # validate config + mocks, exit non-zero on error
+decoy start [--config <path>] [--port <port>] [--json] [--watch] [--tui]   # boot a server from a config (or default mocks/)
+decoy check [--config <path>]                                              # validate config + mocks, exit non-zero on error
 ```
 
 `decoy start` emits one structured log line per request —
@@ -54,6 +54,22 @@ never enable it in CI/e2e, where frozen definitions keep runs deterministic. Wit
 each instance watches its own source: editing one service's mocks re-loads only that instance, while
 editing the shared config file re-validates and re-loads every instance. `--port` is single-instance
 only (each service declares its own port).
+
+`--tui` launches an **interactive TUI** (Claude-Code-style) that drives the in-process engine through
+slash commands while streaming live request logs into the same view:
+
+| command | effect |
+| --- | --- |
+| `/collection <name>` | switch the active collection (the whole scenario) |
+| `/route <route>:<preset>:<variant>` | pin one route to a variant (an override) |
+| `/reset` | drop all per-route overrides |
+| `/collections`, `/routes` | list what is available (`*` marks the active collection) |
+| `/status` | show the active collection and overrides |
+| `/help`, `/quit` | help / exit |
+
+It drives **one** in-process engine, so it is single-instance only (a multi-instance array config is
+rejected — boot the group with plain `decoy start`) and conflicts with `--json` (non-interactive CI
+output). `--watch` still works under the TUI, with reload warnings flowing into the same view.
 
 ### Multi-instance topology
 
