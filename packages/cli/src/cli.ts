@@ -25,6 +25,38 @@ import { createTui, type Tui } from './tui'
 /** Default loopback port the `--ui` control panel binds (overridable with `--ui-port`). */
 const DEFAULT_UI_PORT = 4100
 
+/**
+ * Wrap each multi-instance server so closing **all** of them releases the shared
+ * request-log store exactly once (#78). The store is caller-owned — `createServer`
+ * never closes an injected store (sqlite `db.close()` is not idempotent, so a
+ * per-instance close would double-close and throw) — and `run()` has no other
+ * teardown hook, so without this a multi-instance sqlite `cleanup: 'on-exit'` store
+ * leaks its file on graceful shutdown. Reference-counts the instances: the store
+ * closes after the last one closes (running its on-exit file cleanup), guarded so it
+ * happens exactly once. Memory stores make this a no-op; a single-instance config
+ * keeps owning and closing its own store unchanged (this only wraps arrays).
+ */
+function releaseSharedStore(servers: DecoyServer[], store: RequestLogStore): DecoyServer[] {
+  let open = servers.length
+  let closed = false
+  return servers.map(
+    (server) =>
+      Object.create(server, {
+        close: {
+          enumerable: true,
+          value: async () => {
+            await server.close()
+            open -= 1
+            if (!closed && open === 0) {
+              closed = true
+              store.close()
+            }
+          },
+        },
+      }) as DecoyServer,
+  )
+}
+
 export interface RunOptions {
   logger?: Logger
   /** Sink for CLI output (help text, the `check` report). Defaults to `console.log`. */
@@ -266,5 +298,11 @@ export async function run(
     }
   }
 
-  return servers.length === 1 ? (servers[0] as DecoyServer) : servers
+  if (servers.length === 1) {
+    return servers[0] as DecoyServer
+  }
+  // Multi-instance: hand back instances that, once all closed, release the shared
+  // store exactly once so a sqlite `cleanup: 'on-exit'` store runs its file cleanup
+  // on graceful shutdown (#78). `sharedRequestLog` is defined on this (`multi`) path.
+  return releaseSharedStore(servers, sharedRequestLog as RequestLogStore)
 }

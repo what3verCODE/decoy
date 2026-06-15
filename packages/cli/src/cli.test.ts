@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { type DecoyServer, type DecoyUiServer, type Logger, version } from '@decoy/server'
@@ -229,6 +229,51 @@ describe('decoy start (end-to-end through the CLI)', () => {
       const fromOrders = await fetch(`http://localhost:${portOf(orders)}/orders/1`)
       expect(fromOrders.status).toBe(200)
       expect(await fromOrders.json()).toEqual({ svc: 'orders' })
+    })
+
+    test('a shared sqlite store with cleanup:on-exit is released once on shutdown (#78)', async () => {
+      // A multi-instance config shares **one** request-log store (ADR-0017); it is
+      // caller-owned, so run() — not createServer — must release it on graceful
+      // shutdown. With sqlite + cleanup:on-exit that means removing the file after
+      // the last instance closes, exactly once (a per-instance close double-closes
+      // the db and throws). The store's config comes from the first service.
+      const configDir = mkdtempSync(join(tmpdir(), 'decoy-shared-store-'))
+      const dbPath = join(configDir, '.decoy', 'shared.sqlite')
+      const service = (name: string, route: string, path: string) => `
+        { name: '${name}', port: 0, defaultCollection: 'happy',
+          routes: [{ id: '${route}', method: 'GET', path: '${path}', presets: { default: {} },
+            variants: { success: { status: 200, body: { svc: '${name}' } } } }],
+          collections: [{ id: 'happy', routes: ['${route}:default:success'] }] }`
+      writeFileSync(
+        join(configDir, 'decoy.config.ts'),
+        `export default [
+          { ...${service('users', 'users-route', '/users/{id}')},
+            requestLog: { store: 'sqlite', path: '.decoy/shared.sqlite', cleanup: 'on-exit' } },
+          ${service('orders', 'orders-route', '/orders/{id}')},
+        ]`,
+      )
+
+      try {
+        const booted = (await run(['start', '--config', join(configDir, 'decoy.config.ts')], {
+          logger: silent,
+        })) as DecoyServer[]
+        expect(booted).toHaveLength(2)
+
+        // Drive a request through each instance so both record into the one shared
+        // sqlite store, materialising the file.
+        await fetch(`http://localhost:${portOf(booted[0])}/users/1`)
+        await fetch(`http://localhost:${portOf(booted[1])}/orders/1`)
+        expect(existsSync(dbPath)).toBe(true)
+
+        // Closing every instance releases the shared store exactly once: no
+        // double-close throw, and on-exit cleanup removes the file + sidecars.
+        await Promise.all(booted.map((s) => s.close()))
+        for (const suffix of ['', '-journal', '-wal', '-shm']) {
+          expect(existsSync(`${dbPath}${suffix}`)).toBe(false)
+        }
+      } finally {
+        rmSync(configDir, { recursive: true, force: true })
+      }
     })
 
     describe('--ui aggregator (#72)', () => {
