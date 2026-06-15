@@ -1,4 +1,5 @@
 import { compile as compileJmespath } from '@jmespath-community/jmespath'
+import { validateRequestLog } from './request-log'
 import { CollectionSchema, RouteSchema, validateServiceConfig, validateWithSchema } from './schema'
 import type { LineAt, ValuePath } from './source'
 
@@ -181,6 +182,15 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     issues.push(
       ...validateServiceConfig(input.config.data, input.config.file, input.config.service),
     )
+    if (isRecord(input.config.data)) {
+      issues.push(
+        ...validateRequestLog(
+          input.config.data.requestLog,
+          input.config.file,
+          input.config.service,
+        ),
+      )
+    }
   }
   for (const route of input.routes) {
     issues.push(...validateWithSchema(RouteSchema, route.data, route.file, route.lineAt))

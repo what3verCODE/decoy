@@ -23,6 +23,12 @@ export interface SessionRegistryOptions {
   generateId?: () => string
   /** Called after a background sweep that reaped ≥1 session, with the reaped ids. */
   onReap?: (ids: string[]) => void
+  /**
+   * Called when a session is explicitly destroyed (`destroy`), with its id — so an
+   * observer (e.g. the request-log store's `cleanup: 'on-session-end'`) can react
+   * to the session ending. Not called for reaped sessions (see {@link onReap}).
+   */
+  onDestroy?: (sessionId: string) => void
 }
 
 /**
@@ -150,7 +156,11 @@ export function createSessionRegistry(
       return id
     },
     destroy(sessionId) {
-      return sessions.delete(sessionId)
+      const existed = sessions.delete(sessionId)
+      if (existed) {
+        options.onDestroy?.(sessionId)
+      }
+      return existed
     },
     has(sessionId) {
       return sessions.has(sessionId)

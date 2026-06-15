@@ -10,7 +10,7 @@ import { handleAdmin, isAdminPath, type RequestResolution } from './admin'
 import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger, type RequestLog } from './logger'
 import { forwardPassthrough } from './passthrough'
-import { createMemoryRequestLogStore, type RequestLogStore } from './request-log-store'
+import { createRequestLogStore, type RequestLogStore } from './request-log-store'
 import { createSessionRegistry, type SessionRegistry } from './sessions'
 import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
@@ -165,23 +165,31 @@ export function createServer(
   options: CreateServerOptions = {},
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
+  // The request-log store this instance records to (memory or durable sqlite, #70).
+  const requestLog = createRequestLogStore(service.requestLog)
   const sessions = createSessionRegistry(service.definitions, service.defaultCollection, {
     idleTtlMs: service.sessionIdleTtlMs,
-    onReap: (ids) => logger.info(`decoy "${service.name}" reaped ${ids.length} idle session(s)`),
+    onReap: (ids) => {
+      // A reaped session is destroyed — let the store apply its cleanup policy.
+      for (const id of ids) {
+        requestLog.endSession(id)
+      }
+      logger.info(`decoy "${service.name}" reaped ${ids.length} idle session(s)`)
+    },
+    onDestroy: (id) => requestLog.endSession(id),
   })
   const missStatus = service.missStatus
   const passthrough = service.passthrough
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
-  const requestLog = createMemoryRequestLogStore()
   // The fail-closed/passthrough context the `/admin/try` dry-run replays (DESIGN §6).
   const resolution: RequestResolution = { missStatus, passthrough }
 
-  // Record one structured line per request to both the logger (stdout) and the
-  // log store (the `GET /admin/logs` SSE stream / future durable store).
+  // Record one structured line per request to both the logger (stdout) and the log
+  // store (the `GET /admin/logs` SSE stream); the store tags each with this service.
   const record = (log: RequestLog): void => {
     logger.request(log)
-    requestLog.append(log)
+    requestLog.append({ ...log, service: service.name })
   }
 
   const raw = createHttpServer((req, res) => {
@@ -344,6 +352,8 @@ export function createServer(
         await closeServer(adminServer)
       }
       await closeServer(raw)
+      // Release the store last — under sqlite `cleanup: 'on-exit'` this removes the file.
+      requestLog.close()
     },
   }
 }

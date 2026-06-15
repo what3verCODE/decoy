@@ -153,6 +153,24 @@ describe('loadConfig', () => {
       expect.arrayContaining(['users-me-api', 'users-by-id-api']),
     )
   })
+
+  test('resolves the in-memory request-log store by default (#70)', async () => {
+    const service = await loadConfig({ cwd: `${fixtures}defaults` })
+    expect(service.requestLog).toEqual({ store: 'memory', cleanup: 'never' })
+  })
+
+  test('resolves a sqlite request-log store, expanding its templated path at boot (#70)', async () => {
+    const service = await loadConfig({
+      configPath: `${fixtures}requestlog-sqlite/decoy.config.ts`,
+    })
+    expect(service.requestLog?.store).toBe('sqlite')
+    expect(service.requestLog?.cleanup).toBe('on-exit')
+    expect(service.requestLog?.maxRows).toBe(500)
+    // `{name}` expanded; the path resolved to an absolute one under the config dir.
+    expect(service.requestLog?.path).toBe(
+      resolve(`${fixtures}requestlog-sqlite`, 'var/users.sqlite'),
+    )
+  })
 })
 
 describe('loadConfigs (multi-instance topology, ADR-0006)', () => {

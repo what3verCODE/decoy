@@ -3,6 +3,7 @@ export {
   type DecoyConfig,
   defineConfig,
   type PassthroughConfig,
+  type RequestLogConfig,
   type ServiceConfig,
 } from './define-config'
 export {
@@ -11,11 +12,18 @@ export {
   loadConfigs,
   type ResolvedAdmin,
   type ResolvedPassthrough,
+  type ResolvedRequestLog,
   resolveAllWatchPaths,
   resolveWatchPaths,
   validateConfig,
 } from './load'
 export { MOCK_EXTENSIONS, parseDataFile } from './parse'
+export {
+  type LogPathContext,
+  resolveLogPath,
+  unknownTemplateTokens,
+  validateRequestLog,
+} from './request-log'
 export {
   formatIssues,
   hasErrors,

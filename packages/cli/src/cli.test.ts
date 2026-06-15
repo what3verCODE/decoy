@@ -10,6 +10,7 @@ const silent: Logger = { info() {}, warn() {}, request() {} }
 const configPath = resolve(process.cwd(), 'fixtures/basic/decoy.config.ts')
 const invalidConfigPath = resolve(process.cwd(), 'fixtures/invalid/decoy.config.ts')
 const multiConfigPath = resolve(process.cwd(), 'fixtures/multi/decoy.config.ts')
+const badRequestLogConfigPath = resolve(process.cwd(), 'fixtures/bad-requestlog/decoy.config.ts')
 
 /** The bound port of a running server (its raw address). */
 function portOf(server: DecoyServer | undefined): number {
@@ -341,5 +342,18 @@ describe('decoy check (CI validation gate)', () => {
     const report = text()
     expect(report).toMatch(/undefined variant "missing"/)
     expect(report).toMatch(/collections\.yaml:\d+/)
+  })
+
+  test('an unknown requestLog filename token fails check and names the token (#70)', async () => {
+    const { out, text } = capture()
+
+    await expect(run(['check', '--config', badRequestLogConfigPath], { out })).rejects.toThrow(
+      /validation failed/,
+    )
+
+    const report = text()
+    expect(report).toMatch(/requestLog\.path has unknown token/)
+    expect(report).toMatch(/\{bogus\}/)
+    expect(report).toMatch(/%Q/)
   })
 })

@@ -57,6 +57,35 @@ const PassthroughSchema = v.object({
   ),
 })
 
+/**
+ * Durable request-log store (#70). Structural shape only — the filename-template
+ * token check and the cleanup/store cross-field warnings live in
+ * {@link validateRequestLog} so they can report a precise message.
+ */
+const RequestLogSchema = v.object({
+  store: v.optional(
+    v.picklist(['memory', 'sqlite'], 'requestLog.store must be "memory" or "sqlite"'),
+  ),
+  path: v.optional(v.string()),
+  retention: v.optional(
+    v.object({
+      maxRows: v.optional(
+        v.pipe(
+          v.number(),
+          v.integer('requestLog.retention.maxRows must be an integer'),
+          v.minValue(1, 'requestLog.retention.maxRows must be >= 1'),
+        ),
+      ),
+    }),
+  ),
+  cleanup: v.optional(
+    v.picklist(
+      ['on-exit', 'on-session-end', 'never'],
+      'requestLog.cleanup must be one of "on-exit", "on-session-end", "never"',
+    ),
+  ),
+})
+
 /** One service entry of a Decoy config. */
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
@@ -81,6 +110,7 @@ export const ServiceConfigSchema = v.object({
   routesDir: v.optional(v.string()),
   collectionsFile: v.optional(v.string()),
   defaultCollection: v.optional(v.string()),
+  requestLog: v.optional(RequestLogSchema),
   routes: v.optional(v.array(RouteSchema)),
   collections: v.optional(v.array(CollectionSchema)),
 })

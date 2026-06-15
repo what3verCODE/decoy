@@ -10,7 +10,10 @@ export {
 } from './logger'
 export {
   createMemoryRequestLogStore,
+  createRequestLogStore,
   type MemoryRequestLogStoreOptions,
+  type RequestLogInput,
+  type RequestLogQuery,
   type RequestLogStore,
   type StoredRequestLog,
 } from './request-log-store'
@@ -21,5 +24,9 @@ export {
   type SessionRegistryOptions,
   type SessionReloadResult,
 } from './sessions'
+export {
+  createSqliteRequestLogStore,
+  type SqliteRequestLogStoreOptions,
+} from './sqlite-request-log-store'
 export { type CreateUiServerOptions, createUiServer, type DecoyUiServer } from './ui'
 export { version } from './version'
