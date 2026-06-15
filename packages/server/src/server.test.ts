@@ -3,6 +3,7 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger, RequestLog } from './logger'
+import { createMemoryRequestLogStore } from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 import type { Scheduler, WatchFn } from './watch'
 
@@ -170,6 +171,60 @@ describe('createServer (HTTP)', () => {
     server.control.reset()
     server.control.useRoute('users-by-id', 'default', 'error')
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
+  })
+
+  test('exposes the service name (the aggregator routes control by it, #72)', () => {
+    expect(server.name).toBe('users')
+  })
+})
+
+describe('createServer (shared request-log store, #72)', () => {
+  test('records into an injected store tagged by service, and does not close it', async () => {
+    // One store shared across two instances (ADR-0017): the aggregator's logs view.
+    const shared = createMemoryRequestLogStore()
+    let closed = false
+    const closeWatching = {
+      ...shared,
+      close() {
+        closed = true
+        shared.close()
+      },
+    }
+
+    const users = createServer(
+      { ...service(), name: 'users' },
+      {
+        logger: silent,
+        requestLog: closeWatching,
+      },
+    )
+    const orders = createServer(
+      {
+        ...service(),
+        name: 'orders',
+        definitions: {
+          routes: new Map([[usersRoute.id, usersRoute]]),
+          collections: new Map([[happyPath.id, happyPath]]),
+        },
+      },
+      { logger: silent, requestLog: closeWatching },
+    )
+    const usersPort = await users.listen()
+    const ordersPort = await orders.listen()
+    try {
+      await fetch(`http://localhost:${usersPort}/users/42`)
+      await fetch(`http://localhost:${ordersPort}/users/7`)
+
+      const records = shared.snapshot()
+      expect(records.map((r) => r.service)).toEqual(['users', 'orders'])
+      // The shared store gives one monotonic seq across services (one timeline).
+      expect(records.map((r) => r.seq)).toEqual([1, 2])
+    } finally {
+      await users.close()
+      await orders.close()
+    }
+    // An injected store is caller-owned: closing a server never closes it.
+    expect(closed).toBe(false)
   })
 })
 

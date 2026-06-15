@@ -4,6 +4,11 @@
 # control handle.
 - id: default
   routes:
+    - admin-services:default:list
+    # The orders preset is tried first (array order, first match wins): a
+    # ?service=orders catalog request resolves here; everything else (users) falls
+    # through to the default catch-all below.
+    - admin-routes:orders:orders-catalog
     - admin-routes:default:catalog
     - admin-route-detail:default:detail
     - admin-try:default:resolved

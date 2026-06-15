@@ -11,12 +11,14 @@ import {
 import {
   type CreateServerOptions,
   createLogger,
+  createRequestLogStore,
   createServer,
   createUiServer,
   type DecoyServer,
   type DecoyUiServer,
   version as decoyVersion,
   type Logger,
+  type RequestLogStore,
 } from '@decoy/server'
 import { createTui, type Tui } from './tui'
 
@@ -211,8 +213,18 @@ export async function run(
     }
   }
 
+  // Multi-instance shares **one** request-log store (ADR-0017): every instance
+  // records into it tagged by `service`, so the `--ui` aggregator's logs view (and a
+  // per-instance `/admin/sessions/{id}/logs`) yields one cross-service timeline. The
+  // shared store is caller-owned — `createServer` never closes an injected store —
+  // and it defaults to memory, so a process exit reclaims it (the common case). Its
+  // config comes from the first service's `requestLog`. A single-instance config
+  // keeps its own per-service store (one service, nothing to aggregate).
+  const sharedRequestLog: RequestLogStore | undefined = multi
+    ? createRequestLogStore(services[0]?.requestLog)
+    : undefined
   const servers = services.map((service, index) =>
-    createServer(service, { logger, watch: watchFor(index) }),
+    createServer(service, { logger, watch: watchFor(index), requestLog: sharedRequestLog }),
   )
   await Promise.all(servers.map((server) => server.listen()))
 

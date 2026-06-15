@@ -230,6 +230,58 @@ describe('decoy start (end-to-end through the CLI)', () => {
       expect(fromOrders.status).toBe(200)
       expect(await fromOrders.json()).toEqual({ svc: 'orders' })
     })
+
+    describe('--ui aggregator (#72)', () => {
+      let assetDir: string
+      let ui: DecoyUiServer | undefined
+
+      beforeEach(() => {
+        assetDir = mkdtempSync(join(tmpdir(), 'decoy-cli-multi-ui-'))
+        writeFileSync(join(assetDir, 'index.html'), '<!doctype html><div id="root">decoy</div>')
+      })
+
+      afterEach(async () => {
+        await ui?.close()
+        ui = undefined
+        rmSync(assetDir, { recursive: true, force: true })
+      })
+
+      test('one UI server aggregates every instance: service list, per-instance control, shared logs', async () => {
+        servers = (await run(['start', '--config', multiConfigPath, '--ui', '--ui-port', '0'], {
+          logger: silent,
+          resolveUi: async () => ({ uiAssetDir: () => assetDir, version }),
+          onUiServer: (started) => {
+            ui = started
+          },
+        })) as DecoyServer[]
+        expect(servers).toHaveLength(2)
+        const uiPort = (ui?.raw.address() as { port: number }).port
+
+        // The switcher lists every booted instance (the service axis, ADR-0017).
+        const services = (await (
+          await fetch(`http://localhost:${uiPort}/admin/services`)
+        ).json()) as Array<{
+          name: string
+        }>
+        expect(services).toEqual([{ name: 'users' }, { name: 'orders' }])
+
+        // A ?service= catalog request targets that instance's routes.
+        const ordersRoutes = (await (
+          await fetch(`http://localhost:${uiPort}/admin/routes?service=orders`)
+        ).json()) as Array<{ id: string }>
+        expect(ordersRoutes.map((r) => r.id)).toEqual(['orders-route'])
+
+        // Drive a real request through each instance so both record to the shared
+        // store, then confirm the aggregated timeline carries both, each labelled.
+        await fetch(`http://localhost:${portOf(servers[0])}/users/1`)
+        await fetch(`http://localhost:${portOf(servers[1])}/orders/1`)
+        const timeline = (await (
+          await fetch(`http://localhost:${uiPort}/admin/sessions/global/logs`)
+        ).json()) as Array<{ service: string; path: string }>
+        expect(timeline.map((r) => r.service)).toEqual(['users', 'orders'])
+        expect(timeline.map((r) => r.path)).toEqual(['/users/1', '/orders/1'])
+      })
+    })
   })
 
   test('help returns without starting a server', async () => {

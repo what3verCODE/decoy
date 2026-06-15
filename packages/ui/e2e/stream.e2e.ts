@@ -16,6 +16,19 @@ test('live-stream panel renders request records from the SSE stream', async ({ p
   await expect(page.getByTestId('log-row').first()).toContainText('/missing')
 })
 
+test('the live stream labels each record by service (aggregated across services)', async ({
+  page,
+}) => {
+  await page.goto('/')
+
+  // The aggregated stream carries records from every service, each labelled (#72):
+  // the matched record is the users instance, the miss is the orders instance.
+  await expect(page.getByTestId('log-service')).toHaveCount(2)
+  const stream = page.getByTestId('live-stream')
+  await expect(stream).toContainText('users')
+  await expect(stream).toContainText('orders')
+})
+
 test('fail-closed misses are highlighted distinctly', async ({ page }) => {
   await page.goto('/')
 

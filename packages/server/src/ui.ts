@@ -70,6 +70,26 @@ function pathOf(url: string | undefined): string {
   return new URL(url ?? '/', 'http://localhost').pathname
 }
 
+/** The `?service=<name>` selector naming which instance a control request targets. */
+function serviceOf(url: string | undefined): string | null {
+  return new URL(url ?? '/', 'http://localhost').searchParams.get('service')
+}
+
+/**
+ * Pick the instance a `?service=` control request targets: the one whose name
+ * matches, else the first (the degenerate single-service default, and the safe
+ * fallback for an unknown name — the switcher only ever offers known services).
+ */
+function selectInstance(instances: DecoyServer[], name: string | null): DecoyServer | undefined {
+  if (name !== null) {
+    const match = instances.find((instance) => instance.name === name)
+    if (match) {
+      return match
+    }
+  }
+  return instances[0]
+}
+
 /**
  * Resolve a request path to a file under `assetDir`, defending against `..`
  * traversal. Returns the asset path, or `undefined` if it escapes the root.
@@ -112,9 +132,12 @@ export function createUiServer(
 ): DecoyUiServer {
   const logger = options.logger ?? consoleLogger
   const { assetDir } = options
-  // v1 walking skeleton controls a single instance; the service switcher across
-  // multiple instances (ADR-0017) lands with the multi-instance aggregator.
-  const instance = instances[0]
+  // The aggregator's logs view reads **one shared store** (ADR-0017): the CLI
+  // injects the same store into every instance, so any instance's `requestLog` is
+  // that shared store, holding every service's records (each tagged by `service`).
+  // Control/catalog endpoints target a `?service=`-selected instance; logs are
+  // always read from this shared store, so they aggregate across services.
+  const sharedStore = instances[0]?.requestLog
 
   const bindHost = options.host ?? '127.0.0.1'
   const bindPort = options.port ?? 0
@@ -148,19 +171,32 @@ export function createUiServer(
       return
     }
 
-    // Same-origin data API (no CORS): drive the in-process instance directly.
-    if (instance && isAdminPath(req.url, UI_ADMIN_PREFIX)) {
-      await handleAdmin(
-        req,
-        res,
-        instance.sessions,
-        UI_ADMIN_PREFIX,
-        logger,
-        instance.definitions,
-        instance.requestLog,
-        { missStatus: instance.missStatus, passthrough: instance.passthrough },
-      )
-      return
+    // Same-origin data API (no CORS): drive the in-process instances directly.
+    if (sharedStore && isAdminPath(req.url, UI_ADMIN_PREFIX)) {
+      // The service axis (ADR-0017): list every instance for the SPA's switcher.
+      if (req.method === 'GET' && pathOf(req.url) === `${UI_ADMIN_PREFIX}/services`) {
+        res.statusCode = 200
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify(instances.map((instance) => ({ name: instance.name }))))
+        return
+      }
+      // Control/catalog routes to the `?service=`-selected instance (per-instance);
+      // logs read the shared store (aggregated across services), so the timeline is
+      // one cross-service stream regardless of the selected service.
+      const target = selectInstance(instances, serviceOf(req.url)) ?? instances[0]
+      if (target) {
+        await handleAdmin(
+          req,
+          res,
+          target.sessions,
+          UI_ADMIN_PREFIX,
+          logger,
+          target.definitions,
+          sharedStore,
+          { missStatus: target.missStatus, passthrough: target.passthrough },
+        )
+        return
+      }
     }
 
     const urlPath = pathOf(req.url)

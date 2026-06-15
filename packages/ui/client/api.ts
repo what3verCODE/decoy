@@ -1,6 +1,40 @@
 // The data API the SPA fetches from its own (loopback) origin — same origin as the
 // served assets, so no CORS (ADR-0017). Mirrors the server's RouteCatalogEntry.
 
+// The service (instance) the panel currently controls (ADR-0017's service axis).
+// Empty until the switcher seeds it; control/catalog calls then carry it as a
+// `?service=` selector so the in-process aggregator routes them to that instance.
+// The logs view is aggregated across services, so log calls never carry it.
+let activeService = ''
+
+/** Point control/catalog calls at a service (the aggregator's switcher; #72). */
+export function setActiveService(name: string): void {
+  activeService = name
+}
+
+/** Append the active `?service=` selector to a control/catalog URL (omitted when unset). */
+function scoped(url: string): string {
+  if (!activeService) {
+    return url
+  }
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}service=${encodeURIComponent(activeService)}`
+}
+
+/** One service in the switcher — the body of `GET /admin/services`. */
+export interface ServiceInfo {
+  name: string
+}
+
+/** Fetch the booted services (the switcher's list) from `GET /admin/services`. */
+export async function fetchServices(): Promise<ServiceInfo[]> {
+  const response = await fetch('/admin/services')
+  if (!response.ok) {
+    throw new Error(`GET /admin/services failed: ${response.status}`)
+  }
+  return (await response.json()) as ServiceInfo[]
+}
+
 export interface RouteCatalogEntry {
   id: string
   method: string
@@ -11,7 +45,7 @@ export interface RouteCatalogEntry {
 
 /** Fetch the routes catalog from `GET /admin/routes`. Throws on a non-2xx response. */
 export async function fetchRoutes(): Promise<RouteCatalogEntry[]> {
-  const response = await fetch('/admin/routes')
+  const response = await fetch(scoped('/admin/routes'))
   if (!response.ok) {
     throw new Error(`GET /admin/routes failed: ${response.status}`)
   }
@@ -45,7 +79,7 @@ export interface RouteDetail {
 
 /** Fetch one route's presets and variants from `GET /admin/routes/{id}`. */
 export async function fetchRouteDetail(id: string): Promise<RouteDetail> {
-  const response = await fetch(`/admin/routes/${encodeURIComponent(id)}`)
+  const response = await fetch(scoped(`/admin/routes/${encodeURIComponent(id)}`))
   if (!response.ok) {
     throw new Error(`GET /admin/routes/${id} failed: ${response.status}`)
   }
@@ -71,7 +105,7 @@ export interface TryResult {
 
 /** Run a dry-run match against the current selection via `POST /admin/try` (zero side effects). */
 export async function tryRequest(input: TryRequest): Promise<TryResult> {
-  const response = await fetch('/admin/try', {
+  const response = await fetch(scoped('/admin/try'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -113,7 +147,7 @@ export interface CollectionDetail {
 
 /** Fetch the collections catalog from `GET /admin/collections`. Throws on a non-2xx response. */
 export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
-  const response = await fetch('/admin/collections')
+  const response = await fetch(scoped('/admin/collections'))
   if (!response.ok) {
     throw new Error(`GET /admin/collections failed: ${response.status}`)
   }
@@ -122,7 +156,7 @@ export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
 
 /** Fetch one collection's resolved entries from `GET /admin/collections/{name}`. */
 export async function fetchCollectionDetail(name: string): Promise<CollectionDetail> {
-  const response = await fetch(`/admin/collections/${encodeURIComponent(name)}`)
+  const response = await fetch(scoped(`/admin/collections/${encodeURIComponent(name)}`))
   if (!response.ok) {
     throw new Error(`GET /admin/collections/${name} failed: ${response.status}`)
   }
@@ -131,7 +165,7 @@ export async function fetchCollectionDetail(name: string): Promise<CollectionDet
 
 /** Fetch the current selection from `GET /admin/selection`. */
 export async function fetchSelection(): Promise<Selection> {
-  const response = await fetch('/admin/selection')
+  const response = await fetch(scoped('/admin/selection'))
   if (!response.ok) {
     throw new Error(`GET /admin/selection failed: ${response.status}`)
   }
@@ -140,7 +174,7 @@ export async function fetchSelection(): Promise<Selection> {
 
 /** POST a JSON control call to `/admin/{path}`, returning the resulting selection. */
 async function postControl(path: string, body?: unknown): Promise<Selection> {
-  const response = await fetch(`/admin/${path}`, {
+  const response = await fetch(scoped(`/admin/${path}`), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -197,7 +231,7 @@ export interface SessionInfo {
 
 /** Fetch the live sessions (global + created) from `GET /admin/sessions`. */
 export async function fetchSessions(): Promise<SessionInfo[]> {
-  const response = await fetch('/admin/sessions')
+  const response = await fetch(scoped('/admin/sessions'))
   if (!response.ok) {
     throw new Error(`GET /admin/sessions failed: ${response.status}`)
   }

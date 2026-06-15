@@ -37,9 +37,25 @@ export interface CreateServerOptions {
   logger?: Logger
   /** Enable dev-only hot reload (#44). Omit in CI/e2e to keep definitions frozen. */
   watch?: WatchSetup
+  /**
+   * A pre-built request-log store to record into instead of one created from this
+   * service's `requestLog` config. The multi-instance aggregator (#72, ADR-0017)
+   * injects **one shared store** into every instance so the `--ui` server's logs
+   * view aggregates across services (each record tagged by `service`). An injected
+   * store is **caller-owned**: `close()` never closes it (the caller built it and
+   * shares it, so the caller releases it). Omitted → the server creates and owns
+   * its own store from config (the single-instance default).
+   */
+  requestLog?: RequestLogStore
 }
 
 export interface DecoyServer {
+  /**
+   * The service (instance) name this server impersonates (ADR-0006). Exposed so the
+   * in-process `--ui` aggregator (#72) can list services and route a `?service=`
+   * control request to the right instance.
+   */
+  readonly name: string
   /** Start listening; resolves with the actual bound port (useful with port 0). */
   listen(): Promise<number>
   /** Stop listening. */
@@ -166,7 +182,10 @@ export function createServer(
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
   // The request-log store this instance records to (memory or durable sqlite, #70).
-  const requestLog = createRequestLogStore(service.requestLog)
+  // An injected store (the aggregator's shared store, #72) is caller-owned and not
+  // closed on shutdown; otherwise the server creates and owns one from config.
+  const ownsStore = options.requestLog === undefined
+  const requestLog = options.requestLog ?? createRequestLogStore(service.requestLog)
   const sessions = createSessionRegistry(service.definitions, service.defaultCollection, {
     idleTtlMs: service.sessionIdleTtlMs,
     onReap: (ids) => {
@@ -322,6 +341,7 @@ export function createServer(
 
   return {
     raw,
+    name: service.name,
     control: sessions.global,
     sessions,
     definitions: service.definitions,
@@ -352,8 +372,11 @@ export function createServer(
         await closeServer(adminServer)
       }
       await closeServer(raw)
-      // Release the store last — under sqlite `cleanup: 'on-exit'` this removes the file.
-      requestLog.close()
+      // Release the store last — under sqlite `cleanup: 'on-exit'` this removes the
+      // file. An injected (shared) store is caller-owned, so we never close it (#72).
+      if (ownsStore) {
+        requestLog.close()
+      }
     },
   }
 }

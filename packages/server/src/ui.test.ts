@@ -6,6 +6,7 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger } from './logger'
+import { createMemoryRequestLogStore, type RequestLogStore } from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 import { createUiServer, type DecoyUiServer } from './ui'
 
@@ -50,6 +51,34 @@ function rawGet(
       )
     })
     req.on('error', reject)
+    req.end()
+  })
+}
+
+/** A bare HTTP request with a method and optional JSON body (loopback Host). */
+function rawRequest(
+  port: number,
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body)
+    const headers: Record<string, string> = {}
+    if (payload !== undefined) {
+      headers['content-type'] = 'application/json'
+    }
+    const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', (chunk) => chunks.push(chunk as Buffer))
+      res.on('end', () =>
+        resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }),
+      )
+    })
+    req.on('error', reject)
+    if (payload !== undefined) {
+      req.write(payload)
+    }
     req.end()
   })
 }
@@ -147,5 +176,138 @@ describe('@decoy/ui server with a host override', () => {
     } finally {
       await ui.close()
     }
+  })
+})
+
+describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
+  const ordersRoute: Route = {
+    id: 'orders-by-id',
+    method: 'GET',
+    path: '/orders/{id}',
+    presets: { default: {} },
+    variants: { ok: { status: 200, body: { id: 7 } } },
+  }
+  const ordersHappy: Collection = { id: 'happy-path', routes: ['orders-by-id:default:ok'] }
+  const ordersError: Collection = { id: 'error-state', routes: [] }
+  const usersError: Collection = { id: 'error-state', routes: [] }
+
+  /** Two services sharing one request-log store — the aggregator's setup. */
+  function instances(shared: RequestLogStore): { users: DecoyServer; orders: DecoyServer } {
+    const usersSvc: LoadedService = {
+      ...service(),
+      name: 'users',
+      definitions: {
+        routes: new Map([[usersRoute.id, usersRoute]]),
+        collections: new Map([
+          [happyPath.id, happyPath],
+          [usersError.id, usersError],
+        ]),
+      },
+    }
+    const ordersSvc: LoadedService = {
+      ...service(),
+      name: 'orders',
+      definitions: {
+        routes: new Map([[ordersRoute.id, ordersRoute]]),
+        collections: new Map([
+          [ordersHappy.id, ordersHappy],
+          [ordersError.id, ordersError],
+        ]),
+      },
+    }
+    return {
+      users: createServer(usersSvc, { logger: silent, requestLog: shared }),
+      orders: createServer(ordersSvc, { logger: silent, requestLog: shared }),
+    }
+  }
+
+  let assetDir: string
+  let shared: RequestLogStore
+  let users: DecoyServer
+  let orders: DecoyServer
+  let ui: DecoyUiServer
+  let port: number
+
+  beforeEach(async () => {
+    assetDir = mkdtempSync(join(tmpdir(), 'decoy-ui-multi-'))
+    writeFileSync(join(assetDir, 'index.html'), '<!doctype html><div id=app>')
+    shared = createMemoryRequestLogStore()
+    ;({ users, orders } = instances(shared))
+    ui = createUiServer([users, orders], { assetDir, logger: silent })
+    port = await ui.listen()
+  })
+
+  afterEach(async () => {
+    await ui.close()
+    users.sessions.stop()
+    orders.sessions.stop()
+    rmSync(assetDir, { recursive: true, force: true })
+  })
+
+  test('GET /admin/services lists every service in boot order', async () => {
+    const response = await rawGet(port, '/admin/services')
+    expect(response.status).toBe(200)
+    expect(JSON.parse(response.body)).toEqual([{ name: 'users' }, { name: 'orders' }])
+  })
+
+  test('a ?service= control request targets that instance; no param targets the first', async () => {
+    expect(JSON.parse((await rawGet(port, '/admin/routes')).body)).toEqual([
+      { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 1 },
+    ])
+    expect(JSON.parse((await rawGet(port, '/admin/routes?service=orders')).body)).toEqual([
+      { id: 'orders-by-id', method: 'GET', path: '/orders/{id}', presetCount: 1, variantCount: 1 },
+    ])
+  })
+
+  test("one service's collection switch is isolated from another's", async () => {
+    const switched = await rawRequest(port, 'POST', '/admin/collection?service=orders', {
+      name: 'error-state',
+    })
+    expect(switched.status).toBe(200)
+
+    const ordersSel = JSON.parse((await rawGet(port, '/admin/selection?service=orders')).body)
+    const usersSel = JSON.parse((await rawGet(port, '/admin/selection?service=users')).body)
+    expect(ordersSel.collection).toBe('error-state')
+    // The users instance keeps its own selection — control is per-instance.
+    expect(usersSel.collection).toBe('happy-path')
+  })
+
+  test('the logs view aggregates records from every service, each labelled by service', async () => {
+    // Both instances record to the one shared store (ADR-0017), each tagging its
+    // own `service`. The UI server never listens these in-process instances, so we
+    // append directly to the store they share — exactly what their `record()` does.
+    shared.append({
+      service: 'users',
+      method: 'GET',
+      path: '/users/1',
+      outcome: {
+        type: 'matched',
+        address: { route: 'users-by-id', preset: 'default', variant: 'success' },
+      },
+      status: 200,
+      latencyMs: 1,
+      session: 'global',
+    })
+    shared.append({
+      service: 'orders',
+      method: 'GET',
+      path: '/orders/7',
+      outcome: {
+        type: 'matched',
+        address: { route: 'orders-by-id', preset: 'default', variant: 'ok' },
+      },
+      status: 200,
+      latencyMs: 1,
+      session: 'global',
+    })
+
+    // The global session's timeline is read from the shared store — cross-service,
+    // and independent of which instance a ?service= request would target.
+    const timeline = JSON.parse((await rawGet(port, '/admin/sessions/global/logs')).body) as Array<{
+      service: string
+      path: string
+    }>
+    expect(timeline.map((r) => r.service)).toEqual(['users', 'orders'])
+    expect(timeline.map((r) => r.path)).toEqual(['/users/1', '/orders/7'])
   })
 })

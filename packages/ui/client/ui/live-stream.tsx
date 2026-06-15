@@ -46,6 +46,7 @@ export function LiveStream(): JSX.Element {
                 <th class="font-medium px-2 py-1.5">resolution</th>
                 <th class="font-medium px-2 py-1.5 w-14 text-right">status</th>
                 <th class="font-medium px-2 py-1.5 w-16 text-right">latency</th>
+                <th class="font-medium px-2 py-1.5 w-20">service</th>
                 <th class="font-medium px-4 py-1.5 w-24">session</th>
               </tr>
             </thead>
@@ -76,6 +77,12 @@ export function LiveStream(): JSX.Element {
                     </td>
                     <td class="px-2 py-1.5 font-mono text-[12px] text-foreground text-right tabular-nums">
                       {record.latencyMs.toFixed(1)}ms
+                    </td>
+                    <td
+                      class="px-2 py-1.5 font-mono text-[12px] text-muted-foreground truncate"
+                      data-testid="log-service"
+                    >
+                      {record.service ?? ''}
                     </td>
                     <td class="px-4 py-1.5 font-mono text-[12px] text-muted-foreground truncate">
                       {record.session}
