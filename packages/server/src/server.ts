@@ -10,7 +10,11 @@ import { handleAdmin, isAdminPath, type RequestResolution } from './admin'
 import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger, type RequestLog } from './logger'
 import { forwardPassthrough } from './passthrough'
-import { createRequestLogStore, type RequestLogStore } from './request-log-store'
+import {
+  createRequestLogStore,
+  type RequestLogStore,
+  type SharedRequestLogStore,
+} from './request-log-store'
 import { createSessionRegistry, GLOBAL_SESSION, type SessionRegistry } from './sessions'
 import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
@@ -38,15 +42,16 @@ export interface CreateServerOptions {
   /** Enable dev-only hot reload (#44). Omit in CI/e2e to keep definitions frozen. */
   watch?: WatchSetup
   /**
-   * A pre-built request-log store to record into instead of one created from this
+   * A shared request-log store to record into instead of one created from this
    * service's `requestLog` config. The multi-instance aggregator (#72, ADR-0017)
-   * injects **one shared store** into every instance so the `--ui` server's logs
-   * view aggregates across services (each record tagged by `service`). An injected
-   * store is **caller-owned**: `close()` never closes it (the caller built it and
-   * shares it, so the caller releases it). Omitted → the server creates and owns
-   * its own store from config (the single-instance default).
+   * injects **one shared store** across every instance so the `--ui` server's logs
+   * view aggregates across services (each record tagged by `service`). The server
+   * {@link SharedRequestLogStore.acquire}s a holder handle and closes it on shutdown
+   * like any store; the shared store itself closes only when every instance's handle
+   * has closed (close-once ownership, #80). Omitted → the server creates and owns its
+   * own store from config (the single-instance default).
    */
-  requestLog?: RequestLogStore
+  requestLog?: SharedRequestLogStore
 }
 
 export interface DecoyServer {
@@ -182,10 +187,13 @@ export function createServer(
 ): DecoyServer {
   const logger = options.logger ?? consoleLogger
   // The request-log store this instance records to (memory or durable sqlite, #70).
-  // An injected store (the aggregator's shared store, #72) is caller-owned and not
-  // closed on shutdown; otherwise the server creates and owns one from config.
-  const ownsStore = options.requestLog === undefined
-  const requestLog = options.requestLog ?? createRequestLogStore(service.requestLog)
+  // A shared store (the aggregator's, #72) hands out a per-instance holder handle;
+  // otherwise the server creates its own from config. Either way it is closed the
+  // same way on shutdown — the handle's close is ref-counted so the shared store
+  // closes once, after the last instance (#80), with no `ownsStore` flag.
+  const requestLog: RequestLogStore = options.requestLog
+    ? options.requestLog.acquire()
+    : createRequestLogStore(service.requestLog)
   const sessions = createSessionRegistry(service.definitions, service.defaultCollection, {
     idleTtlMs: service.sessionIdleTtlMs,
     onReap: (ids) => {
@@ -372,11 +380,10 @@ export function createServer(
         await closeServer(adminServer)
       }
       await closeServer(raw)
-      // Release the store last — under sqlite `cleanup: 'on-exit'` this removes the
-      // file. An injected (shared) store is caller-owned, so we never close it (#72).
-      if (ownsStore) {
-        requestLog.close()
-      }
+      // Release the store last. For an own store this removes the file under sqlite
+      // `cleanup: 'on-exit'`; for a shared holder handle it releases this instance's
+      // reference, and the shared store closes once after the last instance (#80).
+      requestLog.close()
     },
   }
 }

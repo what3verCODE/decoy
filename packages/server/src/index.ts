@@ -11,10 +11,12 @@ export {
 export {
   createMemoryRequestLogStore,
   createRequestLogStore,
+  createSharedRequestLogStore,
   type MemoryRequestLogStoreOptions,
   type RequestLogInput,
   type RequestLogQuery,
   type RequestLogStore,
+  type SharedRequestLogStore,
   type StoredRequestLog,
 } from './request-log-store'
 export { type CreateServerOptions, createServer, type DecoyServer } from './server'

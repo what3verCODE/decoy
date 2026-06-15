@@ -13,49 +13,18 @@ import {
   createLogger,
   createRequestLogStore,
   createServer,
+  createSharedRequestLogStore,
   createUiServer,
   type DecoyServer,
   type DecoyUiServer,
   version as decoyVersion,
   type Logger,
-  type RequestLogStore,
+  type SharedRequestLogStore,
 } from '@decoy/server'
 import { createTui, type Tui } from './tui'
 
 /** Default loopback port the `--ui` control panel binds (overridable with `--ui-port`). */
 const DEFAULT_UI_PORT = 4100
-
-/**
- * Wrap each multi-instance server so closing **all** of them releases the shared
- * request-log store exactly once (#78). The store is caller-owned — `createServer`
- * never closes an injected store (sqlite `db.close()` is not idempotent, so a
- * per-instance close would double-close and throw) — and `run()` has no other
- * teardown hook, so without this a multi-instance sqlite `cleanup: 'on-exit'` store
- * leaks its file on graceful shutdown. Reference-counts the instances: the store
- * closes after the last one closes (running its on-exit file cleanup), guarded so it
- * happens exactly once. Memory stores make this a no-op; a single-instance config
- * keeps owning and closing its own store unchanged (this only wraps arrays).
- */
-function releaseSharedStore(servers: DecoyServer[], store: RequestLogStore): DecoyServer[] {
-  let open = servers.length
-  let closed = false
-  return servers.map(
-    (server) =>
-      Object.create(server, {
-        close: {
-          enumerable: true,
-          value: async () => {
-            await server.close()
-            open -= 1
-            if (!closed && open === 0) {
-              closed = true
-              store.close()
-            }
-          },
-        },
-      }) as DecoyServer,
-  )
-}
 
 export interface RunOptions {
   logger?: Logger
@@ -248,12 +217,13 @@ export async function run(
   // Multi-instance shares **one** request-log store (ADR-0017): every instance
   // records into it tagged by `service`, so the `--ui` aggregator's logs view (and a
   // per-instance `/admin/sessions/{id}/logs`) yields one cross-service timeline. The
-  // shared store is caller-owned — `createServer` never closes an injected store —
-  // and it defaults to memory, so a process exit reclaims it (the common case). Its
-  // config comes from the first service's `requestLog`. A single-instance config
-  // keeps its own per-service store (one service, nothing to aggregate).
-  const sharedRequestLog: RequestLogStore | undefined = multi
-    ? createRequestLogStore(services[0]?.requestLog)
+  // store is wrapped as a {@link SharedRequestLogStore} so each instance acquires a
+  // holder handle and the store closes once after the last instance closes (#80) —
+  // running its sqlite `cleanup: 'on-exit'` file removal on graceful shutdown. Its
+  // config comes from the first service's `requestLog` (memory by default). A
+  // single-instance config keeps its own per-service store (nothing to aggregate).
+  const sharedRequestLog: SharedRequestLogStore | undefined = multi
+    ? createSharedRequestLogStore(createRequestLogStore(services[0]?.requestLog))
     : undefined
   const servers = services.map((service, index) =>
     createServer(service, { logger, watch: watchFor(index), requestLog: sharedRequestLog }),
@@ -301,8 +271,9 @@ export async function run(
   if (servers.length === 1) {
     return servers[0] as DecoyServer
   }
-  // Multi-instance: hand back instances that, once all closed, release the shared
-  // store exactly once so a sqlite `cleanup: 'on-exit'` store runs its file cleanup
-  // on graceful shutdown (#78). `sharedRequestLog` is defined on this (`multi`) path.
-  return releaseSharedStore(servers, sharedRequestLog as RequestLogStore)
+  // Multi-instance: each instance holds a handle on the shared store and closes it
+  // on shutdown, so closing every instance releases the store exactly once — a
+  // sqlite `cleanup: 'on-exit'` store runs its file cleanup on graceful shutdown
+  // (#78), now via the store's own ref-counted close seam rather than a CLI wrapper.
+  return servers
 }

@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, test } from '@rstest/core'
 import type { RequestLogInput, RequestLogStore } from './request-log-store'
-import { createMemoryRequestLogStore, createRequestLogStore } from './request-log-store'
+import {
+  createMemoryRequestLogStore,
+  createRequestLogStore,
+  createSharedRequestLogStore,
+} from './request-log-store'
 import { createSqliteRequestLogStore } from './sqlite-request-log-store'
 
 const dir = mkdtempSync(join(tmpdir(), 'decoy-log-store-'))
@@ -166,6 +170,81 @@ describe('createSqliteRequestLogStore — durable behavior', () => {
     store.append(input('/a'))
     expect(existsSync(nested)).toBe(true)
     store.close()
+  })
+})
+
+describe('createSharedRequestLogStore — ref-counted shared ownership (#80)', () => {
+  /** Wrap a memory store so its close() calls are counted, to assert close-once. */
+  function counting(): { store: RequestLogStore; closes: () => number } {
+    const inner = createMemoryRequestLogStore()
+    let count = 0
+    return {
+      store: {
+        ...inner,
+        close() {
+          count += 1
+          inner.close()
+        },
+      },
+      closes: () => count,
+    }
+  }
+
+  test('every holder handle reads and writes through to the one shared store', () => {
+    const { store } = counting()
+    const shared = createSharedRequestLogStore(store)
+    const a = shared.acquire()
+    const b = shared.acquire()
+
+    a.append(input('/a', { service: 'users' }))
+    b.append(input('/b', { service: 'orders' }))
+
+    // Both holders observe one shared timeline with a single monotonic seq.
+    expect(a.snapshot().map((r) => r.path)).toEqual(['/a', '/b'])
+    expect(a.snapshot().map((r) => r.seq)).toEqual([1, 2])
+    expect(b.query({ service: 'orders' }).map((r) => r.path)).toEqual(['/b'])
+  })
+
+  test('the shared store closes exactly once, after the last holder releases', () => {
+    const { store, closes } = counting()
+    const shared = createSharedRequestLogStore(store)
+    const a = shared.acquire()
+    const b = shared.acquire()
+
+    a.close()
+    expect(closes()).toBe(0) // b still holds a reference — the store stays open
+
+    b.close()
+    expect(closes()).toBe(1) // the last release runs the cleanup policy once
+  })
+
+  test('a holder close is idempotent — a double close does not double-release', () => {
+    const { store, closes } = counting()
+    const shared = createSharedRequestLogStore(store)
+    const a = shared.acquire()
+    const b = shared.acquire()
+
+    a.close()
+    a.close() // same holder closed twice — no extra release
+    expect(closes()).toBe(0) // b still holds the last reference
+
+    b.close()
+    expect(closes()).toBe(1) // close-once survives a's double close
+  })
+
+  test('endSession routes through to the shared store (on-session-end cleanup)', () => {
+    const path = tmpFile()
+    const inner = createSqliteRequestLogStore({ path, cleanup: 'on-session-end' })
+    const shared = createSharedRequestLogStore(inner)
+    const holder = shared.acquire()
+
+    holder.append(input('/a', { session: 's1' }))
+    holder.append(input('/b', { session: 's2' }))
+    holder.endSession('s1')
+
+    expect(holder.query({ session: 's1' })).toHaveLength(0)
+    expect(holder.query({ session: 's2' }).map((r) => r.path)).toEqual(['/b'])
+    holder.close()
   })
 })
 

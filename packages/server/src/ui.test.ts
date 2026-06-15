@@ -6,7 +6,12 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger } from './logger'
-import { createMemoryRequestLogStore, type RequestLogStore } from './request-log-store'
+import {
+  createMemoryRequestLogStore,
+  createSharedRequestLogStore,
+  type RequestLogStore,
+  type SharedRequestLogStore,
+} from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 import { createUiServer, type DecoyUiServer } from './ui'
 
@@ -192,7 +197,7 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
   const usersError: Collection = { id: 'error-state', routes: [] }
 
   /** Two services sharing one request-log store — the aggregator's setup. */
-  function instances(shared: RequestLogStore): { users: DecoyServer; orders: DecoyServer } {
+  function instances(shared: SharedRequestLogStore): { users: DecoyServer; orders: DecoyServer } {
     const usersSvc: LoadedService = {
       ...service(),
       name: 'users',
@@ -222,7 +227,8 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
   }
 
   let assetDir: string
-  let shared: RequestLogStore
+  let store: RequestLogStore
+  let shared: SharedRequestLogStore
   let users: DecoyServer
   let orders: DecoyServer
   let ui: DecoyUiServer
@@ -231,7 +237,8 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
   beforeEach(async () => {
     assetDir = mkdtempSync(join(tmpdir(), 'decoy-ui-multi-'))
     writeFileSync(join(assetDir, 'index.html'), '<!doctype html><div id=app>')
-    shared = createMemoryRequestLogStore()
+    store = createMemoryRequestLogStore()
+    shared = createSharedRequestLogStore(store)
     ;({ users, orders } = instances(shared))
     ui = createUiServer([users, orders], { assetDir, logger: silent })
     port = await ui.listen()
@@ -276,7 +283,7 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
     // Both instances record to the one shared store (ADR-0017), each tagging its
     // own `service`. The UI server never listens these in-process instances, so we
     // append directly to the store they share — exactly what their `record()` does.
-    shared.append({
+    store.append({
       service: 'users',
       method: 'GET',
       path: '/users/1',
@@ -288,7 +295,7 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
       latencyMs: 1,
       session: 'global',
     })
-    shared.append({
+    store.append({
       service: 'orders',
       method: 'GET',
       path: '/orders/7',

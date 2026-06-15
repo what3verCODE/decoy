@@ -66,6 +66,63 @@ export interface RequestLogStore {
   close(): void
 }
 
+/**
+ * A {@link RequestLogStore} that can be shared across N holders with close-once
+ * ownership (ADR-0017, #80). The multi-instance aggregator (#72) shares one store
+ * across every instance; each instance {@link acquire}s a holder handle and closes
+ * it independently on shutdown. The underlying store's `close()` — and so its
+ * cleanup policy (sqlite `on-exit` file removal) — runs **exactly once**, after the
+ * last holder releases. This models shared ownership as a seam, replacing the
+ * `ownsStore` flag in the server and the ref-counting close-wrapper in the CLI.
+ */
+export interface SharedRequestLogStore {
+  /**
+   * Take a holder handle on the shared store. It is a full {@link RequestLogStore}
+   * whose reads/writes pass through to the shared store; its `close()` releases
+   * just this holder's reference (idempotent — a double close is a no-op), and the
+   * underlying store closes only when every acquired handle has closed.
+   */
+  acquire(): RequestLogStore
+}
+
+/**
+ * Wrap a {@link RequestLogStore} so it can be shared across N holders with
+ * close-once semantics (#80). Each holder takes a handle via
+ * {@link SharedRequestLogStore.acquire}; the underlying store's `close()` runs once,
+ * after the last handle closes — so a sqlite `cleanup: 'on-exit'` store removes its
+ * file exactly once on graceful shutdown, with no double `db.close()` (which throws).
+ * The store is created and owned by the caller (the CLI), which acquires a handle per
+ * instance; ownership lives here as a seam, not as a convention spread across callers.
+ */
+export function createSharedRequestLogStore(store: RequestLogStore): SharedRequestLogStore {
+  let holders = 0
+  let storeClosed = false
+  return {
+    acquire() {
+      holders += 1
+      let released = false
+      return {
+        append: (log) => store.append(log),
+        snapshot: () => store.snapshot(),
+        query: (filter) => store.query(filter),
+        subscribe: (listener) => store.subscribe(listener),
+        endSession: (session) => store.endSession(session),
+        close() {
+          if (released) {
+            return
+          }
+          released = true
+          holders -= 1
+          if (holders === 0 && !storeClosed) {
+            storeClosed = true
+            store.close()
+          }
+        },
+      }
+    },
+  }
+}
+
 export interface MemoryRequestLogStoreOptions {
   /** Max records retained; the oldest are ring-evicted past this. Default 1000. */
   capacity?: number

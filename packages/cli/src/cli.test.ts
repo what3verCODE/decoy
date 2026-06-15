@@ -231,12 +231,12 @@ describe('decoy start (end-to-end through the CLI)', () => {
       expect(await fromOrders.json()).toEqual({ svc: 'orders' })
     })
 
-    test('a shared sqlite store with cleanup:on-exit is released once on shutdown (#78)', async () => {
-      // A multi-instance config shares **one** request-log store (ADR-0017); it is
-      // caller-owned, so run() — not createServer — must release it on graceful
-      // shutdown. With sqlite + cleanup:on-exit that means removing the file after
-      // the last instance closes, exactly once (a per-instance close double-closes
-      // the db and throws). The store's config comes from the first service.
+    test('a shared sqlite store with cleanup:on-exit is released once on shutdown (#78, #80)', async () => {
+      // A multi-instance config shares **one** request-log store (ADR-0017); each
+      // instance holds a ref-counted handle on it (#80), so the store closes after
+      // the last instance closes, exactly once (a per-instance close would double-
+      // close the db and throw). With sqlite + cleanup:on-exit that final close
+      // removes the file. The store's config comes from the first service.
       const configDir = mkdtempSync(join(tmpdir(), 'decoy-shared-store-'))
       const dbPath = join(configDir, '.decoy', 'shared.sqlite')
       const service = (name: string, route: string, path: string) => `

@@ -3,7 +3,11 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger, RequestLog } from './logger'
-import { createMemoryRequestLogStore } from './request-log-store'
+import {
+  createMemoryRequestLogStore,
+  createSharedRequestLogStore,
+  type RequestLogStore,
+} from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 import type { Scheduler, WatchFn } from './watch'
 
@@ -178,24 +182,26 @@ describe('createServer (HTTP)', () => {
   })
 })
 
-describe('createServer (shared request-log store, #72)', () => {
-  test('records into an injected store tagged by service, and does not close it', async () => {
+describe('createServer (shared request-log store, #72, #80)', () => {
+  test('records into a shared store tagged by service, closing it once after the last instance', async () => {
     // One store shared across two instances (ADR-0017): the aggregator's logs view.
-    const shared = createMemoryRequestLogStore()
-    let closed = false
-    const closeWatching = {
-      ...shared,
+    // Count the underlying close to prove the ref-counted close-once seam (#80).
+    const inner = createMemoryRequestLogStore()
+    let closeCount = 0
+    const counting: RequestLogStore = {
+      ...inner,
       close() {
-        closed = true
-        shared.close()
+        closeCount += 1
+        inner.close()
       },
     }
+    const shared = createSharedRequestLogStore(counting)
 
     const users = createServer(
       { ...service(), name: 'users' },
       {
         logger: silent,
-        requestLog: closeWatching,
+        requestLog: shared,
       },
     )
     const orders = createServer(
@@ -207,24 +213,24 @@ describe('createServer (shared request-log store, #72)', () => {
           collections: new Map([[happyPath.id, happyPath]]),
         },
       },
-      { logger: silent, requestLog: closeWatching },
+      { logger: silent, requestLog: shared },
     )
     const usersPort = await users.listen()
     const ordersPort = await orders.listen()
-    try {
-      await fetch(`http://localhost:${usersPort}/users/42`)
-      await fetch(`http://localhost:${ordersPort}/users/7`)
+    await fetch(`http://localhost:${usersPort}/users/42`)
+    await fetch(`http://localhost:${ordersPort}/users/7`)
 
-      const records = shared.snapshot()
-      expect(records.map((r) => r.service)).toEqual(['users', 'orders'])
-      // The shared store gives one monotonic seq across services (one timeline).
-      expect(records.map((r) => r.seq)).toEqual([1, 2])
-    } finally {
-      await users.close()
-      await orders.close()
-    }
-    // An injected store is caller-owned: closing a server never closes it.
-    expect(closed).toBe(false)
+    const records = counting.snapshot()
+    expect(records.map((r) => r.service)).toEqual(['users', 'orders'])
+    // The shared store gives one monotonic seq across services (one timeline).
+    expect(records.map((r) => r.seq)).toEqual([1, 2])
+
+    // Closing one instance releases only its handle — the shared store stays open.
+    await users.close()
+    expect(closeCount).toBe(0)
+    // Closing the last instance closes the shared store exactly once (#80).
+    await orders.close()
+    expect(closeCount).toBe(1)
   })
 })
 
