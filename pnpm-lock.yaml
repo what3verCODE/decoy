@@ -338,6 +338,9 @@ importers:
 
   packages/playwright:
     dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../config
       '@decoy/control':
         specifier: workspace:*
         version: link:../control
@@ -367,6 +370,9 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../config
       '@decoy/core':
         specifier: workspace:*
         version: link:../core

@@ -28,6 +28,7 @@
     "typecheck": "tsc -p tsconfig.lint.json"
   },
   "dependencies": {
+    "@decoy/config": "workspace:*",
     "@decoy/control": "workspace:*",
     "@decoy/core": "workspace:*"
   },

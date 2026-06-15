@@ -1,0 +1,6 @@
+- id: happy-path
+  routes:
+    - users-by-id:default:ada
+- id: error-state
+  routes:
+    - users-by-id:default:boom

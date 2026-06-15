@@ -1,0 +1,24 @@
+{
+  "id": "admin-logs",
+  "method": "GET",
+  "path": "/admin/logs",
+  "presets": {
+    "default": {}
+  },
+  "variants": {
+    "stream": {
+      "status": 200,
+      "headers": {
+        "content-type": "text/event-stream"
+      },
+      "body": "id: 1\ndata: {\"seq\":1,\"method\":\"GET\",\"path\":\"/users/42\",\"outcome\":{\"type\":\"matched\",\"address\":{\"route\":\"users-by-id\",\"preset\":\"default\",\"variant\":\"success\"}},\"status\":200,\"latencyMs\":1.2,\"session\":\"global\"}\n\nid: 2\ndata: {\"seq\":2,\"method\":\"GET\",\"path\":\"/missing\",\"outcome\":{\"type\":\"miss\",\"reason\":\"no-route\"},\"status\":501,\"latencyMs\":0.4,\"session\":\"global\"}\n\n"
+    },
+    "empty": {
+      "status": 200,
+      "headers": {
+        "content-type": "text/event-stream"
+      },
+      "body": ""
+    }
+  }
+}

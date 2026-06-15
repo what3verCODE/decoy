@@ -1,0 +1,25 @@
+# GET /admin/routes — the routes catalog the panel lists. `catalog` is the populated
+# baseline; `empty` drives the panel's empty state (switch with
+# router.useRoute('admin-routes', 'default', 'empty')).
+id: admin-routes
+method: GET
+path: /admin/routes
+presets:
+  default: {}
+variants:
+  catalog:
+    status: 200
+    body:
+      - id: users-by-id
+        method: GET
+        path: /users/{id}
+        presetCount: 1
+        variantCount: 2
+      - id: create-order
+        method: POST
+        path: /orders
+        presetCount: 2
+        variantCount: 2
+  empty:
+    status: 200
+    body: []

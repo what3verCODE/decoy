@@ -1,0 +1,6 @@
+# The e2e baseline: a populated catalog and a two-record live stream. Tests that need
+# an empty state pin the route's `empty` variant via the router control handle.
+- id: default
+  routes:
+    - admin-routes:default:catalog
+    - admin-logs:default:stream

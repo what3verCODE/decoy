@@ -25,8 +25,12 @@ export type PassthroughConfig = { url: string }
 export interface ServiceConfig {
   /** Display name for logs; defaults to `'decoy'`. */
   name?: string
-  /** Port to listen on. */
-  port: number
+  /**
+   * Port the server listens on; defaults to `4000`. A server transport concern —
+   * irrelevant to the in-process router surfaces (e.g. @decoy/playwright), which boot
+   * no server, so it can be omitted there.
+   */
+  port?: number
   /** HTTP `/admin` control API exposure; defaults to on (same port, `/admin` prefix). */
   admin?: AdminConfig
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */

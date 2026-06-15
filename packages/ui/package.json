@@ -29,6 +29,7 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.client.json"
   },
   "devDependencies": {
+    "@decoy/config": "workspace:*",
     "@decoy/core": "workspace:*",
     "@decoy/playwright": "workspace:*",
     "@playwright/test": "^1.60.0",

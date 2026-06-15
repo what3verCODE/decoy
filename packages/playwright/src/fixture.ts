@@ -18,20 +18,22 @@ export type RouterFixture = (args: RouterFixtureArgs, use: Use<PlaywrightRouter>
 
 /**
  * Build a Playwright fixture that installs a {@link PlaywrightRouter} on each
- * test's `context` and tears it down afterwards. Because every Playwright context
- * gets its own router (its own selection), parallel tests are isolated for free —
- * no standalone server. Plug it into `test.extend`:
+ * test's `context` and tears it down afterwards. The mocks come from the project's
+ * `decoy.config.*` (ADR-0007); with no options it is discovered from
+ * `process.cwd()`. Because every Playwright context gets its own router (its own
+ * selection), parallel tests are isolated for free — no standalone server. Plug it
+ * into `test.extend`:
  *
  * ```ts
  * export const test = base.extend<{ router: PlaywrightRouter }>({
- *   router: createRouterFixture({ definitions, defaultCollection: 'happy-path' }),
+ *   router: createRouterFixture(),
  * })
  * ```
  *
  * Playwright types are referenced via `import type` only (a required peer dependency),
  * so this package carries no Playwright *runtime* dependency.
  */
-export function createRouterFixture(options: PlaywrightRouterOptions): RouterFixture {
+export function createRouterFixture(options: PlaywrightRouterOptions = {}): RouterFixture {
   return async ({ context }, use) => {
     const router = await createPlaywrightRouter(context, options)
     try {

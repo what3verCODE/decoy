@@ -60,7 +60,7 @@ const PassthroughSchema = v.object({
 /** One service entry of a Decoy config. */
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
-  port: v.number(),
+  port: v.optional(v.number()),
   admin: v.optional(AdminSchema),
   missStatus: v.optional(
     v.pipe(

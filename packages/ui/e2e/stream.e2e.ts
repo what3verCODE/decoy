@@ -1,15 +1,14 @@
-import { expect, sampleLogs, stubLogs, stubRoutes, test } from './fixtures'
+import { expect, test } from './fixtures'
 
-// Dogfood smoke (ADR-0017): the prebuilt SPA renders the live request stream it
-// reads from the GET /admin/logs SSE endpoint. The stream is stubbed in the
-// browser (stubLogs) — @decoy/ui is static assets only, so the e2e never boots a
-// server; it proves the panel renders whatever the stream emits.
+// Dogfood smoke (ADR-0017): the prebuilt SPA renders the live request stream it reads
+// from the GET /admin/logs SSE endpoint. The admin API is faked by the auto router
+// fixture (decoy.config.ts + mocks/) — @decoy/ui is static assets only, so the e2e
+// never boots a server; it proves the panel renders whatever the stream emits. The
+// baseline `stream` variant replays two records; the empty state pins `empty`.
 test('live-stream panel renders request records from the SSE stream', async ({ page }) => {
-  await stubRoutes(page)
-  await stubLogs(page)
   await page.goto('/')
 
-  await expect(page.getByTestId('log-row')).toHaveCount(sampleLogs.length)
+  await expect(page.getByTestId('log-row')).toHaveCount(2)
   const panel = page.getByTestId('live-stream')
   await expect(panel).toContainText('/users/42')
   await expect(panel).toContainText('users-by-id:default:success')
@@ -18,8 +17,6 @@ test('live-stream panel renders request records from the SSE stream', async ({ p
 })
 
 test('fail-closed misses are highlighted distinctly', async ({ page }) => {
-  await stubRoutes(page)
-  await stubLogs(page)
   await page.goto('/')
 
   const panel = page.getByTestId('live-stream')
@@ -30,19 +27,16 @@ test('fail-closed misses are highlighted distinctly', async ({ page }) => {
 })
 
 test('clear empties the live stream', async ({ page }) => {
-  await stubRoutes(page)
-  await stubLogs(page)
   await page.goto('/')
 
-  await expect(page.getByTestId('log-row')).toHaveCount(sampleLogs.length)
+  await expect(page.getByTestId('log-row')).toHaveCount(2)
   await page.getByTestId('logs-clear').click()
   await expect(page.getByTestId('log-row')).toHaveCount(0)
   await expect(page.getByTestId('live-stream')).toContainText('waiting for requests…')
 })
 
-test('shows a waiting state when the stream is empty', async ({ page }) => {
-  await stubRoutes(page)
-  await stubLogs(page, [])
+test('shows a waiting state when the stream is empty', async ({ page, router }) => {
+  await router.useRoute('admin-logs', 'default', 'empty')
   await page.goto('/')
 
   await expect(page.getByTestId('log-row')).toHaveCount(0)

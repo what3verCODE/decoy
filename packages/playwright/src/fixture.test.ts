@@ -1,23 +1,11 @@
-import type { Collection, Definitions, Route } from '@decoy/core'
+import { resolve } from 'node:path'
 import { describe, expect, test } from '@rstest/core'
 import { createRouterFixture } from './fixture'
 import type { PlaywrightRoutable, RouteHandler } from './playwright-types'
 
-const usersRoute: Route = {
-  id: 'users-by-id',
-  method: 'GET',
-  path: '/users/{id}',
-  presets: { default: {} },
-  variants: { ada: { status: 200, body: { name: 'Ada' } } },
-}
-const happyPath: Collection = { id: 'happy-path', routes: ['users-by-id:default:ada'] }
-
-function defs(): Definitions {
-  return {
-    routes: new Map([[usersRoute.id, usersRoute]]),
-    collections: new Map([[happyPath.id, happyPath]]),
-  }
-}
+// The fixture loads its mocks from a real decoy.config.* (ADR-0007); point it at
+// the shared fixtures/users-api config (happy-path baseline).
+const FIXTURE_CONFIG = resolve(process.cwd(), 'fixtures/users-api/decoy.config.yaml')
 
 function fakeContext() {
   let handler: RouteHandler | undefined
@@ -43,7 +31,7 @@ function fakeContext() {
 describe('createRouterFixture', () => {
   test('provides a router bound to the context, then disposes after use returns', async () => {
     const ctx = fakeContext()
-    const fixture = createRouterFixture({ definitions: defs(), defaultCollection: 'happy-path' })
+    const fixture = createRouterFixture({ configPath: FIXTURE_CONFIG })
 
     let sawSelection: string | undefined
     let installedDuringUse = false
@@ -61,7 +49,7 @@ describe('createRouterFixture', () => {
 
   test('disposes even when the test body throws', async () => {
     const ctx = fakeContext()
-    const fixture = createRouterFixture({ definitions: defs(), defaultCollection: 'happy-path' })
+    const fixture = createRouterFixture({ configPath: FIXTURE_CONFIG })
 
     await expect(
       fixture({ context: ctx.routable }, async () => {
