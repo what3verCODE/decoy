@@ -1,0 +1,14 @@
+# POST /admin/route — pin one route override. Fixed response (no templating yet):
+# the e2e pins users-by-id:default:success, the value this variant encodes.
+id: admin-route-pin
+method: POST
+path: /admin/route
+presets:
+  default: {}
+variants:
+  pinned:
+    status: 200
+    body:
+      collection: happy-path
+      overrides:
+        - { route: users-by-id, preset: default, variant: success }

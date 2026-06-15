@@ -1,0 +1,21 @@
+# GET /admin/collections — the scenarios the panel lists. `list` is the populated
+# baseline (happy-path active); `empty` drives the panel's empty state (switch with
+# router.useRoute('admin-collections', 'default', 'empty')).
+id: admin-collections
+method: GET
+path: /admin/collections
+presets:
+  default: {}
+variants:
+  list:
+    status: 200
+    body:
+      - name: happy-path
+        active: true
+        entryCount: 2
+      - name: error-state
+        active: false
+        entryCount: 1
+  empty:
+    status: 200
+    body: []

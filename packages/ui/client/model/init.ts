@@ -1,3 +1,4 @@
+import { loadCollections } from './collections'
 import { startLogStream } from './logs'
 import { loadRoutes } from './routes'
 
@@ -9,6 +10,7 @@ import { loadRoutes } from './routes'
  */
 export function startApp(): () => void {
   void loadRoutes()
+  void loadCollections()
   const stream = startLogStream()
   return () => stream.close()
 }

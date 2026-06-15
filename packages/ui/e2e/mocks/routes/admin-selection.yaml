@@ -1,0 +1,12 @@
+# GET /admin/selection — the current selection the panel seeds active + overrides from.
+id: admin-selection
+method: GET
+path: /admin/selection
+presets:
+  default: {}
+variants:
+  default:
+    status: 200
+    body:
+      collection: happy-path
+      overrides: []

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Definitions } from '@decoy/core'
+import { type Definitions, resolveCollection } from '@decoy/core'
 import type { Logger } from './logger'
 import type { RequestLogStore, StoredRequestLog } from './request-log-store'
 import type { SessionRegistry } from './sessions'
@@ -24,6 +24,31 @@ function routesCatalog(definitions: Definitions): RouteCatalogEntry[] {
     path: route.path,
     presetCount: Object.keys(route.presets).length,
     variantCount: Object.keys(route.variants).length,
+  }))
+}
+
+/** One collections-catalog entry: a scenario's identity, whether it's active, and its size. */
+export interface CollectionCatalogEntry {
+  name: string
+  /** The parent collection this one `extends`, if any. */
+  extends?: string
+  /** True for the collection the controlling session currently has active. */
+  active: boolean
+  /** Number of resolved `route:preset:variant` entries (post-`extends`). */
+  entryCount: number
+}
+
+/**
+ * Summarize the definitions' collections into the catalog served by
+ * `GET {prefix}/collections`, marking the session's `active` collection and
+ * counting each scenario's resolved (post-`extends`) entries.
+ */
+function collectionsCatalog(definitions: Definitions, active: string): CollectionCatalogEntry[] {
+  return [...definitions.collections.values()].map((collection) => ({
+    name: collection.id,
+    ...(collection.extends ? { extends: collection.extends } : {}),
+    active: collection.id === active,
+    entryCount: resolveCollection(definitions, collection.id).length,
   }))
 }
 
@@ -109,6 +134,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
  * - `GET  {prefix}/routes`                              → the routes catalog (pure read).
+ * - `GET  {prefix}/collections`                         → collections catalog, active marked (pure read).
+ * - `GET  {prefix}/collections/{name}`                  → a collection's resolved entries (pure read).
  * - `GET  {prefix}/logs`                                → SSE live request stream.
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
@@ -168,6 +195,27 @@ export async function handleAdmin(
 
     if (method === 'GET' && sub === '/routes') {
       sendJson(res, 200, routesCatalog(definitions))
+      return
+    }
+
+    if (method === 'GET' && sub === '/collections') {
+      sendJson(res, 200, collectionsCatalog(definitions, control.selection.collection))
+      return
+    }
+
+    if (method === 'GET' && sub.startsWith('/collections/')) {
+      const name = decodeURIComponent(sub.slice('/collections/'.length))
+      const collection = definitions.collections.get(name)
+      if (!collection) {
+        sendJson(res, 404, { error: `admin: no such collection "${name}"` })
+        return
+      }
+      sendJson(res, 200, {
+        name: collection.id,
+        ...(collection.extends ? { extends: collection.extends } : {}),
+        active: collection.id === control.selection.collection,
+        entries: resolveCollection(definitions, name),
+      })
       return
     }
 

@@ -202,6 +202,75 @@ describe('/admin HTTP control API', () => {
     }
   })
 
+  test('GET /admin/collections lists all collections, marking the active one with entry counts', async () => {
+    const response = await fetch(`${base}/admin/collections`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([
+      { name: 'happy-path', active: true, entryCount: 1 },
+      { name: 'error-state', active: false, entryCount: 1 },
+    ])
+  })
+
+  test('GET /admin/collections reflects the session-scoped active collection after a switch', async () => {
+    await fetch(`${base}/admin/collection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'error-state' }),
+    })
+    const response = await fetch(`${base}/admin/collections`)
+    expect(await response.json()).toEqual([
+      { name: 'happy-path', active: false, entryCount: 1 },
+      { name: 'error-state', active: true, entryCount: 1 },
+    ])
+  })
+
+  test('GET /admin/collections/{name} returns the resolved ordered entries after extends', async () => {
+    const base2: Collection = { id: 'base', routes: ['users-by-id:default:success'] }
+    const checkout: Collection = {
+      id: 'checkout',
+      extends: 'base',
+      routes: ['users-by-id:default:error'],
+    }
+    const local = createServer(
+      {
+        name: 'scenarios',
+        port: 0,
+        defaultCollection: 'base',
+        missStatus: 501,
+        sessionIdleTtlMs: 1_800_000,
+        admin: { enabled: true, prefix: '/admin' },
+        definitions: {
+          routes: new Map([[usersRoute.id, usersRoute]]),
+          collections: new Map([
+            [base2.id, base2],
+            [checkout.id, checkout],
+          ]),
+        },
+      },
+      { logger: silent },
+    )
+    const port = await local.listen()
+    try {
+      const response = await fetch(`http://localhost:${port}/admin/collections/checkout`)
+      expect(response.status).toBe(200)
+      // The inherited users-by-id slot is overridden in place to the `error` variant.
+      expect(await response.json()).toEqual({
+        name: 'checkout',
+        extends: 'base',
+        active: false,
+        entries: [{ route: 'users-by-id', preset: 'default', variant: 'error' }],
+      })
+    } finally {
+      await local.close()
+    }
+  })
+
+  test('GET /admin/collections/{name} is a 404 for an unknown collection', async () => {
+    const response = await fetch(`${base}/admin/collections/nope`)
+    expect(response.status).toBe(404)
+    expect(((await response.json()) as { error: string }).error).toContain('nope')
+  })
+
   test('GET /admin/logs replays request history then tails new records (SSE)', async () => {
     // Drive some requests so the store has history to replay on connect.
     await (await fetch(`${base}/users/42`)).text() // matched

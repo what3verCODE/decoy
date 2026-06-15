@@ -1,0 +1,12 @@
+# POST /admin/reset — drop all overrides back to the active collection baseline.
+id: admin-reset
+method: POST
+path: /admin/reset
+presets:
+  default: {}
+variants:
+  cleared:
+    status: 200
+    body:
+      collection: happy-path
+      overrides: []

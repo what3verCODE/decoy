@@ -18,6 +18,90 @@ export async function fetchRoutes(): Promise<RouteCatalogEntry[]> {
   return (await response.json()) as RouteCatalogEntry[]
 }
 
+/** A resolved `route:preset:variant` triple — mirrors the core `VariantAddress`. */
+export interface VariantAddress {
+  route: string
+  preset: string
+  variant: string
+}
+
+/** The only mutable state — mirrors the core `Selection`. */
+export interface Selection {
+  collection: string
+  overrides?: VariantAddress[]
+}
+
+/** One collections-catalog entry — mirrors the server's `CollectionCatalogEntry`. */
+export interface CollectionCatalogEntry {
+  name: string
+  extends?: string
+  active: boolean
+  entryCount: number
+}
+
+/** A collection's resolved detail — the body of `GET /admin/collections/{name}`. */
+export interface CollectionDetail {
+  name: string
+  extends?: string
+  active: boolean
+  entries: VariantAddress[]
+}
+
+/** Fetch the collections catalog from `GET /admin/collections`. Throws on a non-2xx response. */
+export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
+  const response = await fetch('/admin/collections')
+  if (!response.ok) {
+    throw new Error(`GET /admin/collections failed: ${response.status}`)
+  }
+  return (await response.json()) as CollectionCatalogEntry[]
+}
+
+/** Fetch one collection's resolved entries from `GET /admin/collections/{name}`. */
+export async function fetchCollectionDetail(name: string): Promise<CollectionDetail> {
+  const response = await fetch(`/admin/collections/${encodeURIComponent(name)}`)
+  if (!response.ok) {
+    throw new Error(`GET /admin/collections/${name} failed: ${response.status}`)
+  }
+  return (await response.json()) as CollectionDetail
+}
+
+/** Fetch the current selection from `GET /admin/selection`. */
+export async function fetchSelection(): Promise<Selection> {
+  const response = await fetch('/admin/selection')
+  if (!response.ok) {
+    throw new Error(`GET /admin/selection failed: ${response.status}`)
+  }
+  return (await response.json()) as Selection
+}
+
+/** POST a JSON control call to `/admin/{path}`, returning the resulting selection. */
+async function postControl(path: string, body?: unknown): Promise<Selection> {
+  const response = await fetch(`/admin/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`POST /admin/${path} failed: ${response.status}`)
+  }
+  return (await response.json()) as Selection
+}
+
+/** Switch the active collection via `POST /admin/collection`. */
+export function setCollection(name: string): Promise<Selection> {
+  return postControl('collection', { name })
+}
+
+/** Pin a route's `preset` slot to a variant via `POST /admin/route`. */
+export function pinRoute(route: string, preset: string, variant: string): Promise<Selection> {
+  return postControl('route', { route, preset, variant })
+}
+
+/** Drop all per-route overrides via `POST /admin/reset`. */
+export function resetOverrides(): Promise<Selection> {
+  return postControl('reset')
+}
+
 /** The outcome of matching one request — mirrors the server's `RequestOutcome`. */
 export type RequestOutcome =
   | { type: 'matched'; address: { route: string; preset: string; variant: string } }

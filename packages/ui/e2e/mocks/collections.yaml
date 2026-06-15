@@ -1,6 +1,14 @@
-# The e2e baseline: a populated catalog and a two-record live stream. Tests that need
-# an empty state pin the route's `empty` variant via the router control handle.
+# The e2e baseline: a populated catalog, a two-record live stream, and the
+# collections control surface (list/detail/selection + the switch/pin/reset POSTs).
+# Tests that need an empty state pin the route's `empty` variant via the router
+# control handle.
 - id: default
   routes:
     - admin-routes:default:catalog
     - admin-logs:default:stream
+    - admin-collections:default:list
+    - admin-collection-detail:default:detail
+    - admin-selection:default:default
+    - admin-collection-switch:default:switched
+    - admin-route-pin:default:pinned
+    - admin-reset:default:cleared

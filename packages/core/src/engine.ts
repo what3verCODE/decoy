@@ -3,10 +3,10 @@ import {
   type JSONValue,
   TreeInterpreter,
 } from '@jmespath-community/jmespath'
+import { parseAddress, resolveCollections, slotOf } from './collections'
 import { type CompiledPath, compilePath, matchPath } from './path'
 import { buildResponse } from './response'
 import type {
-  Collection,
   Definitions,
   Engine,
   MatchResult,
@@ -15,7 +15,6 @@ import type {
   RouteOverride,
   Selection,
   TriedPreset,
-  VariantAddress,
 } from './types'
 
 /** A pre-compiled JMESPath `match:` predicate (parsed once at engine creation). */
@@ -42,68 +41,6 @@ function isTruthy(value: JSONValue): boolean {
     return Object.keys(value).length > 0
   }
   return true
-}
-
-function parseAddress(entry: string): VariantAddress | null {
-  const parts = entry.split(':')
-  if (parts.length !== 3) {
-    return null
-  }
-  const [route, preset, variant] = parts
-  if (!route || !preset || !variant) {
-    return null
-  }
-  return { route, preset, variant }
-}
-
-/**
- * Resolve every collection's `extends` chain into a flat, ordered entry list.
- * A child inherits its parent's entries; an entry whose `route:preset` slot
- * already exists in the parent overrides it **in place** (keeping the parent's
- * order position), and any new slot is appended in child order. Cyclic chains
- * and references to undefined collections throw — this is static, IO-free, and
- * fails fast at engine creation.
- */
-function resolveCollections(collections: Map<string, Collection>): Map<string, string[]> {
-  const resolved = new Map<string, string[]>()
-  const resolving = new Set<string>()
-
-  function resolve(id: string): string[] {
-    const cached = resolved.get(id)
-    if (cached) {
-      return cached
-    }
-    const collection = collections.get(id)
-    if (!collection) {
-      throw new Error(`collection "${id}" is not defined`)
-    }
-    if (resolving.has(id)) {
-      throw new Error(`collection "${id}" has a cyclic "extends" chain`)
-    }
-    resolving.add(id)
-
-    let entries: string[]
-    if (collection.extends) {
-      entries = mergeEntries(resolve(collection.extends), collection.routes)
-    } else {
-      entries = [...collection.routes]
-    }
-
-    resolving.delete(id)
-    resolved.set(id, entries)
-    return entries
-  }
-
-  for (const id of collections.keys()) {
-    resolve(id)
-  }
-  return resolved
-}
-
-/** The `route:preset` slot of an entry — the unit `extends`/overrides key on. */
-function slotOf(entry: string): string | null {
-  const address = parseAddress(entry)
-  return address ? `${address.route}:${address.preset}` : null
 }
 
 /**
@@ -136,21 +73,6 @@ function applyOverrides(entries: string[], overrides: RouteOverride[] | undefine
   for (const [slot, variant] of bySlot) {
     if (!used.has(slot)) {
       result.push(`${slot}:${variant}`)
-    }
-  }
-  return result
-}
-
-/** Merge child entries onto parent entries: same slot overrides in place, new slots append. */
-function mergeEntries(parent: string[], child: string[]): string[] {
-  const result = [...parent]
-  for (const entry of child) {
-    const slot = slotOf(entry)
-    const index = slot === null ? -1 : result.findIndex((existing) => slotOf(existing) === slot)
-    if (index >= 0) {
-      result[index] = entry
-    } else {
-      result.push(entry)
     }
   }
   return result
