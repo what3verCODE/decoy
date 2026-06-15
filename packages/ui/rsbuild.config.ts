@@ -5,7 +5,7 @@ import { pluginPreact } from '@rsbuild/plugin-preact'
 // The @decoy/ui asset resolver (node/index.ts) points `decoy start --ui` here.
 export default defineConfig({
   plugins: [pluginPreact()],
-  source: { entry: { index: './client/main.tsx' } },
+  source: { entry: { index: './client/main.tsx' }, tsconfigPath: './tsconfig.client.json' },
   html: { template: './client/index.html' },
   output: {
     distPath: { root: 'dist/client' },

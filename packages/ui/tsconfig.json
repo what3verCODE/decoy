@@ -1,10 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "./node",
-    "outDir": "./dist",
-    "types": ["node"]
-  },
-  "include": ["node"],
-  "exclude": ["**/*.test.ts"]
+  // Solution-style config: the editor (tsserver) reads this and routes each source
+  // file to the project that owns it — node/ → tsconfig.node.json, client/ →
+  // tsconfig.client.json — so the Preact SPA gets its JSX settings in the editor too.
+  // (The old tsconfig.lint.json held those settings, but the editor never reads it.)
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.client.json" }]
 }

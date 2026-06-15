@@ -1,0 +1,13 @@
+{
+  // The Node asset resolver. rslib builds it (source.tsconfigPath points here) to
+  // dist/index.js + dist/index.d.ts; rootDir ./node keeps the bundled declaration at
+  // dist/index.d.ts, where publishConfig.exports expects it.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./node",
+    "outDir": "./dist",
+    "types": ["node"]
+  },
+  "include": ["node"],
+  "exclude": ["**/*.test.ts"]
+}

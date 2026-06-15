@@ -26,7 +26,7 @@
     "build": "rslib build && rsbuild build",
     "dev": "rsbuild dev",
     "test:e2e": "playwright test",
-    "typecheck": "tsc -p tsconfig.lint.json"
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.client.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
