@@ -1,6 +1,27 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Definitions } from '@decoy/core'
 import type { Logger } from './logger'
 import type { SessionRegistry } from './sessions'
+
+/** One routes-catalog entry: a route's identity plus how many presets/variants it carries. */
+export interface RouteCatalogEntry {
+  id: string
+  method: string
+  path: string
+  presetCount: number
+  variantCount: number
+}
+
+/** Summarize the definitions' routes into the catalog served by `GET {prefix}/routes`. */
+function routesCatalog(definitions: Definitions): RouteCatalogEntry[] {
+  return [...definitions.routes.values()].map((route) => ({
+    id: route.id,
+    method: route.method,
+    path: route.path,
+    presetCount: Object.keys(route.presets).length,
+    variantCount: Object.keys(route.variants).length,
+  }))
+}
 
 /** The `x-mock-session` header value, if present (first value wins for a repeated header). */
 function sessionIdOf(req: IncomingMessage): string | undefined {
@@ -48,6 +69,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/collection` `{ name }`               → `setCollection(name)`.
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
+ * - `GET  {prefix}/routes`                              → the routes catalog (pure read).
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
  *
@@ -66,6 +88,7 @@ export async function handleAdmin(
   sessions: SessionRegistry,
   prefix: string,
   logger: Logger,
+  definitions: Definitions,
 ): Promise<void> {
   const method = req.method ?? 'GET'
   const path = pathOf(req.url)
@@ -99,6 +122,11 @@ export async function handleAdmin(
 
     if (method === 'GET' && (sub === '/' || sub === '/selection')) {
       sendJson(res, 200, control.selection)
+      return
+    }
+
+    if (method === 'GET' && sub === '/routes') {
+      sendJson(res, 200, routesCatalog(definitions))
       return
     }
 

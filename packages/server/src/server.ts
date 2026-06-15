@@ -5,7 +5,7 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { LoadedService } from '@decoy/config'
-import type { Controller, MockResponse } from '@decoy/core'
+import type { Controller, Definitions, MockResponse } from '@decoy/core'
 import { handleAdmin, isAdminPath } from './admin'
 import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger } from './logger'
@@ -49,6 +49,14 @@ export interface DecoyServer {
    */
   readonly control: Controller
   /**
+   * The session registry backing this server — the global session plus any
+   * created ones. Exposed so an in-process `--ui` server (ADR-0017) can drive and
+   * read this instance's selection directly, with no HTTP proxy or CORS.
+   */
+  readonly sessions: SessionRegistry
+  /** The immutable definitions this server matches against (routes + collections). */
+  readonly definitions: Definitions
+  /**
    * The port the HTTP `/admin` control API is reachable on once listening: the
    * service port (same-port mount) or its dedicated port; `undefined` when admin
    * is disabled or before `listen()`.
@@ -83,8 +91,9 @@ function serveAdmin(
   sessions: SessionRegistry,
   prefix: string,
   logger: Logger,
+  definitions: Definitions,
 ): void {
-  void handleAdmin(req, res, sessions, prefix, logger).catch((error: unknown) => {
+  void handleAdmin(req, res, sessions, prefix, logger, definitions).catch((error: unknown) => {
     res.statusCode = 500
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify({ error: 'internal decoy error' }))
@@ -146,7 +155,7 @@ export function createServer(
 
   const raw = createHttpServer((req, res) => {
     if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
-      serveAdmin(req, res, sessions, admin.prefix, logger)
+      serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions)
       return
     }
 
@@ -211,7 +220,9 @@ export function createServer(
   // gets its own HTTP server; otherwise admin rides the main server above.
   const adminServer =
     admin.enabled && admin.port !== undefined
-      ? createHttpServer((req, res) => serveAdmin(req, res, sessions, admin.prefix, logger))
+      ? createHttpServer((req, res) =>
+          serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions),
+        )
       : undefined
 
   // Dev-only hot reload (#44): re-load the service on a watched-source change and
@@ -255,6 +266,8 @@ export function createServer(
   return {
     raw,
     control: sessions.global,
+    sessions,
+    definitions: service.definitions,
     get adminPort() {
       if (!admin.enabled) {
         return undefined

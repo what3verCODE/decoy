@@ -12,10 +12,16 @@ import {
   type CreateServerOptions,
   createLogger,
   createServer,
+  createUiServer,
   type DecoyServer,
+  type DecoyUiServer,
+  version as decoyVersion,
   type Logger,
 } from '@decoy/server'
 import { createTui, type Tui } from './tui'
+
+/** Default loopback port the `--ui` control panel binds (overridable with `--ui-port`). */
+const DEFAULT_UI_PORT = 4100
 
 export interface RunOptions {
   logger?: Logger
@@ -27,12 +33,21 @@ export interface RunOptions {
    * own logger renders live request lines — `logger` above is ignored in `--tui`.
    */
   tui?: Tui
+  /**
+   * Resolve the optional `@decoy/ui` package for `--ui` (its prebuilt-asset
+   * directory). Defaults to a lazy `import('@decoy/ui')`; injected in tests. A
+   * rejection means the package is not installed — `--ui` then fails closed.
+   */
+  resolveUi?: () => Promise<{ uiAssetDir: () => string; version: string }>
+  /** Called with the running UI server when `--ui` starts one (for tests to drive/close). */
+  onUiServer?: (server: DecoyUiServer) => void
 }
 
 const HELP = `decoy — a fast, contract-first HTTP mock you point a base URL at.
 
 Usage:
   decoy start [--config <path>] [--port <port>] [--json] [--watch] [--tui]
+              [--ui] [--ui-port <port>] [--ui-host <host>]
   decoy check [--config <path>]
   decoy help
 
@@ -52,7 +67,11 @@ Options:
                     source. Off by default; never enable in CI/e2e.
   --tui             Launch an interactive TUI (Claude-Code-style slash commands:
                     /collection, /route, …) driving the in-process engine, with
-                    live request logs (start only; single-instance only).`
+                    live request logs (start only; single-instance only).
+  --ui              Serve the @decoy/ui web control panel on its own loopback port
+                    (start only). Needs the optional @decoy/ui package installed.
+  --ui-port <port>  Port for the --ui panel (default ${DEFAULT_UI_PORT}).
+  --ui-host <host>  Bind the --ui panel beyond loopback (prints an exposure warning).`
 
 /**
  * Run the CLI. `start` resolves with the running server(s) so tests can drive and
@@ -73,6 +92,9 @@ export async function run(
       json: { type: 'boolean' },
       watch: { type: 'boolean' },
       tui: { type: 'boolean' },
+      ui: { type: 'boolean' },
+      'ui-port': { type: 'string' },
+      'ui-host': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
   })
@@ -193,5 +215,44 @@ export async function run(
     createServer(service, { logger, watch: watchFor(index) }),
   )
   await Promise.all(servers.map((server) => server.listen()))
+
+  // Web control panel (#66, ADR-0017): lazily resolve the optional `@decoy/ui`
+  // package and serve its prebuilt SPA — plus the same-origin data API backed by
+  // in-process references to the running instances — on its own loopback port. If
+  // the package is not installed, fail closed with a friendly install hint and
+  // leave the mock server(s) running.
+  if (values.ui) {
+    const resolveUi = options.resolveUi ?? (() => import('@decoy/ui'))
+    let assetDir: string | undefined
+    try {
+      const ui = await resolveUi()
+      assetDir = ui.uiAssetDir()
+      // @decoy/ui and @decoy/server are published together; a drift between them
+      // can mean the panel calls an admin endpoint the server does not serve.
+      if (ui.version !== decoyVersion) {
+        logger.warn(
+          `decoy ui: @decoy/ui ${ui.version} does not match decoy ${decoyVersion} — install matching versions to avoid panel/server drift`,
+        )
+      }
+    } catch {
+      out('decoy: --ui needs the @decoy/ui package — run `pnpm add -D @decoy/ui` to install it')
+    }
+    if (assetDir !== undefined) {
+      const uiPort = values['ui-port'] !== undefined ? Number(values['ui-port']) : DEFAULT_UI_PORT
+      if (!Number.isInteger(uiPort) || uiPort < 0) {
+        throw new Error(`invalid --ui-port: ${values['ui-port']}`)
+      }
+      const ui = createUiServer(servers, {
+        assetDir,
+        port: uiPort,
+        host: values['ui-host'],
+        logger,
+      })
+      const boundUiPort = await ui.listen()
+      logger.info(`decoy ui on http://localhost:${boundUiPort}`)
+      options.onUiServer?.(ui)
+    }
+  }
+
   return servers.length === 1 ? (servers[0] as DecoyServer) : servers
 }
