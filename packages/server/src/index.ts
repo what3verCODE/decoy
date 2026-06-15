@@ -1,4 +1,4 @@
-export type { RouteCatalogEntry } from './admin'
+export type { RequestResolution, RouteCatalogEntry, RouteDetail } from './admin'
 export { toEnvelope } from './envelope'
 export {
   consoleLogger,

@@ -158,6 +158,7 @@ export function createUiServer(
         logger,
         instance.definitions,
         instance.requestLog,
+        { missStatus: instance.missStatus, passthrough: instance.passthrough },
       )
       return
     }

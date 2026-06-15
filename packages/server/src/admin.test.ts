@@ -202,6 +202,142 @@ describe('/admin HTTP control API', () => {
     }
   })
 
+  test('GET /admin/routes/{id} returns the route presets and variants in full', async () => {
+    const response = await fetch(`${base}/admin/routes/users-by-id`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      id: 'users-by-id',
+      method: 'GET',
+      path: '/users/{id}',
+      presets: { default: {} },
+      variants: {
+        success: { status: 200, body: { id: 42, name: 'Ada' } },
+        error: { status: 500, body: { error: 'boom' } },
+      },
+    })
+  })
+
+  test('GET /admin/routes/{id} is a 404 for an unknown route', async () => {
+    const response = await fetch(`${base}/admin/routes/ghost`)
+    expect(response.status).toBe(404)
+    expect(((await response.json()) as { error: string }).error).toContain('ghost')
+  })
+
+  test('POST /admin/try resolves through the real engine, byte-identical to a live request', async () => {
+    const live = await fetch(`${base}/users/42`)
+    const liveBody = await live.json()
+
+    const tried = await fetch(`${base}/admin/try`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method: 'GET', path: '/users/42' }),
+    })
+    expect(tried.status).toBe(200)
+    expect(await tried.json()).toEqual({
+      resolution: 'users-by-id:default:success',
+      response: {
+        status: live.status,
+        headers: { 'content-type': live.headers.get('content-type') },
+        body: liveBody,
+      },
+    })
+  })
+
+  test("POST /admin/try honors the caller's (session-scoped) selection", async () => {
+    await fetch(`${base}/admin/collection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'error-state' }),
+    })
+
+    const tried = await fetch(`${base}/admin/try`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method: 'GET', path: '/users/42' }),
+    })
+    expect(await tried.json()).toEqual({
+      resolution: 'users-by-id:default:error',
+      response: {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+        body: { error: 'boom' },
+      },
+    })
+  })
+
+  test('POST /admin/try honestly reports a fail-closed miss with the diagnostic response', async () => {
+    const tried = await fetch(`${base}/admin/try`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method: 'GET', path: '/nope' }),
+    })
+    expect(tried.status).toBe(200)
+    const result = (await tried.json()) as {
+      resolution: string
+      response: { status: number; headers: Record<string, string>; body: { error: string } }
+    }
+    expect(result.resolution).toBe('MISS(no-route)')
+    expect(result.response.status).toBe(501)
+    expect(result.response.headers['x-mock-miss']).toBe('true')
+    expect(result.response.body.error).toContain('no route matched GET /nope')
+  })
+
+  test('POST /admin/try has zero side effects — the dry-run is excluded from the log stream', async () => {
+    // Fire dry-runs (a match and a miss) before opening the stream.
+    await (
+      await fetch(`${base}/admin/try`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ method: 'GET', path: '/users/42' }),
+      })
+    ).text()
+    await (
+      await fetch(`${base}/admin/try`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ method: 'GET', path: '/nope' }),
+      })
+    ).text()
+
+    const controller = new AbortController()
+    const stream = await fetch(`${base}/admin/logs`, { signal: controller.signal })
+    const reader = (stream.body as ReadableStream<Uint8Array>).getReader()
+    try {
+      // No history replays (the dry-runs were not recorded); the first event is the
+      // real request fired while connected.
+      await (await fetch(`${base}/users/7`)).text()
+      const [first] = await readDataEvents(reader, 1)
+      if (!first) {
+        throw new Error('expected one record')
+      }
+      expect(first.data.path).toBe('/users/7')
+    } finally {
+      await reader.cancel()
+      controller.abort()
+    }
+  })
+
+  test('POST /admin/try reports PASSTHROUGH(target) without forwarding when passthrough is on', async () => {
+    const local = createServer(
+      { ...service(), passthrough: { url: 'https://users.real' } },
+      { logger: silent },
+    )
+    const port = await local.listen()
+    try {
+      const tried = await fetch(`http://localhost:${port}/admin/try`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ method: 'GET', path: '/nope' }),
+      })
+      expect(await tried.json()).toEqual({
+        resolution: 'PASSTHROUGH(https://users.real)',
+        response: null,
+      })
+    } finally {
+      await local.close()
+    }
+  })
+
   test('GET /admin/collections lists all collections, marking the active one with entry counts', async () => {
     const response = await fetch(`${base}/admin/collections`)
     expect(response.status).toBe(200)

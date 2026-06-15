@@ -5,6 +5,8 @@
 - id: default
   routes:
     - admin-routes:default:catalog
+    - admin-route-detail:default:detail
+    - admin-try:default:resolved
     - admin-logs:default:stream
     - admin-collections:default:list
     - admin-collection-detail:default:detail

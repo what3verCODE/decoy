@@ -1,5 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { type Definitions, resolveCollection } from '@decoy/core'
+import {
+  type Definitions,
+  type MatchResult,
+  type Preset,
+  type RequestEnvelope,
+  resolveCollection,
+  type Variant,
+} from '@decoy/core'
+import { envelopeFrom } from './envelope'
 import type { Logger } from './logger'
 import type { RequestLogStore, StoredRequestLog } from './request-log-store'
 import type { SessionRegistry } from './sessions'
@@ -14,6 +22,15 @@ export interface RouteCatalogEntry {
   path: string
   presetCount: number
   variantCount: number
+}
+
+/** A route's full detail — its presets and variants — served by `GET {prefix}/routes/{id}`. */
+export interface RouteDetail {
+  id: string
+  method: string
+  path: string
+  presets: Record<string, Preset>
+  variants: Record<string, Variant>
 }
 
 /** Summarize the definitions' routes into the catalog served by `GET {prefix}/routes`. */
@@ -110,6 +127,102 @@ function serveLogStream(req: IncomingMessage, res: ServerResponse, store: Reques
   req.on('close', close)
 }
 
+/**
+ * The request-resolution context the `POST {prefix}/try` dry-run needs to report a
+ * miss/passthrough honestly and reproduce the live response byte-for-byte: the
+ * fail-closed status and the global passthrough target (if configured). Mirrors
+ * the live request handler's fail-closed/passthrough decision (DESIGN §6).
+ */
+export interface RequestResolution {
+  /** The fail-closed status returned on a miss (mirrors the live server's `missStatus`). */
+  missStatus: number
+  /** The global passthrough target, if configured; a dry-run reports it but never forwards. */
+  passthrough?: { url: string }
+}
+
+/** The body of `POST {prefix}/try`: a dry-run resolution plus the response it would serve. */
+interface TryOutcome {
+  /** `route:preset:variant` · `MISS(reason)` · `PASSTHROUGH(target)` — mirrors the log line. */
+  resolution: string
+  /** The response the live server would serve, or `null` for a passthrough (not forwarded). */
+  response: { status: number; headers: Record<string, string>; body: unknown } | null
+}
+
+/**
+ * Build the request envelope for a `POST {prefix}/try` dry-run from its JSON body
+ * (`{ method, url|path, query, headers, body }`), routing it through the same
+ * {@link envelopeFrom} the live server uses so the engine sees an identical shape.
+ * A `body` is re-serialized as JSON (the live transport's wire form) so partial
+ * `body` matchers behave exactly as on a real request.
+ */
+function tryEnvelope(input: Record<string, unknown>): RequestEnvelope {
+  const method = typeof input.method === 'string' ? input.method : 'GET'
+
+  const headers: Record<string, string> = {}
+  if (input.headers !== null && typeof input.headers === 'object') {
+    for (const [name, value] of Object.entries(input.headers as Record<string, unknown>)) {
+      if (typeof value === 'string') {
+        headers[name.toLowerCase()] = value
+      }
+    }
+  }
+
+  let url: string
+  if (typeof input.url === 'string') {
+    url = input.url
+  } else {
+    const path = typeof input.path === 'string' ? input.path : '/'
+    const params = new URLSearchParams()
+    if (input.query !== null && typeof input.query === 'object') {
+      for (const [key, value] of Object.entries(input.query as Record<string, unknown>)) {
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            params.append(key, String(item))
+          }
+        } else if (value !== undefined && value !== null) {
+          params.append(key, String(value))
+        }
+      }
+    }
+    const queryString = params.toString()
+    url = queryString ? `${path}?${queryString}` : path
+  }
+
+  let rawBody: Buffer | undefined
+  if (input.body !== undefined) {
+    rawBody = Buffer.from(JSON.stringify(input.body))
+    if (!('content-type' in headers)) {
+      headers['content-type'] = 'application/json'
+    }
+  }
+
+  return envelopeFrom({ method, url, headers } as unknown as IncomingMessage, rawBody)
+}
+
+/**
+ * Resolve a dry-run {@link MatchResult} into the `POST {prefix}/try` body: the
+ * `route:preset:variant` address and its response on a match; otherwise the live
+ * server's branch — `PASSTHROUGH(target)` with no forwarded response when
+ * passthrough is on, else the byte-identical fail-closed `MISS(reason)` response.
+ */
+function tryOutcome(result: MatchResult, resolution: RequestResolution): TryOutcome {
+  if (result.type === 'matched') {
+    const { route, preset, variant } = result.address
+    return { resolution: `${route}:${preset}:${variant}`, response: result.response }
+  }
+  if (resolution.passthrough) {
+    return { resolution: `PASSTHROUGH(${resolution.passthrough.url})`, response: null }
+  }
+  return {
+    resolution: `MISS(${result.reason.kind})`,
+    response: {
+      status: resolution.missStatus,
+      headers: { 'x-mock-miss': 'true', 'content-type': 'application/json' },
+      body: { error: result.message },
+    },
+  }
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   for await (const chunk of req) {
@@ -134,9 +247,11 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
  * - `GET  {prefix}/routes`                              → the routes catalog (pure read).
+ * - `GET  {prefix}/routes/{id}`                         → a route's presets+variants in full (pure read).
  * - `GET  {prefix}/collections`                         → collections catalog, active marked (pure read).
  * - `GET  {prefix}/collections/{name}`                  → a collection's resolved entries (pure read).
  * - `GET  {prefix}/logs`                                → SSE live request stream.
+ * - `POST {prefix}/try`                                 → dry-run match (resolution + response, zero side effects).
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
  *
@@ -157,6 +272,7 @@ export async function handleAdmin(
   logger: Logger,
   definitions: Definitions,
   store: RequestLogStore,
+  resolution: RequestResolution,
 ): Promise<void> {
   const method = req.method ?? 'GET'
   const path = pathOf(req.url)
@@ -198,6 +314,24 @@ export async function handleAdmin(
       return
     }
 
+    if (method === 'GET' && sub.startsWith('/routes/')) {
+      const id = decodeURIComponent(sub.slice('/routes/'.length))
+      const route = definitions.routes.get(id)
+      if (!route) {
+        sendJson(res, 404, { error: `admin: no such route "${id}"` })
+        return
+      }
+      const detail: RouteDetail = {
+        id: route.id,
+        method: route.method,
+        path: route.path,
+        presets: route.presets,
+        variants: route.variants,
+      }
+      sendJson(res, 200, detail)
+      return
+    }
+
     if (method === 'GET' && sub === '/collections') {
       sendJson(res, 200, collectionsCatalog(definitions, control.selection.collection))
       return
@@ -226,6 +360,15 @@ export async function handleAdmin(
 
     if (method === 'POST') {
       const body = (await readJsonBody(req)) as Record<string, unknown> | undefined
+
+      if (sub === '/try') {
+        // A pure dry-run: run the real engine against the caller's selection and
+        // report the resolution + response. No `record()` call → zero side effects,
+        // excluded from the request-log store / live stream (ADR-0017).
+        const result = control.match(tryEnvelope(body ?? {}))
+        sendJson(res, 200, tryOutcome(result, resolution))
+        return
+      }
 
       if (sub === '/collection') {
         const name = body?.name

@@ -18,6 +18,70 @@ export async function fetchRoutes(): Promise<RouteCatalogEntry[]> {
   return (await response.json()) as RouteCatalogEntry[]
 }
 
+/** A route's preset (request-match conditions) — mirrors the core `Preset`. */
+export interface RoutePreset {
+  query?: Record<string, string>
+  headers?: Record<string, string>
+  body?: unknown
+  match?: string
+}
+
+/** One of a route's responses — mirrors the core `Variant`. */
+export interface RouteVariant {
+  status?: number
+  headers?: Record<string, string>
+  delay?: number
+  body?: unknown
+}
+
+/** A route's full detail — the body of `GET /admin/routes/{id}` (the server's `RouteDetail`). */
+export interface RouteDetail {
+  id: string
+  method: string
+  path: string
+  presets: Record<string, RoutePreset>
+  variants: Record<string, RouteVariant>
+}
+
+/** Fetch one route's presets and variants from `GET /admin/routes/{id}`. */
+export async function fetchRouteDetail(id: string): Promise<RouteDetail> {
+  const response = await fetch(`/admin/routes/${encodeURIComponent(id)}`)
+  if (!response.ok) {
+    throw new Error(`GET /admin/routes/${id} failed: ${response.status}`)
+  }
+  return (await response.json()) as RouteDetail
+}
+
+/** A playground dry-run request posted to `POST /admin/try`. */
+export interface TryRequest {
+  method: string
+  path: string
+  query?: Record<string, string>
+  headers?: Record<string, string>
+  body?: unknown
+}
+
+/** The dry-run outcome from `POST /admin/try` (the server's `TryOutcome`). */
+export interface TryResult {
+  /** `route:preset:variant` · `MISS(reason)` · `PASSTHROUGH(target)`. */
+  resolution: string
+  /** The response the live server would serve, or `null` for a (not-forwarded) passthrough. */
+  response: { status: number; headers: Record<string, string>; body: unknown } | null
+}
+
+/** Run a dry-run match against the current selection via `POST /admin/try` (zero side effects). */
+export async function tryRequest(input: TryRequest): Promise<TryResult> {
+  const response = await fetch('/admin/try', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    throw new Error(`POST /admin/try failed: ${response.status}`)
+  }
+  return (await response.json()) as TryResult
+}
+
 /** A resolved `route:preset:variant` triple — mirrors the core `VariantAddress`. */
 export interface VariantAddress {
   route: string

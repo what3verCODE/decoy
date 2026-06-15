@@ -4,9 +4,9 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http'
-import type { LoadedService } from '@decoy/config'
+import type { LoadedService, ResolvedPassthrough } from '@decoy/config'
 import type { Controller, Definitions, MockResponse } from '@decoy/core'
-import { handleAdmin, isAdminPath } from './admin'
+import { handleAdmin, isAdminPath, type RequestResolution } from './admin'
 import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger, type RequestLog } from './logger'
 import { forwardPassthrough } from './passthrough'
@@ -64,6 +64,16 @@ export interface DecoyServer {
    */
   readonly requestLog: RequestLogStore
   /**
+   * The fail-closed status this instance returns on a miss. Exposed so an
+   * in-process `--ui` server can reproduce the live response in `/admin/try`.
+   */
+  readonly missStatus: number
+  /**
+   * This instance's global passthrough target, or `undefined` when off. Exposed so
+   * an in-process `--ui` server's `/admin/try` can honestly report `PASSTHROUGH`.
+   */
+  readonly passthrough: ResolvedPassthrough | undefined
+  /**
    * The port the HTTP `/admin` control API is reachable on once listening: the
    * service port (same-port mount) or its dedicated port; `undefined` when admin
    * is disabled or before `listen()`.
@@ -100,8 +110,9 @@ function serveAdmin(
   logger: Logger,
   definitions: Definitions,
   store: RequestLogStore,
+  resolution: RequestResolution,
 ): void {
-  void handleAdmin(req, res, sessions, prefix, logger, definitions, store).catch(
+  void handleAdmin(req, res, sessions, prefix, logger, definitions, store, resolution).catch(
     (error: unknown) => {
       res.statusCode = 500
       res.setHeader('content-type', 'application/json')
@@ -163,6 +174,8 @@ export function createServer(
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
   const requestLog = createMemoryRequestLogStore()
+  // The fail-closed/passthrough context the `/admin/try` dry-run replays (DESIGN §6).
+  const resolution: RequestResolution = { missStatus, passthrough }
 
   // Record one structured line per request to both the logger (stdout) and the
   // log store (the `GET /admin/logs` SSE stream / future durable store).
@@ -173,7 +186,16 @@ export function createServer(
 
   const raw = createHttpServer((req, res) => {
     if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
-      serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions, requestLog)
+      serveAdmin(
+        req,
+        res,
+        sessions,
+        admin.prefix,
+        logger,
+        service.definitions,
+        requestLog,
+        resolution,
+      )
       return
     }
 
@@ -239,7 +261,16 @@ export function createServer(
   const adminServer =
     admin.enabled && admin.port !== undefined
       ? createHttpServer((req, res) =>
-          serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions, requestLog),
+          serveAdmin(
+            req,
+            res,
+            sessions,
+            admin.prefix,
+            logger,
+            service.definitions,
+            requestLog,
+            resolution,
+          ),
         )
       : undefined
 
@@ -287,6 +318,8 @@ export function createServer(
     sessions,
     definitions: service.definitions,
     requestLog,
+    missStatus,
+    passthrough,
     get adminPort() {
       if (!admin.enabled) {
         return undefined

@@ -1,4 +1,5 @@
 import type { JSX } from 'preact'
+import { openRoute } from '../model/route-detail'
 import { load } from '../model/routes'
 import { MethodBadge } from './badges'
 
@@ -45,8 +46,15 @@ export function RoutesCatalog(): JSX.Element {
                     <MethodBadge method={route.method} />
                   </td>
                   <td class="px-2 py-1.5 font-mono text-[12px] text-foreground">{route.path}</td>
-                  <td class="px-2 py-1.5 font-mono text-[12px] text-muted-foreground">
-                    {route.id}
+                  <td class="px-2 py-1.5">
+                    <button
+                      type="button"
+                      data-testid="route-open"
+                      onClick={() => void openRoute(route.id)}
+                      class="font-mono text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      {route.id}
+                    </button>
                   </td>
                   <td class="px-2 py-1.5 font-mono text-[12px] text-foreground text-right tabular-nums">
                     {route.presetCount}
