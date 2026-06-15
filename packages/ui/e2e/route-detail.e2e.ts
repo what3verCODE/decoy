@@ -1,8 +1,8 @@
 import { expect, test } from './fixtures'
 
 // Dogfood (ADR-0017): drilling into a route shows its presets/variants (GET
-// /admin/routes/{id}) and the playground fires POST /admin/try, rendering the
-// resolution + response. The admin API is faked by the auto router fixture
+// /__decoy__/routes/{id}) and the playground fires POST /__decoy__/try, rendering the
+// resolution + response. The control API is faked by the auto router fixture
 // (decoy.config.ts + mocks/) — @decoy/ui ships static assets only, so the e2e never
 // boots a server; the real engine match is covered by the server HTTP-seam tests.
 test('opening a route shows its presets and variants', async ({ page }) => {

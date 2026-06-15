@@ -38,7 +38,7 @@ export interface RequestLogQuery {
 /**
  * Write-only observability sink for completed requests (ADR-0017): it ingests the
  * same {@link RequestLog} `Logger.request()` emits, retains recent history, and
- * lets a consumer (the `GET /admin/logs` SSE stream) replay that history then tail
+ * lets a consumer (the `GET /__decoy__/logs` SSE stream) replay that history then tail
  * new records. Records are *not* engine state — `core` stays pure (ADR-0012); the
  * store lives in `@decoy/server` where IO is allowed. Two impls share this contract:
  * the process-bound in-memory ring and the durable `node:sqlite` store (#70).

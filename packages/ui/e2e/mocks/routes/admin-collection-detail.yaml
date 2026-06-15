@@ -1,8 +1,8 @@
-# GET /admin/collections/{name} — a collection's resolved, pinnable entries. The
+# GET /__decoy__/collections/{name} — a collection's resolved, pinnable entries. The
 # panel fetches this for the active collection so each entry can be pinned.
 id: admin-collection-detail
 method: GET
-path: /admin/collections/{name}
+path: /__decoy__/collections/{name}
 presets:
   default: {}
 variants:

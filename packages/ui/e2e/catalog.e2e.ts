@@ -1,11 +1,11 @@
 import { expect, test } from './fixtures'
 
 // Dogfood smoke (ADR-0017): the prebuilt SPA loads in a real browser and renders the
-// routes catalog it fetched from GET /admin/routes. The admin API is faked by the
+// routes catalog it fetched from GET /__decoy__/routes. The control API is faked by the
 // auto router fixture (decoy.config.ts + mocks/) — @decoy/ui is static assets only,
 // so the e2e never boots a server; it proves the panel renders whatever the API
 // returns. The empty state pins the route's `empty` variant via the control handle.
-test('panel renders the routes catalog from GET /admin/routes', async ({ page }) => {
+test('panel renders the routes catalog from GET /__decoy__/routes', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByTestId('route-row')).toHaveCount(2)

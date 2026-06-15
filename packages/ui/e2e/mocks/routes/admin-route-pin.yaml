@@ -1,8 +1,8 @@
-# POST /admin/route — pin one route override. Fixed response (no templating yet):
+# POST /__decoy__/route — pin one route override. Fixed response (no templating yet):
 # the e2e pins users-by-id:default:success, the value this variant encodes.
 id: admin-route-pin
 method: POST
-path: /admin/route
+path: /__decoy__/route
 presets:
   default: {}
 variants:

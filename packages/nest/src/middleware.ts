@@ -67,7 +67,7 @@ function writeMatched(res: NestResponse, response: MockResponse): void {
 /**
  * Create a {@link DecoyMiddleware} over the given definitions, starting on
  * `defaultCollection`. Each middleware owns its own {@link Controller}, so the host
- * app drives scenarios entirely in-process — no standalone server, no `/admin`. A
+ * app drives scenarios entirely in-process — no standalone server, no `/__decoy__`. A
  * matched request is served from its variant and ends here; a miss calls `next()` to
  * fall through to the rest of the Nest stack. An unexpected failure while building the
  * envelope or response is passed to `next(error)` for Nest's exception layer. Throws

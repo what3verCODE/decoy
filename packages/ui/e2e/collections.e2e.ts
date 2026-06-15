@@ -1,12 +1,12 @@
 import { expect, test } from './fixtures'
 
-// Dogfood (ADR-0017): the collections panel drives the same-origin /admin control
+// Dogfood (ADR-0017): the collections panel drives the same-origin /__decoy__ control
 // API, faked by the auto router fixture (decoy.config.ts + mocks/). @decoy/ui ships
 // static assets only, so the e2e never boots a server — it proves the panel lists
 // scenarios, marks the active one, and that switching / pinning / resetting send the
 // control calls and reflect their results. The engine semantics (which variant the
-// next request resolves to) are covered by the server's HTTP-seam admin tests.
-test('panel lists collections from GET /admin/collections and marks the active one', async ({
+// next request resolves to) are covered by the server's HTTP-seam control tests.
+test('panel lists collections from GET /__decoy__/collections and marks the active one', async ({
   page,
 }) => {
   await page.goto('/')
@@ -31,7 +31,7 @@ test('shows an empty state when no collections are defined', async ({ page, rout
   await expect(page.getByTestId('collections-panel')).toContainText('no collections defined')
 })
 
-test('switching a collection moves the active marker (POST /admin/collection)', async ({
+test('switching a collection moves the active marker (POST /__decoy__/collection)', async ({
   page,
 }) => {
   await page.goto('/')
@@ -46,7 +46,9 @@ test('switching a collection moves the active marker (POST /admin/collection)', 
   ).toHaveAttribute('data-active', 'false')
 })
 
-test('pinning a route override raises the override count (POST /admin/route)', async ({ page }) => {
+test('pinning a route override raises the override count (POST /__decoy__/route)', async ({
+  page,
+}) => {
   await page.goto('/')
 
   // No overrides yet → no count badge, no reset control.
@@ -67,7 +69,7 @@ test('pinning a route override raises the override count (POST /admin/route)', a
   ).toHaveAttribute('data-pinned', 'true')
 })
 
-test('reset clears all overrides (POST /admin/reset)', async ({ page }) => {
+test('reset clears all overrides (POST /__decoy__/reset)', async ({ page }) => {
   await page.goto('/')
 
   await page

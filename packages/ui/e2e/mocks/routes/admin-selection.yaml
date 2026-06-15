@@ -1,7 +1,7 @@
-# GET /admin/selection — the current selection the panel seeds active + overrides from.
+# GET /__decoy__/selection — the current selection the panel seeds active + overrides from.
 id: admin-selection
 method: GET
-path: /admin/selection
+path: /__decoy__/selection
 presets:
   default: {}
 variants:

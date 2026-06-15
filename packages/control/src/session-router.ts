@@ -13,8 +13,8 @@ export interface HeaderSink {
 /**
  * A {@link Router} backed by a server **session** (ADR-0011). It owns an isolated
  * selection on a shared server, keyed by `x-mock-session`, so parallel e2e
- * workers never stomp each other. Control calls are proxied to `/admin` carrying
- * the session header; the same header is stamped onto the app's own requests via
+ * workers never stomp each other. Control calls are proxied to `/__decoy__`
+ * carrying the session header; the same header is stamped onto the app's own requests via
  * {@link SessionRouter.stampOn}, so the app's `fetch`/`axios` reach the right
  * session transparently — no app changes.
  */
@@ -33,7 +33,7 @@ export interface SessionRouter extends Router {
 export interface SessionRouterOptions {
   /** Base URL of the running Decoy server, e.g. `http://localhost:4001`. */
   baseUrl: string
-  /** Admin path prefix; defaults to `/admin`. */
+  /** Control path prefix; defaults to `/__decoy__`. */
   prefix?: string
   /** Adopt an existing session id instead of creating a fresh one. */
   sessionId?: string

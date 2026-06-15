@@ -7,12 +7,9 @@ import {
   type ServerResponse,
 } from 'node:http'
 import { extname, join, normalize, sep } from 'node:path'
-import { handleAdmin, isAdminPath } from './admin'
+import { CONTROL_PREFIX, isUnderPrefix } from './control'
 import { consoleLogger, type Logger } from './logger'
 import type { DecoyServer } from './server'
-
-/** The path prefix the UI server mounts its (same-origin) data API under. */
-const UI_ADMIN_PREFIX = '/admin'
 
 /** A running `--ui` server: the web control panel on its own loopback port. */
 export interface DecoyUiServer {
@@ -132,12 +129,6 @@ export function createUiServer(
 ): DecoyUiServer {
   const logger = options.logger ?? consoleLogger
   const { assetDir } = options
-  // The aggregator's logs view reads **one shared store** (ADR-0017): the CLI
-  // injects the same store into every instance, so any instance's `requestLog` is
-  // that shared store, holding every service's records (each tagged by `service`).
-  // Control/catalog endpoints target a `?service=`-selected instance; logs are
-  // always read from this shared store, so they aggregate across services.
-  const sharedStore = instances[0]?.requestLog
 
   const bindHost = options.host ?? '127.0.0.1'
   const bindPort = options.port ?? 0
@@ -172,29 +163,23 @@ export function createUiServer(
     }
 
     // Same-origin data API (no CORS): drive the in-process instances directly.
-    if (sharedStore && isAdminPath(req.url, UI_ADMIN_PREFIX)) {
+    if (isUnderPrefix(req.url, CONTROL_PREFIX)) {
       // The service axis (ADR-0017): list every instance for the SPA's switcher.
-      if (req.method === 'GET' && pathOf(req.url) === `${UI_ADMIN_PREFIX}/services`) {
+      // Inherently cross-instance, so the aggregator serves it (not `serveControl`).
+      if (req.method === 'GET' && pathOf(req.url) === `${CONTROL_PREFIX}/services`) {
         res.statusCode = 200
         res.setHeader('content-type', 'application/json')
         res.end(JSON.stringify(instances.map((instance) => ({ name: instance.name }))))
         return
       }
-      // Control/catalog routes to the `?service=`-selected instance (per-instance);
-      // logs read the shared store (aggregated across services), so the timeline is
-      // one cross-service stream regardless of the selected service.
-      const target = selectInstance(instances, serviceOf(req.url)) ?? instances[0]
+      // Every per-instance endpoint goes through the `?service=`-selected instance's
+      // `serveControl` (ADR-0010), which closes over that instance's own store. The
+      // CLI shares **one** store across instances (ADR-0017), so the logs endpoints
+      // aggregate across services regardless of the selected service; control/catalog
+      // endpoints are per-instance.
+      const target = selectInstance(instances, serviceOf(req.url))
       if (target) {
-        await handleAdmin(
-          req,
-          res,
-          target.sessions,
-          UI_ADMIN_PREFIX,
-          logger,
-          target.definitions,
-          sharedStore,
-          { missStatus: target.missStatus, passthrough: target.passthrough },
-        )
+        target.serveControl(req, res)
         return
       }
     }

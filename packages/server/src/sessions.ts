@@ -5,7 +5,7 @@ import { type Controller, createController, type Definitions, type ReloadResult 
  * The label of the **global** (default) session — what no/empty-`x-mock-session`
  * requests resolve against and what their request-log records are tagged with. A
  * shared constant so the registry listing, the request-log `session` column, and a
- * `GET /admin/sessions/global/logs` query all agree on one literal.
+ * `GET /__decoy__/sessions/global/logs` query all agree on one literal.
  */
 export const GLOBAL_SESSION = 'global'
 
@@ -55,7 +55,7 @@ export interface SessionRegistryOptions {
  * The set of live **sessions** on one server (ADR-0011). Each session owns its own
  * {@link Controller} (selection), so parallel e2e tests sharing a server never stomp
  * each other. The **global** session is the default — what dev's no-header requests
- * and `/admin` mutate. Created sessions are keyed by the `x-mock-session` header; an
+ * and `/__decoy__` mutate. Created sessions are keyed by the `x-mock-session` header; an
  * unknown id is lazily auto-created on `resolve`. Abandoned sessions are cleaned up
  * by an idle-TTL reaper.
  */

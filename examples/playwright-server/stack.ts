@@ -23,7 +23,7 @@ function freePort(): Promise<number> {
 export interface RunningStack {
   /** URL of the Rsbuild-served SPA — open this in a browser. */
   spaUrl: string
-  /** Base URL of the live Decoy server (its `/admin` control API rides the same port). */
+  /** Base URL of the live Decoy server (its `/__decoy__` control API rides the same port). */
   decoyBaseUrl: string
   /** Tear both servers down. */
   stop(): Promise<void>

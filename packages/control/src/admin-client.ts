@@ -5,7 +5,7 @@ import { SESSION_HEADER } from './router'
 export interface AdminClientOptions {
   /** Base URL of the running Decoy server, e.g. `http://localhost:4001`. */
   baseUrl: string
-  /** Admin path prefix; defaults to `/admin` (matches the server default). */
+  /** Control path prefix; defaults to `/__decoy__` (matches the server default). */
   prefix?: string
   /**
    * Session id stamped as `x-mock-session` on every **control** call, scoping it
@@ -18,8 +18,8 @@ export interface AdminClientOptions {
 }
 
 /**
- * A typed client for the HTTP `/admin` control API (ADR-0010) — the cross-process
- * mirror of the canonical JS control API. Control methods resolve with the
+ * A typed client for the HTTP control API (ADR-0010) — the cross-process mirror
+ * of the canonical JS control API. Control methods resolve with the
  * resulting selection so a switch is confirmable; an unknown collection/route/
  * preset/variant or bad input fails loud with the server's error message,
  * mirroring the in-process API.
@@ -44,10 +44,10 @@ interface RequestOptions {
   session?: string
 }
 
-/** Create an {@link AdminClient} bound to a running server's `/admin` API. */
+/** Create an {@link AdminClient} bound to a running server's control API. */
 export function createAdminClient(options: AdminClientOptions): AdminClient {
   const fetchImpl = options.fetch ?? fetch
-  const prefix = options.prefix ?? '/admin'
+  const prefix = options.prefix ?? '/__decoy__'
   const base = `${options.baseUrl}${prefix}`
   const { sessionId } = options
 

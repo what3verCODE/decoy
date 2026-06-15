@@ -132,7 +132,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
       expect(page.status).toBe(200)
       expect(await page.text()).toContain('id="root"')
 
-      const routes = await fetch(`http://localhost:${uiPort}/admin/routes`)
+      const routes = await fetch(`http://localhost:${uiPort}/__decoy__/routes`)
       expect(routes.status).toBe(200)
       expect((await routes.json()) as unknown[]).toHaveLength(1)
     })
@@ -304,7 +304,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
 
         // The switcher lists every booted instance (the service axis, ADR-0017).
         const services = (await (
-          await fetch(`http://localhost:${uiPort}/admin/services`)
+          await fetch(`http://localhost:${uiPort}/__decoy__/services`)
         ).json()) as Array<{
           name: string
         }>
@@ -312,7 +312,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
 
         // A ?service= catalog request targets that instance's routes.
         const ordersRoutes = (await (
-          await fetch(`http://localhost:${uiPort}/admin/routes?service=orders`)
+          await fetch(`http://localhost:${uiPort}/__decoy__/routes?service=orders`)
         ).json()) as Array<{ id: string }>
         expect(ordersRoutes.map((r) => r.id)).toEqual(['orders-route'])
 
@@ -321,7 +321,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
         await fetch(`http://localhost:${portOf(servers[0])}/users/1`)
         await fetch(`http://localhost:${portOf(servers[1])}/orders/1`)
         const timeline = (await (
-          await fetch(`http://localhost:${uiPort}/admin/sessions/global/logs`)
+          await fetch(`http://localhost:${uiPort}/__decoy__/sessions/global/logs`)
         ).json()) as Array<{ service: string; path: string }>
         expect(timeline.map((r) => r.service)).toEqual(['users', 'orders'])
         expect(timeline.map((r) => r.path)).toEqual(['/users/1', '/orders/1'])

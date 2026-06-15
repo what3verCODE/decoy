@@ -1,8 +1,8 @@
-# GET /admin/routes/{id} — a route's full presets + variants, fetched when the panel
+# GET /__decoy__/routes/{id} — a route's full presets + variants, fetched when the panel
 # drills into a route. Fixed body (no `{{ }}` templating yet): the detail the e2e opens.
 id: admin-route-detail
 method: GET
-path: /admin/routes/{id}
+path: /__decoy__/routes/{id}
 presets:
   default: {}
 variants:

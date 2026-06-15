@@ -1,5 +1,5 @@
 export {
-  type AdminConfig,
+  type ControlConfig,
   type DecoyConfig,
   defineConfig,
   type PassthroughConfig,
@@ -10,7 +10,7 @@ export {
   type LoadedService,
   loadConfig,
   loadConfigs,
-  type ResolvedAdmin,
+  type ResolvedControl,
   type ResolvedPassthrough,
   type ResolvedRequestLog,
   resolveAllWatchPaths,

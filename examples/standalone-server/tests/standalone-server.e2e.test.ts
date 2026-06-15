@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from '@rstest/core'
 import { type RunningServer, startServer } from './harness'
 
-describe('examples/standalone-server — decoy CLI + /admin control over HTTP', () => {
+describe('examples/standalone-server — decoy CLI + /__decoy__ control over HTTP', () => {
   let server: RunningServer
 
-  /** Drive the running server's control plane over its HTTP `/admin` API. */
-  function admin(path: string, body?: unknown): Promise<Response> {
-    return fetch(`${server.base}/admin/${path}`, {
+  /** Drive the running server's control plane over its HTTP `/__decoy__` API. */
+  function control(path: string, body?: unknown): Promise<Response> {
+    return fetch(`${server.base}/__decoy__/${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -28,8 +28,8 @@ describe('examples/standalone-server — decoy CLI + /admin control over HTTP', 
     expect(await response.json()).toEqual({ id: 42, name: 'Ada' })
   })
 
-  test('switching the collection over /admin flips what the next request sees', async () => {
-    const switched = await admin('collection', { name: 'error-state' })
+  test('switching the collection over /__decoy__ flips what the next request sees', async () => {
+    const switched = await control('collection', { name: 'error-state' })
     expect(switched.status).toBe(200)
 
     const errored = await fetch(`${server.base}/users/42`)
@@ -37,12 +37,12 @@ describe('examples/standalone-server — decoy CLI + /admin control over HTTP', 
     expect(await errored.json()).toEqual({ error: 'upstream exploded' })
 
     // Restore the baseline scenario for the following tests.
-    expect((await admin('collection', { name: 'happy-path' })).status).toBe(200)
+    expect((await control('collection', { name: 'happy-path' })).status).toBe(200)
     expect((await fetch(`${server.base}/users/42`)).status).toBe(200)
   })
 
-  test('a single-route override over /admin, then reset, restores the baseline', async () => {
-    const pinned = await admin('route', {
+  test('a single-route override over /__decoy__, then reset, restores the baseline', async () => {
+    const pinned = await control('route', {
       route: 'users-by-id',
       preset: 'default',
       variant: 'boom',
@@ -50,7 +50,7 @@ describe('examples/standalone-server — decoy CLI + /admin control over HTTP', 
     expect(pinned.status).toBe(200)
     expect((await fetch(`${server.base}/users/42`)).status).toBe(500)
 
-    expect((await admin('reset')).status).toBe(200)
+    expect((await control('reset')).status).toBe(200)
     expect((await fetch(`${server.base}/users/42`)).status).toBe(200)
   })
 

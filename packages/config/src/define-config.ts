@@ -1,12 +1,12 @@
 import type { Collection, Route } from '@decoy/core'
 
 /**
- * HTTP `/admin` control API exposure (ADR-0010). `true` (the default) mounts it
- * on the same port under the `/admin` prefix; `false` disables it. The object
- * form configures the `prefix` and/or moves it to a separate `port` — the escape
- * hatch for when a real `/admin/*` upstream would otherwise be shadowed.
+ * HTTP control API exposure (ADR-0010). `true` (the default) mounts it on the
+ * same port under the `/__decoy__` prefix; `false` disables it. The object form
+ * configures the `prefix` and/or moves it to a separate `port` — the escape hatch
+ * for when a real `/__decoy__/*` upstream would otherwise be shadowed.
  */
-export type AdminConfig = boolean | { port?: number; prefix?: string }
+export type ControlConfig = boolean | { port?: number; prefix?: string }
 
 /**
  * Global passthrough (ADR-0005): when set, **unmatched** requests are forwarded
@@ -19,7 +19,7 @@ export type PassthroughConfig = { url: string }
 
 /**
  * Durable request-log store (#70). `store` selects the backing of the request-log
- * ring (the `GET /admin/logs` stream, ADR-0017): the process-bound in-memory store
+ * ring (the `GET /__decoy__/logs` stream, ADR-0017): the process-bound in-memory store
  * (default) or a `node:sqlite` file shared across this config's instances. `path`
  * is a filename template resolved **once at boot** — `%Y %m %d %H %M %S %s`
  * (UTC strftime) and `{name} {pid} {port}` (named) tokens; an unknown token fails
@@ -57,8 +57,8 @@ export interface ServiceConfig {
    * no server, so it can be omitted there.
    */
   port?: number
-  /** HTTP `/admin` control API exposure; defaults to on (same port, `/admin` prefix). */
-  admin?: AdminConfig
+  /** HTTP control API exposure; defaults to on (same port, `/__decoy__` prefix). */
+  control?: ControlConfig
   /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
   missStatus?: number
   /**

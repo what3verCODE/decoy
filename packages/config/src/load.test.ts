@@ -90,10 +90,10 @@ describe('loadConfig', () => {
     expect(ttlIssue?.message).toContain('at sessionIdleTtl')
   })
 
-  test('resolves the admin config to a separate port and normalized prefix', async () => {
+  test('resolves the control config to a separate port and normalized prefix', async () => {
     const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
 
-    expect(service.admin).toEqual({ enabled: true, prefix: '/control', port: 5101 })
+    expect(service.control).toEqual({ enabled: true, prefix: '/control', port: 5101 })
   })
 
   test('falls back to the default-path source when no config file exists', async () => {
@@ -101,8 +101,8 @@ describe('loadConfig', () => {
 
     expect(service.defaultCollection).toBe('happy-path')
     expect(service.definitions.routes.get('users-list-api')?.path).toBe('/users')
-    // admin defaults to on, same port, `/admin` prefix
-    expect(service.admin).toEqual({ enabled: true, prefix: '/admin' })
+    // control defaults to on, same port, `/__decoy__` prefix
+    expect(service.control).toEqual({ enabled: true, prefix: '/__decoy__' })
   })
 
   test('panics when neither config nor default-path source is present', async () => {

@@ -23,7 +23,7 @@ export interface ReloadResult {
  * definitions and fails loud on an unknown collection/route/preset/variant.
  *
  * The engine stays stateless (ADR-0012); this is the stateful holder around it.
- * Cross-process control (`/admin`) and sessions wrap this same surface (#28/#39).
+ * Cross-process control (`/__decoy__`) and sessions wrap this same surface (#28/#39).
  */
 export interface Controller {
   /** Match a request against the current selection. */

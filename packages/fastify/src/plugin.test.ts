@@ -242,7 +242,7 @@ describe('fromService', () => {
       missStatus: 503,
       sessionIdleTtlMs: 0,
       definitions: defs(),
-      admin: { enabled: false, prefix: '/admin' },
+      control: { enabled: false, prefix: '/__decoy__' },
     })
     const { notFound } = register(plugin)
 

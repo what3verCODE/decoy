@@ -216,7 +216,7 @@ export async function run(
 
   // Multi-instance shares **one** request-log store (ADR-0017): every instance
   // records into it tagged by `service`, so the `--ui` aggregator's logs view (and a
-  // per-instance `/admin/sessions/{id}/logs`) yields one cross-service timeline. The
+  // per-instance `/__decoy__/sessions/{id}/logs`) yields one cross-service timeline. The
   // store is wrapped as a {@link SharedRequestLogStore} so each instance acquires a
   // holder handle and the store closes once after the last instance closes (#80) —
   // running its sqlite `cleanup: 'on-exit'` file removal on graceful shutdown. Its
@@ -242,7 +242,7 @@ export async function run(
       const ui = await resolveUi()
       assetDir = ui.uiAssetDir()
       // @decoy/ui and @decoy/server are published together; a drift between them
-      // can mean the panel calls an admin endpoint the server does not serve.
+      // can mean the panel calls a control endpoint the server does not serve.
       if (ui.version !== decoyVersion) {
         logger.warn(
           `decoy ui: @decoy/ui ${ui.version} does not match decoy ${decoyVersion} — install matching versions to avoid panel/server drift`,

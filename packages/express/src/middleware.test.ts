@@ -160,7 +160,7 @@ describe('fromService', () => {
       missStatus: 501,
       sessionIdleTtlMs: 0,
       definitions: defs(),
-      admin: { enabled: false, prefix: '/admin' },
+      control: { enabled: false, prefix: '/__decoy__' },
     })
 
     expect(mw.selection.collection).toBe('happy-path')

@@ -86,7 +86,7 @@ export function resolveCollections(collections: Map<string, Collection>): Map<st
  * after applying `extends` (parent inherited first, child overrides in place,
  * new slots appended). Throws if the collection — or any collection it extends —
  * is not defined, or if its `extends` chain is cyclic. Pure and IO-free: the
- * admin catalog (`GET /admin/collections/{name}`) reads scenarios through this.
+ * control catalog (`GET /__decoy__/collections/{name}`) reads scenarios through this.
  */
 export function resolveCollection(definitions: Definitions, name: string): VariantAddress[] {
   const entries = resolveCollections(definitions.collections).get(name)

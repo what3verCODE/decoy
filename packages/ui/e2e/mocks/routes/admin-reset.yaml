@@ -1,7 +1,7 @@
-# POST /admin/reset — drop all overrides back to the active collection baseline.
+# POST /__decoy__/reset — drop all overrides back to the active collection baseline.
 id: admin-reset
 method: POST
-path: /admin/reset
+path: /__decoy__/reset
 presets:
   default: {}
 variants:

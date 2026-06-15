@@ -1,11 +1,11 @@
 import { expect, test } from './fixtures'
 
-// Dogfood (ADR-0017): the sessions inspector drives the same-origin /admin sessions
+// Dogfood (ADR-0017): the sessions inspector drives the same-origin /__decoy__ sessions
 // API, faked by the auto router fixture (decoy.config.ts + mocks/). @decoy/ui ships
 // static assets only, so the e2e never boots a server — it proves the panel lists
 // sessions (global + created) and that drilling into one shows its (cross-service)
 // request timeline. The store/lifecycle semantics (survives destroy, one ordered
-// cross-service timeline) are covered by the server's HTTP-seam admin tests.
+// cross-service timeline) are covered by the server's HTTP-seam control tests.
 test('the sessions view lists the global session plus created sessions', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('nav-sessions').click()

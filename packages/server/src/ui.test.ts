@@ -33,7 +33,7 @@ function service(): LoadedService {
     defaultCollection: 'happy-path',
     missStatus: 501,
     sessionIdleTtlMs: 1_800_000,
-    admin: { enabled: true, prefix: '/admin' },
+    control: { enabled: true, prefix: '/__decoy__' },
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),
       collections: new Map([[happyPath.id, happyPath]]),
@@ -107,9 +107,9 @@ describe('@decoy/ui server', () => {
 
   afterEach(async () => {
     await ui.close()
-    // `mock` is never listened — the UI server only holds its in-process
-    // sessions/definitions — so there is no socket to close.
-    mock.sessions.stop()
+    // `mock` is never listened — the UI server only drives it in-process via
+    // `serveControl` — so there is no socket to close; its idle-session reaper is
+    // `unref`'d and never keeps the process alive.
     rmSync(assetDir, { recursive: true, force: true })
   })
 
@@ -119,8 +119,8 @@ describe('@decoy/ui server', () => {
     expect(response.body).toContain('id=app')
   })
 
-  test('serves the routes catalog from the same origin (no CORS) via GET /admin/routes', async () => {
-    const response = await rawGet(port, '/admin/routes')
+  test('serves the routes catalog from the same origin (no CORS) via GET /__decoy__/routes', async () => {
+    const response = await rawGet(port, '/__decoy__/routes')
     expect(response.status).toBe(200)
     expect(JSON.parse(response.body)).toEqual([
       { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 1 },
@@ -140,7 +140,7 @@ describe('@decoy/ui server', () => {
   })
 
   test('rejects a request whose Host header is not loopback (anti-DNS-rebinding)', async () => {
-    const response = await rawGet(port, '/admin/routes', { Host: 'evil.example.com' })
+    const response = await rawGet(port, '/__decoy__/routes', { Host: 'evil.example.com' })
     expect(response.status).toBe(403)
   })
 
@@ -161,7 +161,6 @@ describe('@decoy/ui server with a host override', () => {
   })
 
   afterEach(() => {
-    mock.sessions.stop()
     rmSync(assetDir, { recursive: true, force: true })
   })
 
@@ -246,34 +245,34 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
 
   afterEach(async () => {
     await ui.close()
-    users.sessions.stop()
-    orders.sessions.stop()
+    // The two in-process instances are never listened (the UI drives them via
+    // `serveControl`); their `unref`'d reapers never keep the process alive.
     rmSync(assetDir, { recursive: true, force: true })
   })
 
-  test('GET /admin/services lists every service in boot order', async () => {
-    const response = await rawGet(port, '/admin/services')
+  test('GET /__decoy__/services lists every service in boot order', async () => {
+    const response = await rawGet(port, '/__decoy__/services')
     expect(response.status).toBe(200)
     expect(JSON.parse(response.body)).toEqual([{ name: 'users' }, { name: 'orders' }])
   })
 
   test('a ?service= control request targets that instance; no param targets the first', async () => {
-    expect(JSON.parse((await rawGet(port, '/admin/routes')).body)).toEqual([
+    expect(JSON.parse((await rawGet(port, '/__decoy__/routes')).body)).toEqual([
       { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 1 },
     ])
-    expect(JSON.parse((await rawGet(port, '/admin/routes?service=orders')).body)).toEqual([
+    expect(JSON.parse((await rawGet(port, '/__decoy__/routes?service=orders')).body)).toEqual([
       { id: 'orders-by-id', method: 'GET', path: '/orders/{id}', presetCount: 1, variantCount: 1 },
     ])
   })
 
   test("one service's collection switch is isolated from another's", async () => {
-    const switched = await rawRequest(port, 'POST', '/admin/collection?service=orders', {
+    const switched = await rawRequest(port, 'POST', '/__decoy__/collection?service=orders', {
       name: 'error-state',
     })
     expect(switched.status).toBe(200)
 
-    const ordersSel = JSON.parse((await rawGet(port, '/admin/selection?service=orders')).body)
-    const usersSel = JSON.parse((await rawGet(port, '/admin/selection?service=users')).body)
+    const ordersSel = JSON.parse((await rawGet(port, '/__decoy__/selection?service=orders')).body)
+    const usersSel = JSON.parse((await rawGet(port, '/__decoy__/selection?service=users')).body)
     expect(ordersSel.collection).toBe('error-state')
     // The users instance keeps its own selection — control is per-instance.
     expect(usersSel.collection).toBe('happy-path')
@@ -310,7 +309,9 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
 
     // The global session's timeline is read from the shared store — cross-service,
     // and independent of which instance a ?service= request would target.
-    const timeline = JSON.parse((await rawGet(port, '/admin/sessions/global/logs')).body) as Array<{
+    const timeline = JSON.parse(
+      (await rawGet(port, '/__decoy__/sessions/global/logs')).body,
+    ) as Array<{
       service: string
       path: string
     }>

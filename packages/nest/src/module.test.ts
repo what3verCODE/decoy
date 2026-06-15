@@ -150,7 +150,7 @@ describe('DecoyModule.forService', () => {
       missStatus: 501,
       sessionIdleTtlMs: 0,
       definitions: defs(),
-      admin: { enabled: false, prefix: '/admin' },
+      control: { enabled: false, prefix: '/__decoy__' },
     })
 
     const middleware = providerValue(dynamic, DECOY_MIDDLEWARE) as DecoyMiddleware

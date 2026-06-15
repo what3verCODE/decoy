@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Example: run Decoy as a standalone server via the `decoy` CLI and switch scenarios over the /admin HTTP API.",
+  "description": "Example: run Decoy as a standalone server via the `decoy` CLI and switch scenarios over the /__decoy__ HTTP API.",
   "scripts": {
     "dev": "jiti dev.ts",
     "test:e2e": "rstest run"

@@ -6,7 +6,7 @@ import type { Collection, Definitions, Route } from '@decoy/core'
 import { cosmiconfig, defaultLoaders, type Loader, type PublicExplorer } from 'cosmiconfig'
 import { createJiti } from 'jiti'
 import type {
-  AdminConfig,
+  ControlConfig,
   DecoyConfig,
   PassthroughConfig,
   RequestLogConfig,
@@ -43,19 +43,20 @@ const CONFIG_SEARCH_PLACES = [
 const DEFAULT_ROUTES_DIR = 'mocks/routes'
 const DEFAULT_COLLECTIONS_FILE = 'mocks/collections.yaml'
 const DEFAULT_PORT = 4000
-const DEFAULT_ADMIN_PREFIX = '/admin'
+/** Collision-safe default control mount prefix (ADR-0010); won't shadow a real upstream route. */
+const DEFAULT_CONTROL_PREFIX = '/__decoy__'
 const DEFAULT_MISS_STATUS = 501
 /** 30 minutes — long enough to outlive a slow e2e test, short enough to reclaim abandoned sessions. */
 const DEFAULT_SESSION_IDLE_TTL_MS = 30 * 60 * 1000
 /** Default sqlite filename under a gitignored `.decoy/`, namespaced by service name (#70). */
 const DEFAULT_LOG_PATH_TEMPLATE = '.decoy/{name}.sqlite'
 
-/** Resolved `/admin` control API mount: enabled flag, path prefix, and optional separate port. */
-export interface ResolvedAdmin {
+/** Resolved control API mount: enabled flag, path prefix, and optional separate port. */
+export interface ResolvedControl {
   enabled: boolean
-  /** Path prefix the admin API is mounted under, leading `/`, no trailing `/` (e.g. `/admin`). */
+  /** Path prefix the control API is mounted under, leading `/`, no trailing `/` (e.g. `/__decoy__`). */
   prefix: string
-  /** When set, the admin API listens on this dedicated port instead of the service port. */
+  /** When set, the control API listens on this dedicated port instead of the service port. */
   port?: number
 }
 
@@ -92,8 +93,8 @@ export interface LoadedService {
   /** Idle TTL (ms) after which an abandoned session is reaped (ADR-0011); defaults to 30 min. */
   sessionIdleTtlMs: number
   definitions: Definitions
-  /** Resolved `/admin` control API mount (ADR-0010). */
-  admin: ResolvedAdmin
+  /** Resolved control API mount (ADR-0010). */
+  control: ResolvedControl
   /**
    * Resolved durable request-log store (#70). Always set by the loader; optional
    * so an embedding adapter that hand-builds a {@link LoadedService} can omit it
@@ -106,23 +107,23 @@ export interface LoadedService {
 function normalizePrefix(prefix: string): string {
   const trimmed = prefix.trim().replace(/\/+$/, '')
   if (trimmed === '') {
-    return DEFAULT_ADMIN_PREFIX
+    return DEFAULT_CONTROL_PREFIX
   }
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
-/** Resolve the authoring `admin` config into a {@link ResolvedAdmin} (default: on, same port, `/admin`). */
-function resolveAdmin(admin: AdminConfig | undefined): ResolvedAdmin {
-  if (admin === undefined || admin === true) {
-    return { enabled: true, prefix: DEFAULT_ADMIN_PREFIX }
+/** Resolve the authoring `control` config into a {@link ResolvedControl} (default: on, same port, `/__decoy__`). */
+function resolveControl(control: ControlConfig | undefined): ResolvedControl {
+  if (control === undefined || control === true) {
+    return { enabled: true, prefix: DEFAULT_CONTROL_PREFIX }
   }
-  if (admin === false) {
-    return { enabled: false, prefix: DEFAULT_ADMIN_PREFIX }
+  if (control === false) {
+    return { enabled: false, prefix: DEFAULT_CONTROL_PREFIX }
   }
   return {
     enabled: true,
-    prefix: normalizePrefix(admin.prefix ?? DEFAULT_ADMIN_PREFIX),
-    port: admin.port,
+    prefix: normalizePrefix(control.prefix ?? DEFAULT_CONTROL_PREFIX),
+    port: control.port,
   }
 }
 
@@ -532,7 +533,7 @@ function buildLoadedService(sources: CollectedSources): LoadedService {
     passthrough: resolvePassthrough(service.passthrough),
     sessionIdleTtlMs: service.sessionIdleTtl ?? DEFAULT_SESSION_IDLE_TTL_MS,
     definitions,
-    admin: resolveAdmin(service.admin),
+    control: resolveControl(service.control),
     requestLog: resolveRequestLog(service.requestLog, { name, port, baseDir: sources.baseDir }),
   }
 }

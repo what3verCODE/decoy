@@ -1,6 +1,6 @@
 import { defineConfig } from '@decoy/config'
 
-// The panel's same-origin admin API, faked for the e2e exactly the way an adopter
+// The panel's same-origin control API, faked for the e2e exactly the way an adopter
 // fakes their own app's API: a decoy.config + mocks/ (ADR-0007), loaded by
 // @decoy/playwright over `page.route`. No server boots — @decoy/ui ships static assets
 // only (ADR-0017) — so the server-only fields (`name`, `port`) are omitted; the router

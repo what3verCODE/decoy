@@ -1,4 +1,9 @@
-export type { RequestResolution, RouteCatalogEntry, RouteDetail } from './admin'
+export {
+  CONTROL_PREFIX,
+  type RequestResolution,
+  type RouteCatalogEntry,
+  type RouteDetail,
+} from './control'
 export { toEnvelope } from './envelope'
 export {
   consoleLogger,

@@ -1,9 +1,9 @@
-# GET /admin/sessions/{id}/logs — a session's request timeline, ordered across all
+# GET /__decoy__/sessions/{id}/logs — a session's request timeline, ordered across all
 # services (one timeline). `timeline` spans two services (users + orders) to show
 # the cross-service ordering; `empty` drives the no-requests state.
 id: admin-session-logs
 method: GET
-path: /admin/sessions/{id}/logs
+path: /__decoy__/sessions/{id}/logs
 presets:
   default: {}
 variants:

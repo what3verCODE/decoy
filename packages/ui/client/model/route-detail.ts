@@ -65,7 +65,7 @@ export function closeRoute(): void {
   tryLoad.value = { state: 'idle' }
 }
 
-/** Fire the playground request against the current selection via `POST /admin/try`. */
+/** Fire the playground request against the current selection via `POST /__decoy__/try`. */
 export async function runTry(): Promise<void> {
   tryLoad.value = { state: 'loading' }
   try {

@@ -21,16 +21,16 @@ function scoped(url: string): string {
   return `${url}${sep}service=${encodeURIComponent(activeService)}`
 }
 
-/** One service in the switcher — the body of `GET /admin/services`. */
+/** One service in the switcher — the body of `GET /__decoy__/services`. */
 export interface ServiceInfo {
   name: string
 }
 
-/** Fetch the booted services (the switcher's list) from `GET /admin/services`. */
+/** Fetch the booted services (the switcher's list) from `GET /__decoy__/services`. */
 export async function fetchServices(): Promise<ServiceInfo[]> {
-  const response = await fetch('/admin/services')
+  const response = await fetch('/__decoy__/services')
   if (!response.ok) {
-    throw new Error(`GET /admin/services failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/services failed: ${response.status}`)
   }
   return (await response.json()) as ServiceInfo[]
 }
@@ -43,11 +43,11 @@ export interface RouteCatalogEntry {
   variantCount: number
 }
 
-/** Fetch the routes catalog from `GET /admin/routes`. Throws on a non-2xx response. */
+/** Fetch the routes catalog from `GET /__decoy__/routes`. Throws on a non-2xx response. */
 export async function fetchRoutes(): Promise<RouteCatalogEntry[]> {
-  const response = await fetch(scoped('/admin/routes'))
+  const response = await fetch(scoped('/__decoy__/routes'))
   if (!response.ok) {
-    throw new Error(`GET /admin/routes failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/routes failed: ${response.status}`)
   }
   return (await response.json()) as RouteCatalogEntry[]
 }
@@ -68,7 +68,7 @@ export interface RouteVariant {
   body?: unknown
 }
 
-/** A route's full detail — the body of `GET /admin/routes/{id}` (the server's `RouteDetail`). */
+/** A route's full detail — the body of `GET /__decoy__/routes/{id}` (the server's `RouteDetail`). */
 export interface RouteDetail {
   id: string
   method: string
@@ -77,16 +77,16 @@ export interface RouteDetail {
   variants: Record<string, RouteVariant>
 }
 
-/** Fetch one route's presets and variants from `GET /admin/routes/{id}`. */
+/** Fetch one route's presets and variants from `GET /__decoy__/routes/{id}`. */
 export async function fetchRouteDetail(id: string): Promise<RouteDetail> {
-  const response = await fetch(scoped(`/admin/routes/${encodeURIComponent(id)}`))
+  const response = await fetch(scoped(`/__decoy__/routes/${encodeURIComponent(id)}`))
   if (!response.ok) {
-    throw new Error(`GET /admin/routes/${id} failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/routes/${id} failed: ${response.status}`)
   }
   return (await response.json()) as RouteDetail
 }
 
-/** A playground dry-run request posted to `POST /admin/try`. */
+/** A playground dry-run request posted to `POST /__decoy__/try`. */
 export interface TryRequest {
   method: string
   path: string
@@ -95,7 +95,7 @@ export interface TryRequest {
   body?: unknown
 }
 
-/** The dry-run outcome from `POST /admin/try` (the server's `TryOutcome`). */
+/** The dry-run outcome from `POST /__decoy__/try` (the server's `TryOutcome`). */
 export interface TryResult {
   /** `route:preset:variant` · `MISS(reason)` · `PASSTHROUGH(target)`. */
   resolution: string
@@ -103,15 +103,15 @@ export interface TryResult {
   response: { status: number; headers: Record<string, string>; body: unknown } | null
 }
 
-/** Run a dry-run match against the current selection via `POST /admin/try` (zero side effects). */
+/** Run a dry-run match against the current selection via `POST /__decoy__/try` (zero side effects). */
 export async function tryRequest(input: TryRequest): Promise<TryResult> {
-  const response = await fetch(scoped('/admin/try'), {
+  const response = await fetch(scoped('/__decoy__/try'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   })
   if (!response.ok) {
-    throw new Error(`POST /admin/try failed: ${response.status}`)
+    throw new Error(`POST /__decoy__/try failed: ${response.status}`)
   }
   return (await response.json()) as TryResult
 }
@@ -137,7 +137,7 @@ export interface CollectionCatalogEntry {
   entryCount: number
 }
 
-/** A collection's resolved detail — the body of `GET /admin/collections/{name}`. */
+/** A collection's resolved detail — the body of `GET /__decoy__/collections/{name}`. */
 export interface CollectionDetail {
   name: string
   extends?: string
@@ -145,57 +145,57 @@ export interface CollectionDetail {
   entries: VariantAddress[]
 }
 
-/** Fetch the collections catalog from `GET /admin/collections`. Throws on a non-2xx response. */
+/** Fetch the collections catalog from `GET /__decoy__/collections`. Throws on a non-2xx response. */
 export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
-  const response = await fetch(scoped('/admin/collections'))
+  const response = await fetch(scoped('/__decoy__/collections'))
   if (!response.ok) {
-    throw new Error(`GET /admin/collections failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/collections failed: ${response.status}`)
   }
   return (await response.json()) as CollectionCatalogEntry[]
 }
 
-/** Fetch one collection's resolved entries from `GET /admin/collections/{name}`. */
+/** Fetch one collection's resolved entries from `GET /__decoy__/collections/{name}`. */
 export async function fetchCollectionDetail(name: string): Promise<CollectionDetail> {
-  const response = await fetch(scoped(`/admin/collections/${encodeURIComponent(name)}`))
+  const response = await fetch(scoped(`/__decoy__/collections/${encodeURIComponent(name)}`))
   if (!response.ok) {
-    throw new Error(`GET /admin/collections/${name} failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/collections/${name} failed: ${response.status}`)
   }
   return (await response.json()) as CollectionDetail
 }
 
-/** Fetch the current selection from `GET /admin/selection`. */
+/** Fetch the current selection from `GET /__decoy__/selection`. */
 export async function fetchSelection(): Promise<Selection> {
-  const response = await fetch(scoped('/admin/selection'))
+  const response = await fetch(scoped('/__decoy__/selection'))
   if (!response.ok) {
-    throw new Error(`GET /admin/selection failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/selection failed: ${response.status}`)
   }
   return (await response.json()) as Selection
 }
 
-/** POST a JSON control call to `/admin/{path}`, returning the resulting selection. */
+/** POST a JSON control call to `/__decoy__/{path}`, returning the resulting selection. */
 async function postControl(path: string, body?: unknown): Promise<Selection> {
-  const response = await fetch(scoped(`/admin/${path}`), {
+  const response = await fetch(scoped(`/__decoy__/${path}`), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (!response.ok) {
-    throw new Error(`POST /admin/${path} failed: ${response.status}`)
+    throw new Error(`POST /__decoy__/${path} failed: ${response.status}`)
   }
   return (await response.json()) as Selection
 }
 
-/** Switch the active collection via `POST /admin/collection`. */
+/** Switch the active collection via `POST /__decoy__/collection`. */
 export function useCollection(name: string): Promise<Selection> {
   return postControl('collection', { name })
 }
 
-/** Pin a route's `preset` slot to a variant via `POST /admin/route`. */
+/** Pin a route's `preset` slot to a variant via `POST /__decoy__/route`. */
 export function pinRoute(route: string, preset: string, variant: string): Promise<Selection> {
   return postControl('route', { route, preset, variant })
 }
 
-/** Drop all per-route overrides via `POST /admin/reset`. */
+/** Drop all per-route overrides via `POST /__decoy__/reset`. */
 export function resetOverrides(): Promise<Selection> {
   return postControl('reset')
 }
@@ -206,7 +206,7 @@ export type RequestOutcome =
   | { type: 'miss'; reason: string }
   | { type: 'passthrough'; target: string }
 
-/** One live request record streamed over `GET /admin/logs` — the server's `StoredRequestLog`. */
+/** One live request record streamed over `GET /__decoy__/logs` — the server's `StoredRequestLog`. */
 export interface RequestLogRecord {
   /** Monotonic store-assigned id; used to dedupe replayed history on reconnect. */
   seq: number
@@ -220,7 +220,7 @@ export interface RequestLogRecord {
   service?: string
 }
 
-/** One live session — mirrors the server's `SessionInfo` (body of `GET /admin/sessions`). */
+/** One live session — mirrors the server's `SessionInfo` (body of `GET /__decoy__/sessions`). */
 export interface SessionInfo {
   /** `'global'` for the default (dev) session, otherwise the created session id. */
   id: string
@@ -229,23 +229,23 @@ export interface SessionInfo {
   overrideCount: number
 }
 
-/** Fetch the live sessions (global + created) from `GET /admin/sessions`. */
+/** Fetch the live sessions (global + created) from `GET /__decoy__/sessions`. */
 export async function fetchSessions(): Promise<SessionInfo[]> {
-  const response = await fetch(scoped('/admin/sessions'))
+  const response = await fetch(scoped('/__decoy__/sessions'))
   if (!response.ok) {
-    throw new Error(`GET /admin/sessions failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/sessions failed: ${response.status}`)
   }
   return (await response.json()) as SessionInfo[]
 }
 
 /**
- * Fetch a session's request timeline from `GET /admin/sessions/{id}/logs` — ordered
+ * Fetch a session's request timeline from `GET /__decoy__/sessions/{id}/logs` — ordered
  * across all services (one timeline) and readable after the session is destroyed.
  */
 export async function fetchSessionLogs(id: string): Promise<RequestLogRecord[]> {
-  const response = await fetch(`/admin/sessions/${encodeURIComponent(id)}/logs`)
+  const response = await fetch(`/__decoy__/sessions/${encodeURIComponent(id)}/logs`)
   if (!response.ok) {
-    throw new Error(`GET /admin/sessions/${id}/logs failed: ${response.status}`)
+    throw new Error(`GET /__decoy__/sessions/${id}/logs failed: ${response.status}`)
   }
   return (await response.json()) as RequestLogRecord[]
 }
@@ -270,12 +270,12 @@ export interface LogStream {
 }
 
 /**
- * Open the `GET /admin/logs` SSE stream, invoking `onRecord` for every record
+ * Open the `GET /__decoy__/logs` SSE stream, invoking `onRecord` for every record
  * (replayed history first, then live tail). The browser `EventSource` reconnects
  * on drop and the server replays history, so callers must dedupe on `seq`.
  */
 export function connectLogs(onRecord: (record: RequestLogRecord) => void): LogStream {
-  const source = new EventSource('/admin/logs')
+  const source = new EventSource('/__decoy__/logs')
   source.onmessage = (event) => {
     onRecord(JSON.parse(event.data) as RequestLogRecord)
   }

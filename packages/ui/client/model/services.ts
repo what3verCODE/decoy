@@ -25,7 +25,7 @@ export async function loadServices(): Promise<void> {
   try {
     list = await fetchServices()
   } catch {
-    // An older server without /admin/services: stay single-service (no selector,
+    // An older server without /__decoy__/services: stay single-service (no selector,
     // and control calls carry no `?service=`, which the server defaults anyway).
     list = []
   }

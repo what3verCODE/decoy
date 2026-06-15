@@ -84,7 +84,7 @@ function writeMiss(reply: FastifyMockReply, message: string, status: number): vo
 /**
  * Create a {@link DecoyPlugin} over the given definitions, starting on
  * `defaultCollection`. Each plugin owns its own {@link Controller}, so the host app
- * drives scenarios entirely in-process — no standalone server, no `/admin`.
+ * drives scenarios entirely in-process — no standalone server, no `/__decoy__`.
  *
  * The plugin registers two seams on the host instance:
  * - a `preHandler` hook that, for a request whose path a real route already owns,

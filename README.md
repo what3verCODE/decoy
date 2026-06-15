@@ -23,9 +23,9 @@ examples/       per-surface showcases — the e2e tier (`test:e2e` only)
 packages/
   core/         types · engine · JMESPath templating · std fns · Router interface  (pure, no IO)
   config/       defineConfig · valibot schema · loaders
-  server/       HTTP server · /admin · sessions · passthrough
+  server/       HTTP server · /__decoy__ control · sessions · passthrough
   cli/          bin: start / check / --tui
-  control/      admin SDK · SessionRouter base
+  control/      control SDK · SessionRouter base
   playwright/   PlaywrightRouter + fixtures
   testplane/    TestplaneRouter + fixtures
   express/      middleware adapter

@@ -1,9 +1,9 @@
-# GET /admin/sessions — the sessions the inspector lists: the global (dev) session
+# GET /__decoy__/sessions — the sessions the inspector lists: the global (dev) session
 # plus any created ones. `list` is the populated baseline; `solo` drives the
 # global-only case (switch with router.useRoute('admin-sessions','default','solo')).
 id: admin-sessions
 method: GET
-path: /admin/sessions
+path: /__decoy__/sessions
 presets:
   default: {}
 variants:

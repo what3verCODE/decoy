@@ -43,7 +43,7 @@ export const CollectionSchema = v.object({
   routes: v.array(v.string()),
 })
 
-const AdminSchema = v.union([
+const ControlSchema = v.union([
   v.boolean(),
   v.object({ port: v.optional(v.number()), prefix: v.optional(v.string()) }),
 ])
@@ -90,7 +90,7 @@ const RequestLogSchema = v.object({
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
   port: v.optional(v.number()),
-  admin: v.optional(AdminSchema),
+  control: v.optional(ControlSchema),
   missStatus: v.optional(
     v.pipe(
       v.number(),

@@ -15,6 +15,13 @@ import type { SessionRegistry } from './sessions'
 /** Heartbeat interval (ms) keeping an idle SSE connection alive through proxies. */
 const SSE_HEARTBEAT_MS = 15_000
 
+/**
+ * Collision-safe default control mount prefix (ADR-0010), shared by both mounts:
+ * the cross-process mount on the mock port and the same-origin `--ui` panel mount.
+ * They differ only by *where* they're mounted, not by the prefix token.
+ */
+export const CONTROL_PREFIX = '/__decoy__'
+
 /** One routes-catalog entry: a route's identity plus how many presets/variants it carries. */
 export interface RouteCatalogEntry {
   id: string
@@ -80,8 +87,8 @@ function pathOf(url: string | undefined): string {
   return new URL(url ?? '/', 'http://localhost').pathname
 }
 
-/** True when the request path is the admin `prefix` itself or a sub-path of it. */
-export function isAdminPath(url: string | undefined, prefix: string): boolean {
+/** True when the request path is the control `prefix` itself or a sub-path of it. */
+export function isUnderPrefix(url: string | undefined, prefix: string): boolean {
   const path = pathOf(url)
   return path === prefix || path.startsWith(`${prefix}/`)
 }
@@ -234,13 +241,13 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'))
   } catch {
-    throw new Error('admin: request body is not valid JSON')
+    throw new Error('control: request body is not valid JSON')
   }
 }
 
 /**
- * Handle a request to the HTTP `/admin` control API (ADR-0010) — the cross-process
- * mirror of the canonical JS control API. Endpoints, relative to `prefix`:
+ * Handle a request to the HTTP control API (ADR-0010) — the cross-process mirror
+ * of the canonical JS control API. Endpoints, relative to `prefix`:
  *
  * - `GET  {prefix}` / `GET {prefix}/selection` → the current selection.
  * - `POST {prefix}/collection` `{ name }`               → `useCollection(name)`.
@@ -266,7 +273,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * new state. Bad input or an unknown collection/route/preset/variant is a `400`;
  * an unknown endpoint is a `404`.
  */
-export async function handleAdmin(
+export async function handleControl(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: SessionRegistry,
@@ -279,8 +286,8 @@ export async function handleAdmin(
   const method = req.method ?? 'GET'
   const path = pathOf(req.url)
 
-  if (!isAdminPath(req.url, prefix)) {
-    sendJson(res, 404, { error: `admin: no such endpoint ${method} ${path}` })
+  if (!isUnderPrefix(req.url, prefix)) {
+    sendJson(res, 404, { error: `control: no such endpoint ${method} ${path}` })
     return
   }
   const sub = path.slice(prefix.length) || '/'
@@ -290,7 +297,7 @@ export async function handleAdmin(
   try {
     if (method === 'POST' && sub === '/sessions') {
       const id = sessions.create()
-      logger.info(`admin: createSession ${id}`)
+      logger.info(`control: createSession ${id}`)
       sendJson(res, 201, { id })
       return
     }
@@ -298,10 +305,10 @@ export async function handleAdmin(
     if (method === 'DELETE' && sub.startsWith('/sessions/')) {
       const id = decodeURIComponent(sub.slice('/sessions/'.length))
       if (!sessions.destroy(id)) {
-        sendJson(res, 404, { error: `admin: no such session "${id}"` })
+        sendJson(res, 404, { error: `control: no such session "${id}"` })
         return
       }
-      logger.info(`admin: destroySession ${id}`)
+      logger.info(`control: destroySession ${id}`)
       sendJson(res, 200, { destroyed: id })
       return
     }
@@ -320,7 +327,7 @@ export async function handleAdmin(
       const id = decodeURIComponent(sub.slice('/routes/'.length))
       const route = definitions.routes.get(id)
       if (!route) {
-        sendJson(res, 404, { error: `admin: no such route "${id}"` })
+        sendJson(res, 404, { error: `control: no such route "${id}"` })
         return
       }
       const detail: RouteDetail = {
@@ -343,7 +350,7 @@ export async function handleAdmin(
       const name = decodeURIComponent(sub.slice('/collections/'.length))
       const collection = definitions.collections.get(name)
       if (!collection) {
-        sendJson(res, 404, { error: `admin: no such collection "${name}"` })
+        sendJson(res, 404, { error: `control: no such collection "${name}"` })
         return
       }
       sendJson(res, 200, {
@@ -390,11 +397,11 @@ export async function handleAdmin(
       if (sub === '/collection') {
         const name = body?.name
         if (typeof name !== 'string') {
-          sendJson(res, 400, { error: 'admin: "name" (string) is required' })
+          sendJson(res, 400, { error: 'control: "name" (string) is required' })
           return
         }
         control.useCollection(name)
-        logger.info(`admin: useCollection ${name}`)
+        logger.info(`control: useCollection ${name}`)
         sendJson(res, 200, control.selection)
         return
       }
@@ -409,25 +416,25 @@ export async function handleAdmin(
           typeof variant !== 'string'
         ) {
           sendJson(res, 400, {
-            error: 'admin: "route", "preset", and "variant" (strings) are required',
+            error: 'control: "route", "preset", and "variant" (strings) are required',
           })
           return
         }
         control.useRoute(route, preset, variant)
-        logger.info(`admin: useRoute ${route}:${preset}:${variant}`)
+        logger.info(`control: useRoute ${route}:${preset}:${variant}`)
         sendJson(res, 200, control.selection)
         return
       }
 
       if (sub === '/reset') {
         control.reset()
-        logger.info('admin: reset')
+        logger.info('control: reset')
         sendJson(res, 200, control.selection)
         return
       }
     }
 
-    sendJson(res, 404, { error: `admin: no such endpoint ${method} ${path}` })
+    sendJson(res, 404, { error: `control: no such endpoint ${method} ${path}` })
   } catch (error) {
     // Malformed body and unknown collection/route/preset/variant are caller errors.
     sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) })

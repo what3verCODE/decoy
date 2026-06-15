@@ -3,7 +3,7 @@ import { SESSION_HEADER } from './router'
 import { createSessionRouter } from './session-router'
 import { startTestServer, type TestServer } from './test-server'
 
-describe('SessionRouter — transport-agnostic control over /admin', () => {
+describe('SessionRouter — transport-agnostic control over /__decoy__', () => {
   let s: TestServer
 
   beforeEach(async () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import { createAdminClient } from './admin-client'
 import { startTestServer, type TestServer } from './test-server'
 
-describe('AdminClient — typed client over the /admin HTTP API', () => {
+describe('AdminClient — typed client over the control HTTP API', () => {
   let s: TestServer
 
   beforeEach(async () => {
@@ -66,7 +66,14 @@ describe('AdminClient — typed client over the /admin HTTP API', () => {
   })
 
   test('a custom prefix is honored', async () => {
-    const client = createAdminClient({ baseUrl: s.base, prefix: '/admin' })
-    expect(await client.getSelection()).toEqual({ collection: 'happy-path', overrides: [] })
+    // Boot a server whose control mount is at a non-default prefix and point the
+    // client at it — proving the prefix flows through both ends (the escape hatch).
+    const custom = await startTestServer('/control')
+    try {
+      const client = createAdminClient({ baseUrl: custom.base, prefix: '/control' })
+      expect(await client.getSelection()).toEqual({ collection: 'happy-path', overrides: [] })
+    } finally {
+      await custom.stop()
+    }
   })
 })

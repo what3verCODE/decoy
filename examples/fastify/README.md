@@ -4,7 +4,7 @@ Register **`@decoy/fastify` as an in-process plugin** in a real Fastify app. Mat
 served from mocks; a miss for a path a real route owns **falls through** to that route; and a
 request nothing owns **fails closed** (`501 + x-mock-miss`). This is the backend-dev story in
 Fastify's idiom — and because the mock runs *inside* the app, "start the client and the mock"
-collapses to **starting one app**. There is no standalone server and no `/admin`: scenarios are
+collapses to **starting one app**. There is no standalone server and no `/__decoy__`: scenarios are
 switched in-process through the plugin's `control` handle.
 
 ## Run it
@@ -51,7 +51,7 @@ curl -si localhost:3005/orders
 # x-mock-miss: true
 ```
 
-**Switch the scenario in-process** — there's no `/admin` here. A host route, a feature test, or
+**Switch the scenario in-process** — there's no `/__decoy__` here. A host route, a feature test, or
 any in-process code calls `control.useCollection(...)` on the plugin to flip the scenario; the
 next request sees it. The e2e drives exactly this (see `tests/`).
 

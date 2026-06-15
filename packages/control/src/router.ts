@@ -5,7 +5,7 @@ export const SESSION_HEADER = 'x-mock-session'
 
 /**
  * The transport-agnostic control interface (ADR-0011). One set of methods,
- * many transports — `SessionRouter` proxies them over `/admin`, a future
+ * many transports — `SessionRouter` proxies them over `/__decoy__`, a future
  * `PlaywrightRouter` drives the in-process engine — so test code never touches
  * transport details. Mirrors the canonical JS control API (ADR-0010): a Router's
  * `useCollection`/`useRoute`/`reset` are the async, switchable view of

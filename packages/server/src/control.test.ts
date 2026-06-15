@@ -1,7 +1,8 @@
-import type { LoadedService, ResolvedAdmin } from '@decoy/config'
+import type { LoadedService, ResolvedControl } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger, RequestLog } from './logger'
+import { createRequestLogStore, createSharedRequestLogStore } from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 
 const silent: Logger = { info() {}, warn() {}, request() {} }
@@ -61,14 +62,16 @@ const usersRoute: Route = {
 const happyPath: Collection = { id: 'happy-path', routes: ['users-by-id:default:success'] }
 const errorState: Collection = { id: 'error-state', routes: ['users-by-id:default:error'] }
 
-function service(admin: ResolvedAdmin = { enabled: true, prefix: '/admin' }): LoadedService {
+function service(
+  control: ResolvedControl = { enabled: true, prefix: '/__decoy__' },
+): LoadedService {
   return {
     name: 'users',
     port: 0,
     defaultCollection: 'happy-path',
     missStatus: 501,
     sessionIdleTtlMs: 1_800_000,
-    admin,
+    control,
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),
       collections: new Map([
@@ -79,7 +82,7 @@ function service(admin: ResolvedAdmin = { enabled: true, prefix: '/admin' }): Lo
   }
 }
 
-describe('/admin HTTP control API', () => {
+describe('HTTP control API', () => {
   let server: DecoyServer
   let base: string
 
@@ -93,10 +96,10 @@ describe('/admin HTTP control API', () => {
     await server.close()
   })
 
-  test('POST /admin/collection switches the collection; the next request reflects it atomically', async () => {
+  test('POST /__decoy__/collection switches the collection; the next request reflects it atomically', async () => {
     expect((await fetch(`${base}/users/42`)).status).toBe(200)
 
-    const control = await fetch(`${base}/admin/collection`, {
+    const control = await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'error-state' }),
@@ -109,8 +112,8 @@ describe('/admin HTTP control API', () => {
     expect(await switched.json()).toEqual({ error: 'boom' })
   })
 
-  test('POST /admin/route pins one route; the next request reflects it', async () => {
-    const control = await fetch(`${base}/admin/route`, {
+  test('POST /__decoy__/route pins one route; the next request reflects it', async () => {
+    const control = await fetch(`${base}/__decoy__/route`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ route: 'users-by-id', preset: 'default', variant: 'error' }),
@@ -124,33 +127,33 @@ describe('/admin HTTP control API', () => {
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
   })
 
-  test('POST /admin/reset drops overrides back to the active collection baseline', async () => {
-    await fetch(`${base}/admin/route`, {
+  test('POST /__decoy__/reset drops overrides back to the active collection baseline', async () => {
+    await fetch(`${base}/__decoy__/route`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ route: 'users-by-id', preset: 'default', variant: 'error' }),
     })
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
 
-    const reset = await fetch(`${base}/admin/reset`, { method: 'POST' })
+    const reset = await fetch(`${base}/__decoy__/reset`, { method: 'POST' })
     expect(reset.status).toBe(200)
     expect(await reset.json()).toEqual({ collection: 'happy-path', overrides: [] })
     expect((await fetch(`${base}/users/42`)).status).toBe(200)
   })
 
-  test('GET /admin/selection returns the current selection', async () => {
-    await fetch(`${base}/admin/collection`, {
+  test('GET /__decoy__/selection returns the current selection', async () => {
+    await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'error-state' }),
     })
-    const selection = await fetch(`${base}/admin/selection`)
+    const selection = await fetch(`${base}/__decoy__/selection`)
     expect(selection.status).toBe(200)
     expect(await selection.json()).toEqual({ collection: 'error-state', overrides: [] })
   })
 
-  test('GET /admin/routes returns the routes catalog with preset/variant counts', async () => {
-    const response = await fetch(`${base}/admin/routes`)
+  test('GET /__decoy__/routes returns the routes catalog with preset/variant counts', async () => {
+    const response = await fetch(`${base}/__decoy__/routes`)
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual([
       {
@@ -163,7 +166,7 @@ describe('/admin HTTP control API', () => {
     ])
   })
 
-  test('GET /admin/routes lists one entry per route (not per variant), counting presets and variants', async () => {
+  test('GET /__decoy__/routes lists one entry per route (not per variant), counting presets and variants', async () => {
     const multi: Route = {
       id: 'orders',
       method: 'POST',
@@ -179,7 +182,7 @@ describe('/admin HTTP control API', () => {
         defaultCollection: 'happy-path',
         missStatus: 501,
         sessionIdleTtlMs: 1_800_000,
-        admin: { enabled: true, prefix: '/admin' },
+        control: { enabled: true, prefix: '/__decoy__' },
         definitions: {
           routes: new Map([
             [usersRoute.id, usersRoute],
@@ -192,7 +195,7 @@ describe('/admin HTTP control API', () => {
     )
     const port = await local.listen()
     try {
-      const response = await fetch(`http://localhost:${port}/admin/routes`)
+      const response = await fetch(`http://localhost:${port}/__decoy__/routes`)
       expect(await response.json()).toEqual([
         { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 2 },
         { id: 'orders', method: 'POST', path: '/orders', presetCount: 2, variantCount: 3 },
@@ -202,8 +205,8 @@ describe('/admin HTTP control API', () => {
     }
   })
 
-  test('GET /admin/routes/{id} returns the route presets and variants in full', async () => {
-    const response = await fetch(`${base}/admin/routes/users-by-id`)
+  test('GET /__decoy__/routes/{id} returns the route presets and variants in full', async () => {
+    const response = await fetch(`${base}/__decoy__/routes/users-by-id`)
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       id: 'users-by-id',
@@ -217,17 +220,17 @@ describe('/admin HTTP control API', () => {
     })
   })
 
-  test('GET /admin/routes/{id} is a 404 for an unknown route', async () => {
-    const response = await fetch(`${base}/admin/routes/ghost`)
+  test('GET /__decoy__/routes/{id} is a 404 for an unknown route', async () => {
+    const response = await fetch(`${base}/__decoy__/routes/ghost`)
     expect(response.status).toBe(404)
     expect(((await response.json()) as { error: string }).error).toContain('ghost')
   })
 
-  test('POST /admin/try resolves through the real engine, byte-identical to a live request', async () => {
+  test('POST /__decoy__/try resolves through the real engine, byte-identical to a live request', async () => {
     const live = await fetch(`${base}/users/42`)
     const liveBody = await live.json()
 
-    const tried = await fetch(`${base}/admin/try`, {
+    const tried = await fetch(`${base}/__decoy__/try`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ method: 'GET', path: '/users/42' }),
@@ -243,14 +246,14 @@ describe('/admin HTTP control API', () => {
     })
   })
 
-  test("POST /admin/try honors the caller's (session-scoped) selection", async () => {
-    await fetch(`${base}/admin/collection`, {
+  test("POST /__decoy__/try honors the caller's (session-scoped) selection", async () => {
+    await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'error-state' }),
     })
 
-    const tried = await fetch(`${base}/admin/try`, {
+    const tried = await fetch(`${base}/__decoy__/try`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ method: 'GET', path: '/users/42' }),
@@ -265,8 +268,8 @@ describe('/admin HTTP control API', () => {
     })
   })
 
-  test('POST /admin/try honestly reports a fail-closed miss with the diagnostic response', async () => {
-    const tried = await fetch(`${base}/admin/try`, {
+  test('POST /__decoy__/try honestly reports a fail-closed miss with the diagnostic response', async () => {
+    const tried = await fetch(`${base}/__decoy__/try`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ method: 'GET', path: '/nope' }),
@@ -282,17 +285,17 @@ describe('/admin HTTP control API', () => {
     expect(result.response.body.error).toContain('no route matched GET /nope')
   })
 
-  test('POST /admin/try has zero side effects — the dry-run is excluded from the log stream', async () => {
+  test('POST /__decoy__/try has zero side effects — the dry-run is excluded from the log stream', async () => {
     // Fire dry-runs (a match and a miss) before opening the stream.
     await (
-      await fetch(`${base}/admin/try`, {
+      await fetch(`${base}/__decoy__/try`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ method: 'GET', path: '/users/42' }),
       })
     ).text()
     await (
-      await fetch(`${base}/admin/try`, {
+      await fetch(`${base}/__decoy__/try`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ method: 'GET', path: '/nope' }),
@@ -300,7 +303,7 @@ describe('/admin HTTP control API', () => {
     ).text()
 
     const controller = new AbortController()
-    const stream = await fetch(`${base}/admin/logs`, { signal: controller.signal })
+    const stream = await fetch(`${base}/__decoy__/logs`, { signal: controller.signal })
     const reader = (stream.body as ReadableStream<Uint8Array>).getReader()
     try {
       // No history replays (the dry-runs were not recorded); the first event is the
@@ -317,14 +320,14 @@ describe('/admin HTTP control API', () => {
     }
   })
 
-  test('POST /admin/try reports PASSTHROUGH(target) without forwarding when passthrough is on', async () => {
+  test('POST /__decoy__/try reports PASSTHROUGH(target) without forwarding when passthrough is on', async () => {
     const local = createServer(
       { ...service(), passthrough: { url: 'https://users.real' } },
       { logger: silent },
     )
     const port = await local.listen()
     try {
-      const tried = await fetch(`http://localhost:${port}/admin/try`, {
+      const tried = await fetch(`http://localhost:${port}/__decoy__/try`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ method: 'GET', path: '/nope' }),
@@ -338,8 +341,8 @@ describe('/admin HTTP control API', () => {
     }
   })
 
-  test('GET /admin/collections lists all collections, marking the active one with entry counts', async () => {
-    const response = await fetch(`${base}/admin/collections`)
+  test('GET /__decoy__/collections lists all collections, marking the active one with entry counts', async () => {
+    const response = await fetch(`${base}/__decoy__/collections`)
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual([
       { name: 'happy-path', active: true, entryCount: 1 },
@@ -347,20 +350,20 @@ describe('/admin HTTP control API', () => {
     ])
   })
 
-  test('GET /admin/collections reflects the session-scoped active collection after a switch', async () => {
-    await fetch(`${base}/admin/collection`, {
+  test('GET /__decoy__/collections reflects the session-scoped active collection after a switch', async () => {
+    await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'error-state' }),
     })
-    const response = await fetch(`${base}/admin/collections`)
+    const response = await fetch(`${base}/__decoy__/collections`)
     expect(await response.json()).toEqual([
       { name: 'happy-path', active: false, entryCount: 1 },
       { name: 'error-state', active: true, entryCount: 1 },
     ])
   })
 
-  test('GET /admin/collections/{name} returns the resolved ordered entries after extends', async () => {
+  test('GET /__decoy__/collections/{name} returns the resolved ordered entries after extends', async () => {
     const base2: Collection = { id: 'base', routes: ['users-by-id:default:success'] }
     const checkout: Collection = {
       id: 'checkout',
@@ -374,7 +377,7 @@ describe('/admin HTTP control API', () => {
         defaultCollection: 'base',
         missStatus: 501,
         sessionIdleTtlMs: 1_800_000,
-        admin: { enabled: true, prefix: '/admin' },
+        control: { enabled: true, prefix: '/__decoy__' },
         definitions: {
           routes: new Map([[usersRoute.id, usersRoute]]),
           collections: new Map([
@@ -387,7 +390,7 @@ describe('/admin HTTP control API', () => {
     )
     const port = await local.listen()
     try {
-      const response = await fetch(`http://localhost:${port}/admin/collections/checkout`)
+      const response = await fetch(`http://localhost:${port}/__decoy__/collections/checkout`)
       expect(response.status).toBe(200)
       // The inherited users-by-id slot is overridden in place to the `error` variant.
       expect(await response.json()).toEqual({
@@ -401,19 +404,19 @@ describe('/admin HTTP control API', () => {
     }
   })
 
-  test('GET /admin/collections/{name} is a 404 for an unknown collection', async () => {
-    const response = await fetch(`${base}/admin/collections/nope`)
+  test('GET /__decoy__/collections/{name} is a 404 for an unknown collection', async () => {
+    const response = await fetch(`${base}/__decoy__/collections/nope`)
     expect(response.status).toBe(404)
     expect(((await response.json()) as { error: string }).error).toContain('nope')
   })
 
-  test('GET /admin/logs replays request history then tails new records (SSE)', async () => {
+  test('GET /__decoy__/logs replays request history then tails new records (SSE)', async () => {
     // Drive some requests so the store has history to replay on connect.
     await (await fetch(`${base}/users/42`)).text() // matched
     await (await fetch(`${base}/missing`)).text() // miss
 
     const controller = new AbortController()
-    const stream = await fetch(`${base}/admin/logs`, { signal: controller.signal })
+    const stream = await fetch(`${base}/__decoy__/logs`, { signal: controller.signal })
     expect(stream.status).toBe(200)
     expect(stream.headers.get('content-type')).toContain('text/event-stream')
     const reader = (stream.body as ReadableStream<Uint8Array>).getReader()
@@ -446,26 +449,28 @@ describe('/admin HTTP control API', () => {
     }
   })
 
-  test('GET /admin/sessions lists the global session plus created sessions', async () => {
+  test('GET /__decoy__/sessions lists the global session plus created sessions', async () => {
     // Only the global session before anything is created.
-    const before = await fetch(`${base}/admin/sessions`)
+    const before = await fetch(`${base}/__decoy__/sessions`)
     expect(before.status).toBe(200)
     expect(await before.json()).toEqual([
       { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
     ])
 
     // Create one explicitly and switch it; lazily create another via a request header.
-    const created = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+    const created = (await (
+      await fetch(`${base}/__decoy__/sessions`, { method: 'POST' })
+    ).json()) as {
       id: string
     }
-    await fetch(`${base}/admin/collection`, {
+    await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-mock-session': created.id },
       body: JSON.stringify({ name: 'error-state' }),
     })
     await (await fetch(`${base}/users/42`, { headers: { 'x-mock-session': 'lazy' } })).text()
 
-    const after = await fetch(`${base}/admin/sessions`)
+    const after = await fetch(`${base}/__decoy__/sessions`)
     expect(await after.json()).toEqual([
       { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
       { id: created.id, global: false, collection: 'error-state', overrideCount: 0 },
@@ -473,8 +478,10 @@ describe('/admin HTTP control API', () => {
     ])
   })
 
-  test("GET /admin/sessions/{id}/logs returns that session's records, ordered", async () => {
-    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+  test("GET /__decoy__/sessions/{id}/logs returns that session's records, ordered", async () => {
+    const { id } = (await (
+      await fetch(`${base}/__decoy__/sessions`, { method: 'POST' })
+    ).json()) as {
       id: string
     }
 
@@ -483,7 +490,7 @@ describe('/admin HTTP control API', () => {
     await (await fetch(`${base}/users/2`)).text() // global — different session
     await (await fetch(`${base}/missing`, { headers: { 'x-mock-session': id } })).text()
 
-    const response = await fetch(`${base}/admin/sessions/${id}/logs`)
+    const response = await fetch(`${base}/__decoy__/sessions/${id}/logs`)
     expect(response.status).toBe(200)
     const records = (await response.json()) as Array<RequestLog & { seq: number }>
     // Only this session's records, oldest-first (seq ascending).
@@ -492,56 +499,72 @@ describe('/admin HTTP control API', () => {
     expect(records[0]?.seq).toBeLessThan(records[1]?.seq as number)
   })
 
-  test('GET /admin/sessions/{id}/logs survives the session being destroyed', async () => {
-    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+  test('GET /__decoy__/sessions/{id}/logs survives the session being destroyed', async () => {
+    const { id } = (await (
+      await fetch(`${base}/__decoy__/sessions`, { method: 'POST' })
+    ).json()) as {
       id: string
     }
     await (await fetch(`${base}/users/9`, { headers: { 'x-mock-session': id } })).text()
 
     // Destroy the session; the memory store keeps records (logs decoupled from lifecycle).
-    expect((await fetch(`${base}/admin/sessions/${id}`, { method: 'DELETE' })).status).toBe(200)
+    expect((await fetch(`${base}/__decoy__/sessions/${id}`, { method: 'DELETE' })).status).toBe(200)
 
-    const response = await fetch(`${base}/admin/sessions/${id}/logs`)
+    const response = await fetch(`${base}/__decoy__/sessions/${id}/logs`)
     expect(response.status).toBe(200)
     const records = (await response.json()) as Array<RequestLog & { seq: number }>
     expect(records.map((r) => r.path)).toEqual(['/users/9'])
   })
 
-  test('GET /admin/sessions/{id}/logs returns one ordered timeline across services', async () => {
-    // A request the live server records (service "users"), then a record from another
-    // service ("orders") for the same session injected into the shared store — proving
-    // a session spanning multiple services returns a single ordered cross-service timeline.
-    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
-      id: string
-    }
-    await (await fetch(`${base}/users/3`, { headers: { 'x-mock-session': id } })).text()
-    server.requestLog.append({
-      method: 'POST',
-      path: '/orders',
-      outcome: { type: 'matched', address: { route: 'orders', preset: 'default', variant: 'ok' } },
-      status: 201,
-      latencyMs: 0.5,
-      session: id,
-      service: 'orders',
-    })
+  test('GET /__decoy__/sessions/{id}/logs returns one ordered timeline across services', async () => {
+    // Inject a shared store (the same store the CLI shares across instances, ADR-0017)
+    // so the test can add another service's record directly — the `requestLog` accessor
+    // is gone. The server records service "users" through its acquired handle; an
+    // "orders" record appended to the shared store proves a session spanning services
+    // returns a single ordered cross-service timeline.
+    const store = createRequestLogStore(undefined)
+    const shared = createSharedRequestLogStore(store)
+    const local = createServer(service(), { logger: silent, requestLog: shared })
+    const port = await local.listen()
+    try {
+      const lbase = `http://localhost:${port}`
+      const { id } = (await (
+        await fetch(`${lbase}/__decoy__/sessions`, { method: 'POST' })
+      ).json()) as { id: string }
+      await (await fetch(`${lbase}/users/3`, { headers: { 'x-mock-session': id } })).text()
+      store.append({
+        method: 'POST',
+        path: '/orders',
+        outcome: {
+          type: 'matched',
+          address: { route: 'orders', preset: 'default', variant: 'ok' },
+        },
+        status: 201,
+        latencyMs: 0.5,
+        session: id,
+        service: 'orders',
+      })
 
-    const records = (await (await fetch(`${base}/admin/sessions/${id}/logs`)).json()) as Array<
-      RequestLog & { seq: number; service: string }
-    >
-    expect(records.map((r) => `${r.service} ${r.path}`)).toEqual([
-      'users /users/3',
-      'orders /orders',
-    ])
+      const records = (await (
+        await fetch(`${lbase}/__decoy__/sessions/${id}/logs`)
+      ).json()) as Array<RequestLog & { seq: number; service: string }>
+      expect(records.map((r) => `${r.service} ${r.path}`)).toEqual([
+        'users /users/3',
+        'orders /orders',
+      ])
+    } finally {
+      await local.close()
+    }
   })
 
-  test('GET /admin/sessions/{id}/logs is an empty timeline for a session with no records', async () => {
-    const response = await fetch(`${base}/admin/sessions/never-existed/logs`)
+  test('GET /__decoy__/sessions/{id}/logs is an empty timeline for a session with no records', async () => {
+    const response = await fetch(`${base}/__decoy__/sessions/never-existed/logs`)
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual([])
   })
 
   test('an unknown collection is a 400, not a silent switch', async () => {
-    const response = await fetch(`${base}/admin/collection`, {
+    const response = await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'nope' }),
@@ -553,7 +576,7 @@ describe('/admin HTTP control API', () => {
   })
 
   test('an unknown route/preset/variant is a 400', async () => {
-    const response = await fetch(`${base}/admin/route`, {
+    const response = await fetch(`${base}/__decoy__/route`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ route: 'ghost', preset: 'default', variant: 'success' }),
@@ -563,7 +586,7 @@ describe('/admin HTTP control API', () => {
   })
 
   test('a malformed body is a 400', async () => {
-    const response = await fetch(`${base}/admin/collection`, {
+    const response = await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: '{ not json',
@@ -572,7 +595,7 @@ describe('/admin HTTP control API', () => {
   })
 
   test('missing required fields are a 400', async () => {
-    const response = await fetch(`${base}/admin/collection`, {
+    const response = await fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -580,36 +603,38 @@ describe('/admin HTTP control API', () => {
     expect(response.status).toBe(400)
   })
 
-  test('an unknown admin endpoint is a 404', async () => {
-    const response = await fetch(`${base}/admin/nope`, { method: 'POST' })
+  test('an unknown control endpoint is a 404', async () => {
+    const response = await fetch(`${base}/__decoy__/nope`, { method: 'POST' })
     expect(response.status).toBe(404)
   })
 
-  test('adminPort reports the same-port mount', () => {
-    expect(server.adminPort).toBe(Number(new URL(base).port))
+  test('controlPort reports the same-port mount', () => {
+    expect(server.controlPort).toBe(Number(new URL(base).port))
   })
 })
 
-describe('/admin on a separate port', () => {
+describe('control API on a separate port', () => {
   let server: DecoyServer
   let mainBase: string
-  let adminBase: string
+  let controlBase: string
 
   beforeEach(async () => {
-    server = createServer(service({ enabled: true, prefix: '/admin', port: 0 }), { logger: silent })
+    server = createServer(service({ enabled: true, prefix: '/__decoy__', port: 0 }), {
+      logger: silent,
+    })
     const port = await server.listen()
     mainBase = `http://localhost:${port}`
-    adminBase = `http://localhost:${server.adminPort}`
+    controlBase = `http://localhost:${server.controlPort}`
   })
 
   afterEach(async () => {
     await server.close()
   })
 
-  test('admin is reachable on its own port and drives the main port', async () => {
-    expect(server.adminPort).not.toBe(Number(new URL(mainBase).port))
+  test('control is reachable on its own port and drives the main port', async () => {
+    expect(server.controlPort).not.toBe(Number(new URL(mainBase).port))
 
-    const control = await fetch(`${adminBase}/admin/collection`, {
+    const control = await fetch(`${controlBase}/__decoy__/collection`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'error-state' }),
@@ -618,19 +643,19 @@ describe('/admin on a separate port', () => {
     expect((await fetch(`${mainBase}/users/42`)).status).toBe(500)
   })
 
-  test('the main port does not intercept /admin — it is a normal (missed) route', async () => {
-    const response = await fetch(`${mainBase}/admin/selection`)
+  test('the main port does not intercept /__decoy__ — it is a normal (missed) route', async () => {
+    const response = await fetch(`${mainBase}/__decoy__/selection`)
     expect(response.status).toBe(501)
     expect(response.headers.get('x-mock-miss')).toBe('true')
   })
 })
 
-describe('/admin disabled', () => {
+describe('control API disabled', () => {
   let server: DecoyServer
   let base: string
 
   beforeEach(async () => {
-    server = createServer(service({ enabled: false, prefix: '/admin' }), { logger: silent })
+    server = createServer(service({ enabled: false, prefix: '/__decoy__' }), { logger: silent })
     const port = await server.listen()
     base = `http://localhost:${port}`
   })
@@ -639,9 +664,9 @@ describe('/admin disabled', () => {
     await server.close()
   })
 
-  test('adminPort is undefined and /admin is not intercepted', async () => {
-    expect(server.adminPort).toBeUndefined()
-    const response = await fetch(`${base}/admin/selection`)
+  test('controlPort is undefined and /__decoy__ is not intercepted', async () => {
+    expect(server.controlPort).toBeUndefined()
+    const response = await fetch(`${base}/__decoy__/selection`)
     expect(response.status).toBe(501)
     expect(response.headers.get('x-mock-miss')).toBe('true')
   })

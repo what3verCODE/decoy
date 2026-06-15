@@ -18,13 +18,13 @@ const usersRoute: Route = {
 const happyPath: Collection = { id: 'happy-path', routes: ['users-by-id:default:success'] }
 const errorState: Collection = { id: 'error-state', routes: ['users-by-id:default:error'] }
 
-function service(): LoadedService {
+function service(controlPrefix = '/__decoy__'): LoadedService {
   return {
     name: 'users',
     port: 0,
     defaultCollection: 'happy-path',
     missStatus: 501,
-    admin: { enabled: true, prefix: '/admin' },
+    control: { enabled: true, prefix: controlPrefix },
     sessionIdleTtlMs: 1_800_000,
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),
@@ -45,9 +45,13 @@ export interface TestServer {
   stop(): Promise<void>
 }
 
-/** Boot a real Decoy server on an ephemeral port for the control-SDK integration tests. */
-export async function startTestServer(): Promise<TestServer> {
-  const server = createServer(service(), { logger: silent })
+/**
+ * Boot a real Decoy server on an ephemeral port for the control-SDK integration
+ * tests. `controlPrefix` overrides the control mount prefix (default `/__decoy__`)
+ * so a test can exercise a non-default prefix end to end.
+ */
+export async function startTestServer(controlPrefix?: string): Promise<TestServer> {
+  const server = createServer(service(controlPrefix), { logger: silent })
   const port = await server.listen()
   const base = `http://localhost:${port}`
   return {

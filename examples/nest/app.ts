@@ -15,7 +15,7 @@ export interface DecoyApp {
    * The embedded engine's in-process control handle (`useCollection`/`useRoute`/
    * `reset`), resolved from the container under {@link DECOY_CONTROL}. Because the
    * mock runs inside this process, scenarios are switched by calling this directly —
-   * no standalone server, no `/admin`.
+   * no standalone server, no `/__decoy__`.
    */
   control: ControlApi
 }

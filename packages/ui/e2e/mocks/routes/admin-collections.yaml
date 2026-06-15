@@ -1,9 +1,9 @@
-# GET /admin/collections — the scenarios the panel lists. `list` is the populated
+# GET /__decoy__/collections — the scenarios the panel lists. `list` is the populated
 # baseline (happy-path active); `empty` drives the panel's empty state (switch with
 # router.useRoute('admin-collections', 'default', 'empty')).
 id: admin-collections
 method: GET
-path: /admin/collections
+path: /__decoy__/collections
 presets:
   default: {}
 variants:

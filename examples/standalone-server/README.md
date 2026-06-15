@@ -1,7 +1,7 @@
 # examples/standalone-server
 
 Run **Decoy as a standalone server** with the `decoy` CLI, then drive scenarios from any
-non-browser client (here: `curl`) over the **`/admin`** HTTP control API. This is the
+non-browser client (here: `curl`) over the **`/__decoy__`** HTTP control API. This is the
 backend-dev story: point a base URL at Decoy and develop against deterministic mocks instead
 of a live upstream.
 
@@ -13,7 +13,7 @@ pnpm --filter @decoy-examples/standalone-server dev
 
 `dev` invokes the `decoy` CLI's `start` against this example's `decoy.config.ts` (run from
 source via jiti, so no build step is needed — the published package ships it as the `decoy`
-bin: `decoy start`). The server comes up on **http://localhost:3001**, with its `/admin`
+bin: `decoy start`). The server comes up on **http://localhost:3001**, with its `/__decoy__`
 control API on the same port.
 
 ## Poke it with curl
@@ -28,11 +28,11 @@ curl -s localhost:3001/users/42
 # {"id":42,"name":"Ada"}
 ```
 
-**Switch the scenario over `/admin`** — flip to the `error-state` collection; the *next*
+**Switch the scenario over `/__decoy__`** — flip to the `error-state` collection; the *next*
 request sees the new scenario:
 
 ```sh
-curl -s -XPOST localhost:3001/admin/collection -d '{"name":"error-state"}'
+curl -s -XPOST localhost:3001/__decoy__/collection -d '{"name":"error-state"}'
 curl -s localhost:3001/users/42
 # {"error":"upstream exploded"}   (HTTP 500)
 ```
@@ -41,8 +41,8 @@ curl -s localhost:3001/users/42
 collection's baseline:
 
 ```sh
-curl -s -XPOST localhost:3001/admin/route -d '{"route":"users-by-id","preset":"default","variant":"boom"}'
-curl -s -XPOST localhost:3001/admin/reset
+curl -s -XPOST localhost:3001/__decoy__/route -d '{"route":"users-by-id","preset":"default","variant":"boom"}'
+curl -s -XPOST localhost:3001/__decoy__/reset
 curl -s localhost:3001/users/42
 # {"id":42,"name":"Ada"}   (back to happy-path)
 ```
