@@ -28,7 +28,7 @@ export interface AdminClient {
   /** Read the current selection. */
   getSelection(): Promise<Selection>
   /** Switch the active collection. Rejects if `name` is not defined. */
-  setCollection(name: string): Promise<Selection>
+  useCollection(name: string): Promise<Selection>
   /** Pin a single route's `preset` slot to `variant`. Rejects on an unknown address. */
   useRoute(route: string, preset: string, variant: string): Promise<Selection>
   /** Drop all per-route overrides. */
@@ -84,7 +84,7 @@ export function createAdminClient(options: AdminClientOptions): AdminClient {
     async getSelection() {
       return selectionFrom(await request('GET', '/selection', { session: sessionId }))
     },
-    async setCollection(name) {
+    async useCollection(name) {
       return selectionFrom(
         await request('POST', '/collection', { body: { name }, session: sessionId }),
       )

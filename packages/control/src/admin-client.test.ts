@@ -18,10 +18,10 @@ describe('AdminClient — typed client over the /admin HTTP API', () => {
     expect(await client.getSelection()).toEqual({ collection: 'happy-path', overrides: [] })
   })
 
-  test('setCollection switches the active collection and returns the resulting selection', async () => {
+  test('useCollection switches the active collection and returns the resulting selection', async () => {
     const client = createAdminClient({ baseUrl: s.base })
 
-    const selection = await client.setCollection('error-state')
+    const selection = await client.useCollection('error-state')
 
     expect(selection).toEqual({ collection: 'error-state', overrides: [] })
     expect((await s.user()).status).toBe(500)
@@ -51,7 +51,7 @@ describe('AdminClient — typed client over the /admin HTTP API', () => {
 
   test('an unknown collection fails loud with the server error message', async () => {
     const client = createAdminClient({ baseUrl: s.base })
-    await expect(client.setCollection('nope')).rejects.toThrow(/collection "nope" is not defined/)
+    await expect(client.useCollection('nope')).rejects.toThrow(/collection "nope" is not defined/)
   })
 
   test('createSession returns a fresh id; destroySession reports unknown ids', async () => {

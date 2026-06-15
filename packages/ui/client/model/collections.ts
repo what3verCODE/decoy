@@ -6,7 +6,7 @@ import {
   fetchSelection,
   pinRoute,
   resetOverrides as resetOverridesApi,
-  setCollection,
+  useCollection,
   type VariantAddress,
 } from '../api'
 
@@ -61,7 +61,7 @@ export async function loadCollections(): Promise<void> {
 
 /** Switch the active collection; the next mocked request resolves against it. */
 export async function switchCollection(name: string): Promise<void> {
-  const selection = await setCollection(name)
+  const selection = await useCollection(name)
   activeCollection.value = selection.collection
   overrides.value = selection.overrides ?? []
   await loadActiveEntries(selection.collection)

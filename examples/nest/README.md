@@ -48,7 +48,7 @@ curl -si localhost:3003/orders
 
 **Switch the scenario in-process** — there's no `/admin` here. A host provider, a feature test,
 or any in-process code resolves the exported `control` (the `DECOY_CONTROL` token) and calls
-`control.setCollection(...)` to flip the scenario; the next request sees it. The e2e drives
+`control.useCollection(...)` to flip the scenario; the next request sees it. The e2e drives
 exactly this (see `tests/`).
 
 ## What's here

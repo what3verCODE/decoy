@@ -69,12 +69,12 @@ function status(ctx: CommandContext): CommandOutcome {
   return info(lines)
 }
 
-function setCollection(ctx: CommandContext, name: string | undefined): CommandOutcome {
+function useCollection(ctx: CommandContext, name: string | undefined): CommandOutcome {
   if (!name) {
     return ok('usage: /collection <name>')
   }
   try {
-    ctx.control.setCollection(name)
+    ctx.control.useCollection(name)
     return ok(`Active collection → ${name}`)
   } catch (error) {
     return fail(error)
@@ -125,7 +125,7 @@ export function processCommand(input: string, ctx: CommandContext): CommandOutco
 
   switch (command) {
     case 'collection':
-      return setCollection(ctx, args[0])
+      return useCollection(ctx, args[0])
     case 'route':
       return useRoute(ctx, args)
     case 'reset':

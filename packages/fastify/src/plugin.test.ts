@@ -192,10 +192,10 @@ describe('createDecoyPlugin — not-found handler (path no real route owns)', ()
 })
 
 describe('createDecoyPlugin — in-process control', () => {
-  test('control.setCollection switches the scenario the next request sees', async () => {
+  test('control.useCollection switches the scenario the next request sees', async () => {
     const plugin = createDecoyPlugin({ definitions: defs(), defaultCollection: 'happy-path' })
     const { preHandler } = register(plugin)
-    plugin.control.setCollection('error-state')
+    plugin.control.useCollection('error-state')
 
     const rec = fakeReply()
     await preHandler(req({ url: '/users/42' }), rec.reply)
@@ -222,7 +222,7 @@ describe('createDecoyPlugin — in-process control', () => {
   test('exposes the current selection snapshot', () => {
     const plugin = createDecoyPlugin({ definitions: defs(), defaultCollection: 'happy-path' })
     expect(plugin.selection.collection).toBe('happy-path')
-    plugin.control.setCollection('error-state')
+    plugin.control.useCollection('error-state')
     expect(plugin.selection.collection).toBe('error-state')
   })
 

@@ -9,7 +9,7 @@ export const SESSION_HEADER = 'x-mock-session'
  * `PlaywrightRouter` drives the in-process engine — so test code never touches
  * transport details. Mirrors the canonical JS control API (ADR-0010): a Router's
  * `useCollection`/`useRoute`/`reset` are the async, switchable view of
- * `setCollection`/`useRoute`/`reset`. Each call resolves with the resulting
+ * `useCollection`/`useRoute`/`reset`. Each call resolves with the resulting
  * selection, so a switch is confirmable.
  */
 export interface Router {

@@ -30,7 +30,7 @@ export interface DecoyPluginOptions {
  * mock what you want, let everything else hit the host's own routes. When neither a
  * mock nor a real route answers, the request **fails closed** (`501 + x-mock-miss`).
  * Drive scenarios in-process via {@link DecoyPlugin.control} —
- * `setCollection`/`useRoute`/`reset` mutate the selection atomically, so the next
+ * `useCollection`/`useRoute`/`reset` mutate the selection atomically, so the next
  * request reflects the change.
  */
 export interface DecoyPlugin extends FastifyPluginCallback {

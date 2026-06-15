@@ -22,7 +22,7 @@ export interface DecoyMiddlewareOptions {
  * JS control API attached. Serves matched routes from mocks and **falls through**
  * (`next()`) on a miss, so it composes with a real Nest app: mock what you want, let
  * everything else hit the host's own controllers. Drive scenarios in-process via
- * {@link DecoyMiddleware.control} — `setCollection`/`useRoute`/`reset` mutate the
+ * {@link DecoyMiddleware.control} — `useCollection`/`useRoute`/`reset` mutate the
  * selection atomically, so the next request reflects the change.
  */
 export interface DecoyMiddleware extends DecoyMiddlewareFn {

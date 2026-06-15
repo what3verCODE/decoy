@@ -243,7 +243,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * mirror of the canonical JS control API. Endpoints, relative to `prefix`:
  *
  * - `GET  {prefix}` / `GET {prefix}/selection` → the current selection.
- * - `POST {prefix}/collection` `{ name }`               → `setCollection(name)`.
+ * - `POST {prefix}/collection` `{ name }`               → `useCollection(name)`.
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
  * - `GET  {prefix}/routes`                              → the routes catalog (pure read).
@@ -393,8 +393,8 @@ export async function handleAdmin(
           sendJson(res, 400, { error: 'admin: "name" (string) is required' })
           return
         }
-        control.setCollection(name)
-        logger.info(`admin: setCollection ${name}`)
+        control.useCollection(name)
+        logger.info(`admin: useCollection ${name}`)
         sendJson(res, 200, control.selection)
         return
       }

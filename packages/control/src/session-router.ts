@@ -59,7 +59,7 @@ export async function createSessionRouter(options: SessionRouterOptions): Promis
       return { [SESSION_HEADER]: sessionId }
     },
     useCollection(name) {
-      return control.setCollection(name)
+      return control.useCollection(name)
     },
     useRoute(route, preset, variant) {
       return control.useRoute(route, preset, variant)

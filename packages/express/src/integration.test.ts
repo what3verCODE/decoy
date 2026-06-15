@@ -65,16 +65,16 @@ describe('@decoy/express integration — real Express app over HTTP (supertest)'
     expect(response.body).toEqual({ from: 'host app' })
   })
 
-  test('in-process control.setCollection changes what the next HTTP request sees', async () => {
+  test('in-process control.useCollection changes what the next HTTP request sees', async () => {
     expect((await request(app).get('/users/42')).status).toBe(200)
 
-    mw.control.setCollection('error-state')
+    mw.control.useCollection('error-state')
     const errored = await request(app).get('/users/42')
     expect(errored.status).toBe(500)
     expect(errored.body).toEqual({ error: 'upstream exploded' })
 
     // restore the baseline for any later use
-    mw.control.setCollection('happy-path')
+    mw.control.useCollection('happy-path')
     expect((await request(app).get('/users/42')).status).toBe(200)
   })
 })

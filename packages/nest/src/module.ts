@@ -9,7 +9,7 @@ import type { DynamicModule, MiddlewareConsumer, NestModule, RouteTarget } from 
 /**
  * Injection token for the embedded {@link import('@decoy/core').Controller} — the
  * canonical JS control API. Inject it into a Nest provider/controller (e.g. a test
- * helper) to drive scenarios in-process: `setCollection`/`useRoute`/`reset`.
+ * helper) to drive scenarios in-process: `useCollection`/`useRoute`/`reset`.
  *
  * @example
  *   constructor(@Inject(DECOY_CONTROL) private readonly control: Controller) {}

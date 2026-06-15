@@ -186,7 +186,7 @@ async function postControl(path: string, body?: unknown): Promise<Selection> {
 }
 
 /** Switch the active collection via `POST /admin/collection`. */
-export function setCollection(name: string): Promise<Selection> {
+export function useCollection(name: string): Promise<Selection> {
   return postControl('collection', { name })
 }
 

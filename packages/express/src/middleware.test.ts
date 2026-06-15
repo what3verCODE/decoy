@@ -118,9 +118,9 @@ describe('createDecoyMiddleware', () => {
     expect(rec.body).toBe('hi')
   })
 
-  test('control.setCollection switches the scenario the next request sees', () => {
+  test('control.useCollection switches the scenario the next request sees', () => {
     const mw = createDecoyMiddleware({ definitions: defs(), defaultCollection: 'happy-path' })
-    mw.control.setCollection('error-state')
+    mw.control.useCollection('error-state')
 
     const { rec } = run(mw, req({ originalUrl: '/users/42' }))
     expect(rec.statusCode).toBe(500)
@@ -140,7 +140,7 @@ describe('createDecoyMiddleware', () => {
   test('exposes the current selection snapshot', () => {
     const mw = createDecoyMiddleware({ definitions: defs(), defaultCollection: 'happy-path' })
     expect(mw.selection.collection).toBe('happy-path')
-    mw.control.setCollection('error-state')
+    mw.control.useCollection('error-state')
     expect(mw.selection.collection).toBe('error-state')
   })
 

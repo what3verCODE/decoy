@@ -124,7 +124,7 @@ app.use(decoy)                               // serve matched routes from mocks
 app.get('/users/:id', realHandler)           // reached only when no mock matches (fallthrough)
 
 // Drive scenarios in-process via the canonical JS control API (ADR-0010):
-decoy.control.setCollection('checkout-fails')
+decoy.control.useCollection('checkout-fails')
 decoy.control.useRoute('users-by-id', 'default', 'boom')
 decoy.control.reset()
 ```
@@ -151,7 +151,7 @@ export class AppModule {}
 
 // Inject the embedded control API anywhere to drive scenarios in-process:
 //   constructor(@Inject(DECOY_CONTROL) private readonly control: Controller) {}
-//   this.control.setCollection('checkout-fails')
+//   this.control.useCollection('checkout-fails')
 ```
 
 `@decoy/fastify` is the same capability as a **Fastify plugin** — `fastify.register(fromService(service))`
@@ -173,7 +173,7 @@ await app.register(decoy)                     // serve matched routes; fall thro
 
 app.get('/users/:id', realHandler)            // reached only when no mock matches (fallthrough)
 
-decoy.control.setCollection('checkout-fails') // drive scenarios in-process (ADR-0010)
+decoy.control.useCollection('checkout-fails') // drive scenarios in-process (ADR-0010)
 ```
 
 ## Toolchain

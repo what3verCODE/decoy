@@ -97,7 +97,7 @@ describe('sessions over HTTP', () => {
     expect((await fetch(`${base}/users/42`, { headers: { 'x-mock-session': b } })).status).toBe(200)
   })
 
-  test('setCollection with no session header mutates the global session', async () => {
+  test('useCollection with no session header mutates the global session', async () => {
     expect((await switchCollection('error-state')).status).toBe(200)
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
     // A fresh session still starts from the default collection, not the global mutation.

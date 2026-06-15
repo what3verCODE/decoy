@@ -58,7 +58,7 @@ describe('session registry', () => {
     expect(registry.size).toBe(1)
 
     // Switch the session; the global session is untouched.
-    registry.resolve(id).setCollection('error-state')
+    registry.resolve(id).useCollection('error-state')
     expect(registry.resolve(id).selection.collection).toBe('error-state')
     expect(registry.global.selection.collection).toBe('happy-path')
   })
@@ -69,7 +69,7 @@ describe('session registry', () => {
     const b = registry.create()
     expect(a).not.toBe(b)
 
-    registry.resolve(a).setCollection('error-state')
+    registry.resolve(a).useCollection('error-state')
     expect(registry.resolve(a).selection.collection).toBe('error-state')
     expect(registry.resolve(b).selection.collection).toBe('happy-path')
     expect(registry.resolve(a).match(request).type).toBe('matched')
@@ -81,7 +81,7 @@ describe('session registry', () => {
     expect(registry.has('made-up')).toBe(true)
     expect(registry.size).toBe(1)
     // The same id resolves to the same controller (sticky state).
-    controller.setCollection('error-state')
+    controller.useCollection('error-state')
     expect(registry.resolve('made-up').selection.collection).toBe('error-state')
   })
 
@@ -93,7 +93,7 @@ describe('session registry', () => {
     ])
 
     const id = registry.create()
-    registry.resolve(id).setCollection('error-state')
+    registry.resolve(id).useCollection('error-state')
     registry.resolve(id).useRoute('users-by-id', 'default', 'error')
 
     expect(registry.list()).toEqual([
@@ -178,7 +178,7 @@ describe('session registry', () => {
     const kept = registry.create()
     const fellBack = registry.create()
     registry.resolve(kept) // touch (no collection change) — stays on happy-path
-    registry.resolve(fellBack).setCollection('error-state')
+    registry.resolve(fellBack).useCollection('error-state')
 
     const results = registry.reload(reloadedDefinitions(), 'happy-path')
 
@@ -197,7 +197,7 @@ describe('session registry', () => {
     const fresh = registry.resolve('born-after')
     expect((fresh.match(request) as { response: { status: number } }).response.status).toBe(201)
     // error-state is gone post-reload, so switching to it fails loud.
-    expect(() => fresh.setCollection('error-state')).toThrow(/not defined/)
+    expect(() => fresh.useCollection('error-state')).toThrow(/not defined/)
   })
 
   test('the background reaper invokes onReap with the reaped ids', async () => {

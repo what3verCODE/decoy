@@ -52,7 +52,7 @@ curl -si localhost:3005/orders
 ```
 
 **Switch the scenario in-process** — there's no `/admin` here. A host route, a feature test, or
-any in-process code calls `control.setCollection(...)` on the plugin to flip the scenario; the
+any in-process code calls `control.useCollection(...)` on the plugin to flip the scenario; the
 next request sees it. The e2e drives exactly this (see `tests/`).
 
 ## What's here

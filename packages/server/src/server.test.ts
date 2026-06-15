@@ -134,7 +134,7 @@ describe('createServer (HTTP)', () => {
   })
 
   test('route matched but no active preset matched fails closed with a presets-tried diagnostic', async () => {
-    server.control.setCollection('strict')
+    server.control.useCollection('strict')
     // /search matches by method+path, but its only active preset (with-query) needs q=ada
     const response = await fetch(`${base}/search`)
 
@@ -164,10 +164,10 @@ describe('createServer (HTTP)', () => {
     expect(response.headers.get('x-mock-miss')).toBe('true')
   })
 
-  test('in-process setCollection changes the next response atomically', async () => {
+  test('in-process useCollection changes the next response atomically', async () => {
     expect((await fetch(`${base}/users/42`)).status).toBe(200)
 
-    server.control.setCollection('error-state')
+    server.control.useCollection('error-state')
     const switched = await fetch(`${base}/users/42`)
     expect(switched.status).toBe(500)
     expect(await switched.json()).toEqual({ error: 'boom' })
@@ -291,7 +291,7 @@ describe('createServer (hot reload)', () => {
     })
     const port = await server.listen()
     try {
-      server.control.setCollection('error-state')
+      server.control.useCollection('error-state')
       expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(500)
 
       cap.fire()

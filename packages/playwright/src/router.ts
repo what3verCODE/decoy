@@ -126,7 +126,7 @@ export async function createPlaywrightRouter(
       return controller.selection
     },
     async useCollection(name) {
-      controller.setCollection(name)
+      controller.useCollection(name)
       return controller.selection
     },
     async useRoute(route, preset, variant) {
