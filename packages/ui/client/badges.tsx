@@ -25,3 +25,21 @@ export function MethodBadge({ method }: { method: string }): JSX.Element {
   const label = method.toUpperCase() === 'DELETE' ? 'DEL' : method.toUpperCase()
   return <span class={`${pill} font-mono ${methodColor(method)}`}>{label}</span>
 }
+
+// status -> badge color (2xx=emerald, 3xx=sky, 4xx=amber, 5xx incl. 501 miss=rose).
+function statusColor(status: number): string {
+  if (status >= 500) {
+    return 'text-rose border-rose/30 bg-rose/10'
+  }
+  if (status >= 400) {
+    return 'text-amber border-amber/30 bg-amber/10'
+  }
+  if (status >= 300) {
+    return 'text-sky border-sky/30 bg-sky/10'
+  }
+  return 'text-emerald border-emerald/30 bg-emerald/10'
+}
+
+export function StatusBadge({ status }: { status: number }): JSX.Element {
+  return <span class={`${pill} font-mono ${statusColor(status)}`}>{status}</span>
+}

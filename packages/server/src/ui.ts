@@ -150,7 +150,15 @@ export function createUiServer(
 
     // Same-origin data API (no CORS): drive the in-process instance directly.
     if (instance && isAdminPath(req.url, UI_ADMIN_PREFIX)) {
-      await handleAdmin(req, res, instance.sessions, UI_ADMIN_PREFIX, logger, instance.definitions)
+      await handleAdmin(
+        req,
+        res,
+        instance.sessions,
+        UI_ADMIN_PREFIX,
+        logger,
+        instance.definitions,
+        instance.requestLog,
+      )
       return
     }
 

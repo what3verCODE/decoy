@@ -1,7 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Definitions } from '@decoy/core'
 import type { Logger } from './logger'
+import type { RequestLogStore, StoredRequestLog } from './request-log-store'
 import type { SessionRegistry } from './sessions'
+
+/** Heartbeat interval (ms) keeping an idle SSE connection alive through proxies. */
+const SSE_HEARTBEAT_MS = 15_000
 
 /** One routes-catalog entry: a route's identity plus how many presets/variants it carries. */
 export interface RouteCatalogEntry {
@@ -46,6 +50,41 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
+/**
+ * Stream the request log as Server-Sent Events (ADR-0017): replay the retained
+ * history on connect, then tail every newly appended record one-way (control
+ * stays REST — no WebSocket dep). Each frame carries the stored `seq` as the SSE
+ * `id:`, so a client can dedupe re-delivered history after a reconnect. Snapshot
+ * and subscribe happen with no `await` between them, so no record is dropped or
+ * duplicated across the replay/tail boundary.
+ */
+function serveLogStream(req: IncomingMessage, res: ServerResponse, store: RequestLogStore): void {
+  res.statusCode = 200
+  res.setHeader('content-type', 'text/event-stream')
+  res.setHeader('cache-control', 'no-cache, no-transform')
+  res.setHeader('connection', 'keep-alive')
+  // Disable proxy buffering so events flush immediately (e.g. nginx).
+  res.setHeader('x-accel-buffering', 'no')
+  res.flushHeaders()
+
+  const send = (record: StoredRequestLog): void => {
+    res.write(`id: ${record.seq}\ndata: ${JSON.stringify(record)}\n\n`)
+  }
+  for (const record of store.snapshot()) {
+    send(record)
+  }
+  const unsubscribe = store.subscribe(send)
+
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), SSE_HEARTBEAT_MS)
+  heartbeat.unref()
+
+  const close = (): void => {
+    clearInterval(heartbeat)
+    unsubscribe()
+  }
+  req.on('close', close)
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
   for await (const chunk of req) {
@@ -70,6 +109,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/route` `{ route, preset, variant }`  → `useRoute(...)`.
  * - `POST {prefix}/reset`                               → `reset()`.
  * - `GET  {prefix}/routes`                              → the routes catalog (pure read).
+ * - `GET  {prefix}/logs`                                → SSE live request stream.
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
  *
@@ -89,6 +129,7 @@ export async function handleAdmin(
   prefix: string,
   logger: Logger,
   definitions: Definitions,
+  store: RequestLogStore,
 ): Promise<void> {
   const method = req.method ?? 'GET'
   const path = pathOf(req.url)
@@ -127,6 +168,11 @@ export async function handleAdmin(
 
     if (method === 'GET' && sub === '/routes') {
       sendJson(res, 200, routesCatalog(definitions))
+      return
+    }
+
+    if (method === 'GET' && sub === '/logs') {
+      serveLogStream(req, res, store)
       return
     }
 

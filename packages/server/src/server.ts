@@ -8,8 +8,9 @@ import type { LoadedService } from '@decoy/config'
 import type { Controller, Definitions, MockResponse } from '@decoy/core'
 import { handleAdmin, isAdminPath } from './admin'
 import { envelopeFrom, readRawBody } from './envelope'
-import { consoleLogger, type Logger } from './logger'
+import { consoleLogger, type Logger, type RequestLog } from './logger'
 import { forwardPassthrough } from './passthrough'
+import { createMemoryRequestLogStore, type RequestLogStore } from './request-log-store'
 import { createSessionRegistry, type SessionRegistry } from './sessions'
 import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
@@ -57,6 +58,12 @@ export interface DecoyServer {
   /** The immutable definitions this server matches against (routes + collections). */
   readonly definitions: Definitions
   /**
+   * The request-log store this instance records to (ADR-0017) — the backing of the
+   * `GET /admin/logs` SSE stream. Exposed so an in-process `--ui` server can read
+   * this instance's request history directly, with no HTTP proxy.
+   */
+  readonly requestLog: RequestLogStore
+  /**
    * The port the HTTP `/admin` control API is reachable on once listening: the
    * service port (same-port mount) or its dedicated port; `undefined` when admin
    * is disabled or before `listen()`.
@@ -92,13 +99,16 @@ function serveAdmin(
   prefix: string,
   logger: Logger,
   definitions: Definitions,
+  store: RequestLogStore,
 ): void {
-  void handleAdmin(req, res, sessions, prefix, logger, definitions).catch((error: unknown) => {
-    res.statusCode = 500
-    res.setHeader('content-type', 'application/json')
-    res.end(JSON.stringify({ error: 'internal decoy error' }))
-    logger.warn(`admin request failed: ${error instanceof Error ? error.message : String(error)}`)
-  })
+  void handleAdmin(req, res, sessions, prefix, logger, definitions, store).catch(
+    (error: unknown) => {
+      res.statusCode = 500
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: 'internal decoy error' }))
+      logger.warn(`admin request failed: ${error instanceof Error ? error.message : String(error)}`)
+    },
+  )
 }
 
 function hasHeader(headers: Record<string, string>, name: string): boolean {
@@ -152,10 +162,18 @@ export function createServer(
   const passthrough = service.passthrough
   const admin = service.admin
   const samePortAdmin = admin.enabled && admin.port === undefined
+  const requestLog = createMemoryRequestLogStore()
+
+  // Record one structured line per request to both the logger (stdout) and the
+  // log store (the `GET /admin/logs` SSE stream / future durable store).
+  const record = (log: RequestLog): void => {
+    logger.request(log)
+    requestLog.append(log)
+  }
 
   const raw = createHttpServer((req, res) => {
     if (samePortAdmin && isAdminPath(req.url, admin.prefix)) {
-      serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions)
+      serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions, requestLog)
       return
     }
 
@@ -173,7 +191,7 @@ export function createServer(
 
         if (result.type === 'matched') {
           writeResponse(res, result.response)
-          logger.request({
+          record({
             method: envelope.method,
             path: envelope.path,
             outcome: { type: 'matched', address: result.address },
@@ -187,7 +205,7 @@ export function createServer(
         // No match: forward to the passthrough upstream if configured, else fail closed.
         if (passthrough) {
           const status = await forwardPassthrough(req, res, rawBody, passthrough.url)
-          logger.request({
+          record({
             method: envelope.method,
             path: envelope.path,
             outcome: { type: 'passthrough', target: passthrough.url },
@@ -199,7 +217,7 @@ export function createServer(
         }
 
         writeMiss(res, result.message, missStatus)
-        logger.request({
+        record({
           method: envelope.method,
           path: envelope.path,
           outcome: { type: 'miss', reason: result.reason.kind },
@@ -221,7 +239,7 @@ export function createServer(
   const adminServer =
     admin.enabled && admin.port !== undefined
       ? createHttpServer((req, res) =>
-          serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions),
+          serveAdmin(req, res, sessions, admin.prefix, logger, service.definitions, requestLog),
         )
       : undefined
 
@@ -268,6 +286,7 @@ export function createServer(
     control: sessions.global,
     sessions,
     definitions: service.definitions,
+    requestLog,
     get adminPort() {
       if (!admin.enabled) {
         return undefined

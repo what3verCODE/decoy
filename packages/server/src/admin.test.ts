@@ -1,10 +1,51 @@
 import type { LoadedService, ResolvedAdmin } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
-import type { Logger } from './logger'
+import type { Logger, RequestLog } from './logger'
 import { createServer, type DecoyServer } from './server'
 
 const silent: Logger = { info() {}, warn() {}, request() {} }
+
+interface SseEvent {
+  id: string
+  data: RequestLog & { seq: number }
+}
+
+/** Read SSE frames off a stream until `count` data events arrive (comments ignored). */
+async function readDataEvents(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  count: number,
+): Promise<SseEvent[]> {
+  const decoder = new TextDecoder()
+  const events: SseEvent[] = []
+  let buffer = ''
+  while (events.length < count) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    let boundary = buffer.indexOf('\n\n')
+    while (boundary !== -1) {
+      const frame = buffer.slice(0, boundary)
+      buffer = buffer.slice(boundary + 2)
+      let id = ''
+      const dataLines: string[] = []
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('id:')) {
+          id = line.slice(3).trim()
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trim())
+        }
+      }
+      if (dataLines.length > 0) {
+        events.push({ id, data: JSON.parse(dataLines.join('\n')) })
+      }
+      boundary = buffer.indexOf('\n\n')
+    }
+  }
+  return events
+}
 
 const usersRoute: Route = {
   id: 'users-by-id',
@@ -158,6 +199,45 @@ describe('/admin HTTP control API', () => {
       ])
     } finally {
       await local.close()
+    }
+  })
+
+  test('GET /admin/logs replays request history then tails new records (SSE)', async () => {
+    // Drive some requests so the store has history to replay on connect.
+    await (await fetch(`${base}/users/42`)).text() // matched
+    await (await fetch(`${base}/missing`)).text() // miss
+
+    const controller = new AbortController()
+    const stream = await fetch(`${base}/admin/logs`, { signal: controller.signal })
+    expect(stream.status).toBe(200)
+    expect(stream.headers.get('content-type')).toContain('text/event-stream')
+    const reader = (stream.body as ReadableStream<Uint8Array>).getReader()
+    try {
+      const [matched, missed] = await readDataEvents(reader, 2)
+      if (!matched || !missed) {
+        throw new Error('expected two replayed records')
+      }
+      expect([matched.data.path, missed.data.path]).toEqual(['/users/42', '/missing'])
+      expect(matched.data.outcome).toEqual({
+        type: 'matched',
+        address: { route: 'users-by-id', preset: 'default', variant: 'success' },
+      })
+      expect(missed.data.outcome.type).toBe('miss')
+      expect(matched.data.status).toBe(200)
+      // The SSE id carries the stored seq (stable for client dedup on reconnect).
+      expect(matched.id).toBe(String(matched.data.seq))
+
+      // A request fired while connected tails into the open stream.
+      await (await fetch(`${base}/users/7`)).text()
+      const [tailed] = await readDataEvents(reader, 1)
+      if (!tailed) {
+        throw new Error('expected one tailed record')
+      }
+      expect(tailed.data.path).toBe('/users/7')
+      expect(tailed.data.seq).toBeGreaterThan(missed.data.seq)
+    } finally {
+      await reader.cancel()
+      controller.abort()
     }
   })
 

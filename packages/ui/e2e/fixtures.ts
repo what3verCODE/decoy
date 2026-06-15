@@ -18,4 +18,44 @@ export async function stubRoutes(page: Page, catalog: unknown = sampleCatalog): 
   )
 }
 
+/** A live-request stream payload shaped like the server's `GET /admin/logs` SSE records. */
+export const sampleLogs = [
+  {
+    seq: 1,
+    method: 'GET',
+    path: '/users/42',
+    outcome: {
+      type: 'matched',
+      address: { route: 'users-by-id', preset: 'default', variant: 'success' },
+    },
+    status: 200,
+    latencyMs: 1.2,
+    session: 'global',
+  },
+  {
+    seq: 2,
+    method: 'GET',
+    path: '/missing',
+    outcome: { type: 'miss', reason: 'no-route' },
+    status: 501,
+    latencyMs: 0.4,
+    session: 'global',
+  },
+]
+
+/**
+ * Stub the panel's `GET /admin/logs` SSE stream in the browser, serving `records`
+ * as a one-shot event-stream body (`@decoy/ui` ships static assets only, so the
+ * e2e never boots a server). The client dedupes on `seq`, so `EventSource`'s
+ * reconnect-and-replay does not duplicate rows.
+ */
+export async function stubLogs(page: Page, records: unknown[] = sampleLogs): Promise<void> {
+  const body = records
+    .map((r) => `id: ${(r as { seq: number }).seq}\ndata: ${JSON.stringify(r)}\n\n`)
+    .join('')
+  await page.route('**/admin/logs', (route) =>
+    route.fulfill({ contentType: 'text/event-stream', body }),
+  )
+}
+
 export { expect, test } from '@playwright/test'
