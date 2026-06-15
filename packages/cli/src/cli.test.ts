@@ -1,6 +1,8 @@
-import { resolve } from 'node:path'
-import type { DecoyServer, Logger } from '@decoy/server'
-import { afterEach, describe, expect, test } from '@rstest/core'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { type DecoyServer, type DecoyUiServer, type Logger, version } from '@decoy/server'
+import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import { run } from './cli'
 import type { CommandContext, Tui } from './tui'
 
@@ -95,6 +97,80 @@ describe('decoy start (end-to-end through the CLI)', () => {
 
   test('rejects an unknown command', async () => {
     await expect(run(['frobnicate'], { logger: silent })).rejects.toThrow(/unknown command/)
+  })
+
+  describe('--ui (web control panel)', () => {
+    let assetDir: string
+    let ui: DecoyUiServer | undefined
+
+    beforeEach(() => {
+      assetDir = mkdtempSync(join(tmpdir(), 'decoy-cli-ui-'))
+      writeFileSync(join(assetDir, 'index.html'), '<!doctype html><div id="root">decoy</div>')
+    })
+
+    afterEach(async () => {
+      await ui?.close()
+      ui = undefined
+      rmSync(assetDir, { recursive: true, force: true })
+    })
+
+    test('serves the SPA and the same-origin routes catalog on its own loopback port', async () => {
+      server = single(
+        await run(['start', '--config', configPath, '--port', '0', '--ui', '--ui-port', '0'], {
+          logger: silent,
+          resolveUi: async () => ({ uiAssetDir: () => assetDir, version }),
+          onUiServer: (started) => {
+            ui = started
+          },
+        }),
+      )
+      expect(ui).toBeDefined()
+
+      const uiPort = (ui?.raw.address() as { port: number }).port
+      const page = await fetch(`http://localhost:${uiPort}/`)
+      expect(page.status).toBe(200)
+      expect(await page.text()).toContain('id="root"')
+
+      const routes = await fetch(`http://localhost:${uiPort}/admin/routes`)
+      expect(routes.status).toBe(200)
+      expect((await routes.json()) as unknown[]).toHaveLength(1)
+    })
+
+    test('warns when the @decoy/ui version does not match decoy, but still starts the panel', async () => {
+      const warnings: string[] = []
+      const logger: Logger = { info() {}, warn: (m) => warnings.push(m), request() {} }
+      server = single(
+        await run(['start', '--config', configPath, '--port', '0', '--ui', '--ui-port', '0'], {
+          logger,
+          resolveUi: async () => ({ uiAssetDir: () => assetDir, version: '9.9.9' }),
+          onUiServer: (started) => {
+            ui = started
+          },
+        }),
+      )
+      expect(ui).toBeDefined()
+      expect(warnings.some((w) => w.includes('9.9.9') && /version|match/i.test(w))).toBe(true)
+    })
+
+    test('fails closed with a friendly install message when @decoy/ui is not installed', async () => {
+      const report = capture()
+      server = single(
+        await run(['start', '--config', configPath, '--port', '0', '--ui'], {
+          logger: silent,
+          out: report.out,
+          resolveUi: async () => {
+            throw new Error("Cannot find package '@decoy/ui'")
+          },
+          onUiServer: (started) => {
+            ui = started
+          },
+        }),
+      )
+      // The mock server still boots; only the UI is withheld.
+      expect(server).toBeDefined()
+      expect(ui).toBeUndefined()
+      expect(report.text()).toContain('pnpm add -D @decoy/ui')
+    })
   })
 
   describe('multi-instance topology (array config, ADR-0006)', () => {

@@ -31,7 +31,7 @@ packages/
   express/      middleware adapter
   nest/         module adapter
   fastify/      plugin adapter
-  web-panel/    web panel for configuring decoy (future)
+  ui/           @decoy/ui — web control panel SPA, opt-in install (future)
 ```
 
 ## CLI

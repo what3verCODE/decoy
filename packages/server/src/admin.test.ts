@@ -108,6 +108,59 @@ describe('/admin HTTP control API', () => {
     expect(await selection.json()).toEqual({ collection: 'error-state', overrides: [] })
   })
 
+  test('GET /admin/routes returns the routes catalog with preset/variant counts', async () => {
+    const response = await fetch(`${base}/admin/routes`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([
+      {
+        id: 'users-by-id',
+        method: 'GET',
+        path: '/users/{id}',
+        presetCount: 1,
+        variantCount: 2,
+      },
+    ])
+  })
+
+  test('GET /admin/routes lists one entry per route (not per variant), counting presets and variants', async () => {
+    const multi: Route = {
+      id: 'orders',
+      method: 'POST',
+      path: '/orders',
+      presets: { valid: {}, invalid: {} },
+      variants: { created: { status: 201 }, rejected: { status: 422 }, conflict: { status: 409 } },
+    }
+    const happy: Collection = { id: 'happy-path', routes: ['users-by-id:default:success'] }
+    const local = createServer(
+      {
+        name: 'multi',
+        port: 0,
+        defaultCollection: 'happy-path',
+        missStatus: 501,
+        sessionIdleTtlMs: 1_800_000,
+        admin: { enabled: true, prefix: '/admin' },
+        definitions: {
+          routes: new Map([
+            [usersRoute.id, usersRoute],
+            [multi.id, multi],
+          ]),
+          collections: new Map([[happy.id, happy]]),
+        },
+      },
+      { logger: silent },
+    )
+    const port = await local.listen()
+    try {
+      const response = await fetch(`http://localhost:${port}/admin/routes`)
+      expect(await response.json()).toEqual([
+        { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 2 },
+        { id: 'orders', method: 'POST', path: '/orders', presetCount: 2, variantCount: 3 },
+      ])
+    } finally {
+      await local.close()
+    }
+  })
+
   test('an unknown collection is a 400, not a silent switch', async () => {
     const response = await fetch(`${base}/admin/collection`, {
       method: 'POST',

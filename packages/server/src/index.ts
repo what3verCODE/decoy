@@ -1,3 +1,4 @@
+export type { RouteCatalogEntry } from './admin'
 export { toEnvelope } from './envelope'
 export {
   consoleLogger,
@@ -14,3 +15,5 @@ export {
   type SessionRegistryOptions,
   type SessionReloadResult,
 } from './sessions'
+export { type CreateUiServerOptions, createUiServer, type DecoyUiServer } from './ui'
+export { version } from './version'

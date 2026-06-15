@@ -1,0 +1,19 @@
+{
+  // Type-checks the Node asset resolver (node) AND the Preact SPA (client). The
+  // build splits them — rslib emits node to dist/index.js, rsbuild bundles client
+  // to dist/client — so each gets the JSX/DOM settings it needs here in one pass.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "types": ["node"],
+    "paths": {
+      "react": ["../../node_modules/preact/compat/"],
+      "react-dom": ["../../node_modules/preact/compat/"]
+    }
+  },
+  "include": ["node", "client"],
+  "exclude": []
+}
