@@ -14,3 +14,5 @@
     - admin-collection-switch:default:switched
     - admin-route-pin:default:pinned
     - admin-reset:default:cleared
+    - admin-sessions:default:list
+    - admin-session-logs:default:timeline

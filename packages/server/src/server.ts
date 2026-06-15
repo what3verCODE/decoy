@@ -11,7 +11,7 @@ import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger, type RequestLog } from './logger'
 import { forwardPassthrough } from './passthrough'
 import { createRequestLogStore, type RequestLogStore } from './request-log-store'
-import { createSessionRegistry, type SessionRegistry } from './sessions'
+import { createSessionRegistry, GLOBAL_SESSION, type SessionRegistry } from './sessions'
 import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
 /**
@@ -211,7 +211,7 @@ export function createServer(
     const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader
     const control = sessions.resolve(sessionId)
     // The resolved session label: 'global' for no/empty header (matching resolve).
-    const session = sessionId ? sessionId : 'global'
+    const session = sessionId ? sessionId : GLOBAL_SESSION
     const start = process.hrtime.bigint()
     const elapsedMs = () => Number(process.hrtime.bigint() - start) / 1e6
     void readRawBody(req)

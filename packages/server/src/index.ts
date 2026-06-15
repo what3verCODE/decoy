@@ -20,6 +20,8 @@ export {
 export { type CreateServerOptions, createServer, type DecoyServer } from './server'
 export {
   createSessionRegistry,
+  GLOBAL_SESSION,
+  type SessionInfo,
   type SessionRegistry,
   type SessionRegistryOptions,
   type SessionReloadResult,

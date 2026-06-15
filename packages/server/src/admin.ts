@@ -252,6 +252,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `GET  {prefix}/collections/{name}`                  → a collection's resolved entries (pure read).
  * - `GET  {prefix}/logs`                                → SSE live request stream.
  * - `POST {prefix}/try`                                 → dry-run match (resolution + response, zero side effects).
+ * - `GET  {prefix}/sessions`                            → list sessions (global + created) with their selection (pure read).
+ * - `GET  {prefix}/sessions/{id}/logs`                  → a session's request timeline, ordered across services (survives destroy).
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
  *
@@ -355,6 +357,21 @@ export async function handleAdmin(
 
     if (method === 'GET' && sub === '/logs') {
       serveLogStream(req, res, store)
+      return
+    }
+
+    if (method === 'GET' && sub === '/sessions') {
+      sendJson(res, 200, sessions.list())
+      return
+    }
+
+    if (method === 'GET' && sub.startsWith('/sessions/') && sub.endsWith('/logs')) {
+      // The session's request timeline, ordered across all services (one timeline).
+      // Read from the store — *not* the session registry — so it survives the
+      // session's destruction (logs are decoupled from session lifecycle, ADR-0017),
+      // except under sqlite `cleanup: 'on-session-end'` which already dropped them.
+      const id = decodeURIComponent(sub.slice('/sessions/'.length, -'/logs'.length))
+      sendJson(res, 200, store.query({ session: id }))
       return
     }
 

@@ -1,6 +1,7 @@
 import { loadCollections } from './collections'
 import { startLogStream } from './logs'
 import { loadRoutes } from './routes'
+import { loadSessions } from './sessions'
 
 /**
  * Kick off all data flow on mount — the single boot intent the entry fires.
@@ -11,6 +12,7 @@ import { loadRoutes } from './routes'
 export function startApp(): () => void {
   void loadRoutes()
   void loadCollections()
+  void loadSessions()
   const stream = startLogStream()
   return () => stream.close()
 }

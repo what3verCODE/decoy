@@ -85,6 +85,36 @@ describe('session registry', () => {
     expect(registry.resolve('made-up').selection.collection).toBe('error-state')
   })
 
+  test('list returns the global session first, then created sessions with their selection', () => {
+    const registry = createSessionRegistry(definitions(), 'happy-path')
+    // Only the global session exists initially.
+    expect(registry.list()).toEqual([
+      { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
+    ])
+
+    const id = registry.create()
+    registry.resolve(id).setCollection('error-state')
+    registry.resolve(id).useRoute('users-by-id', 'default', 'error')
+
+    expect(registry.list()).toEqual([
+      { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
+      { id, global: false, collection: 'error-state', overrideCount: 1 },
+    ])
+  })
+
+  test('list does not touch last-seen, so reading it never keeps an idle session alive', () => {
+    let clock = 1_000
+    const registry = createSessionRegistry(definitions(), 'happy-path', {
+      idleTtlMs: 100,
+      reapIntervalMs: 0,
+      now: () => clock,
+    })
+    const id = registry.create()
+    clock = 1_200 // past the TTL
+    registry.list() // must not refresh last-seen
+    expect(registry.reapIdle()).toEqual([id])
+  })
+
   test('destroy removes a session; the global session cannot be destroyed', () => {
     const registry = createSessionRegistry(definitions(), 'happy-path')
     const id = registry.create()

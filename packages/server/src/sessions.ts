@@ -1,10 +1,30 @@
 import { randomUUID } from 'node:crypto'
 import { type Controller, createController, type Definitions, type ReloadResult } from '@decoy/core'
 
+/**
+ * The label of the **global** (default) session — what no/empty-`x-mock-session`
+ * requests resolve against and what their request-log records are tagged with. A
+ * shared constant so the registry listing, the request-log `session` column, and a
+ * `GET /admin/sessions/global/logs` query all agree on one literal.
+ */
+export const GLOBAL_SESSION = 'global'
+
 /** One session's {@link ReloadResult}, tagged with the session label (`'global'` or its id). */
 export interface SessionReloadResult extends ReloadResult {
   /** The reloaded session: `'global'` for the default session, otherwise its id. */
   session: string
+}
+
+/** One live session in {@link SessionRegistry.list}: its id plus a selection summary. */
+export interface SessionInfo {
+  /** `'global'` ({@link GLOBAL_SESSION}) for the default session, otherwise the created id. */
+  id: string
+  /** True for the default (global) dev session — the no-header target. */
+  global: boolean
+  /** The session's active collection name. */
+  collection: string
+  /** Number of per-route overrides currently pinned in the session. */
+  overrideCount: number
 }
 
 /**
@@ -52,6 +72,14 @@ export interface SessionRegistry {
   resolve(sessionId: string | undefined): Controller
   /** Explicitly create a new session, returning its generated id. */
   create(): string
+  /**
+   * List the live sessions — the **global** (default) session first, then every
+   * created session in creation order. Each entry carries the session's active
+   * collection and override count so a UI (#71) can show the selection at a glance.
+   * Reading the list never touches a session's last-seen, so it can't keep an idle
+   * session alive.
+   */
+  list(): SessionInfo[]
   /** Destroy a session; `true` if it existed. The global session has no id and is unaffected. */
   destroy(sessionId: string): boolean
   /** Whether a (non-global) session with this id is live. */
@@ -154,6 +182,19 @@ export function createSessionRegistry(
       }
       sessions.set(id, newSession())
       return id
+    },
+    list() {
+      const summarize = (id: string, isGlobal: boolean, controller: Controller): SessionInfo => ({
+        id,
+        global: isGlobal,
+        collection: controller.selection.collection,
+        overrideCount: controller.selection.overrides?.length ?? 0,
+      })
+      const infos = [summarize(GLOBAL_SESSION, true, global)]
+      for (const [id, session] of sessions) {
+        infos.push(summarize(id, false, session.controller))
+      }
+      return infos
     },
     destroy(sessionId) {
       const existed = sessions.delete(sessionId)

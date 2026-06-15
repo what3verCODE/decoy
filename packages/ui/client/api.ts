@@ -182,6 +182,38 @@ export interface RequestLogRecord {
   status: number
   latencyMs: number
   session: string
+  /** The instance (service) that served the request — present on stored records. */
+  service?: string
+}
+
+/** One live session — mirrors the server's `SessionInfo` (body of `GET /admin/sessions`). */
+export interface SessionInfo {
+  /** `'global'` for the default (dev) session, otherwise the created session id. */
+  id: string
+  global: boolean
+  collection: string
+  overrideCount: number
+}
+
+/** Fetch the live sessions (global + created) from `GET /admin/sessions`. */
+export async function fetchSessions(): Promise<SessionInfo[]> {
+  const response = await fetch('/admin/sessions')
+  if (!response.ok) {
+    throw new Error(`GET /admin/sessions failed: ${response.status}`)
+  }
+  return (await response.json()) as SessionInfo[]
+}
+
+/**
+ * Fetch a session's request timeline from `GET /admin/sessions/{id}/logs` — ordered
+ * across all services (one timeline) and readable after the session is destroyed.
+ */
+export async function fetchSessionLogs(id: string): Promise<RequestLogRecord[]> {
+  const response = await fetch(`/admin/sessions/${encodeURIComponent(id)}/logs`)
+  if (!response.ok) {
+    throw new Error(`GET /admin/sessions/${id}/logs failed: ${response.status}`)
+  }
+  return (await response.json()) as RequestLogRecord[]
 }
 
 /** The resolution label for a record, mirroring the server logger's `describeOutcome`. */

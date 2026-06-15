@@ -446,6 +446,100 @@ describe('/admin HTTP control API', () => {
     }
   })
 
+  test('GET /admin/sessions lists the global session plus created sessions', async () => {
+    // Only the global session before anything is created.
+    const before = await fetch(`${base}/admin/sessions`)
+    expect(before.status).toBe(200)
+    expect(await before.json()).toEqual([
+      { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
+    ])
+
+    // Create one explicitly and switch it; lazily create another via a request header.
+    const created = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+      id: string
+    }
+    await fetch(`${base}/admin/collection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mock-session': created.id },
+      body: JSON.stringify({ name: 'error-state' }),
+    })
+    await (await fetch(`${base}/users/42`, { headers: { 'x-mock-session': 'lazy' } })).text()
+
+    const after = await fetch(`${base}/admin/sessions`)
+    expect(await after.json()).toEqual([
+      { id: 'global', global: true, collection: 'happy-path', overrideCount: 0 },
+      { id: created.id, global: false, collection: 'error-state', overrideCount: 0 },
+      { id: 'lazy', global: false, collection: 'happy-path', overrideCount: 0 },
+    ])
+  })
+
+  test("GET /admin/sessions/{id}/logs returns that session's records, ordered", async () => {
+    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+      id: string
+    }
+
+    // Two requests on the session, one on the global session (must be excluded).
+    await (await fetch(`${base}/users/1`, { headers: { 'x-mock-session': id } })).text()
+    await (await fetch(`${base}/users/2`)).text() // global — different session
+    await (await fetch(`${base}/missing`, { headers: { 'x-mock-session': id } })).text()
+
+    const response = await fetch(`${base}/admin/sessions/${id}/logs`)
+    expect(response.status).toBe(200)
+    const records = (await response.json()) as Array<RequestLog & { seq: number }>
+    // Only this session's records, oldest-first (seq ascending).
+    expect(records.map((r) => r.path)).toEqual(['/users/1', '/missing'])
+    expect(records.every((r) => r.session === id)).toBe(true)
+    expect(records[0]?.seq).toBeLessThan(records[1]?.seq as number)
+  })
+
+  test('GET /admin/sessions/{id}/logs survives the session being destroyed', async () => {
+    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+      id: string
+    }
+    await (await fetch(`${base}/users/9`, { headers: { 'x-mock-session': id } })).text()
+
+    // Destroy the session; the memory store keeps records (logs decoupled from lifecycle).
+    expect((await fetch(`${base}/admin/sessions/${id}`, { method: 'DELETE' })).status).toBe(200)
+
+    const response = await fetch(`${base}/admin/sessions/${id}/logs`)
+    expect(response.status).toBe(200)
+    const records = (await response.json()) as Array<RequestLog & { seq: number }>
+    expect(records.map((r) => r.path)).toEqual(['/users/9'])
+  })
+
+  test('GET /admin/sessions/{id}/logs returns one ordered timeline across services', async () => {
+    // A request the live server records (service "users"), then a record from another
+    // service ("orders") for the same session injected into the shared store — proving
+    // a session spanning multiple services returns a single ordered cross-service timeline.
+    const { id } = (await (await fetch(`${base}/admin/sessions`, { method: 'POST' })).json()) as {
+      id: string
+    }
+    await (await fetch(`${base}/users/3`, { headers: { 'x-mock-session': id } })).text()
+    server.requestLog.append({
+      method: 'POST',
+      path: '/orders',
+      outcome: { type: 'matched', address: { route: 'orders', preset: 'default', variant: 'ok' } },
+      status: 201,
+      latencyMs: 0.5,
+      session: id,
+      service: 'orders',
+    })
+
+    const records = (await (await fetch(`${base}/admin/sessions/${id}/logs`)).json()) as Array<
+      RequestLog & { seq: number; service: string }
+    >
+    expect(records.map((r) => `${r.service} ${r.path}`)).toEqual([
+      'users /users/3',
+      'orders /orders',
+    ])
+  })
+
+  test('GET /admin/sessions/{id}/logs is an empty timeline for a session with no records', async () => {
+    const response = await fetch(`${base}/admin/sessions/never-existed/logs`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([])
+  })
+
   test('an unknown collection is a 400, not a silent switch', async () => {
     const response = await fetch(`${base}/admin/collection`, {
       method: 'POST',

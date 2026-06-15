@@ -1,0 +1,27 @@
+# GET /admin/sessions — the sessions the inspector lists: the global (dev) session
+# plus any created ones. `list` is the populated baseline; `solo` drives the
+# global-only case (switch with router.useRoute('admin-sessions','default','solo')).
+id: admin-sessions
+method: GET
+path: /admin/sessions
+presets:
+  default: {}
+variants:
+  list:
+    status: 200
+    body:
+      - id: global
+        global: true
+        collection: happy-path
+        overrideCount: 0
+      - id: sess-1
+        global: false
+        collection: error-state
+        overrideCount: 1
+  solo:
+    status: 200
+    body:
+      - id: global
+        global: true
+        collection: happy-path
+        overrideCount: 0
