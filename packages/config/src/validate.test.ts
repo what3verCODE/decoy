@@ -178,15 +178,15 @@ describe('validateSources — extends', () => {
 })
 
 describe('validateSources — JMESPath', () => {
-  test('invalid match: predicate and invalid {{ template }} both error', () => {
+  test('invalid ${ } in a preset predicate and a variant template both error', () => {
     const issues = validateSources({
       routes: [
         route({
           id: 'users-api',
           method: 'GET',
           path: '/users',
-          presets: { active: { match: 'foo[' } },
-          variants: { success: { body: { label: '{{ bad[ }}' } } },
+          presets: { active: { body: '${ foo[ }' } },
+          variants: { success: { body: { label: '${ bad[ }' } } },
         }),
       ],
       collections: [],
@@ -194,21 +194,21 @@ describe('validateSources — JMESPath', () => {
 
     expect(messages(issues)).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('invalid JMESPath in preset "active" match'),
-        expect.stringContaining('invalid JMESPath template'),
+        expect.stringContaining('in preset "active"'),
+        expect.stringContaining('in variant "success"'),
       ]),
     )
   })
 
-  test('valid match: and {{ template }} produce no issue', () => {
+  test('valid ${ } predicate and template produce no issue', () => {
     const issues = validateSources({
       routes: [
         route({
           id: 'users-api',
           method: 'GET',
           path: '/users',
-          presets: { active: { match: 'length(body.items) > `0`' } },
-          variants: { success: { body: { count: '{{ length(body.items) }}' } } },
+          presets: { active: { body: '${ length(body.items) > `0` }' } },
+          variants: { success: { body: { count: '${ length(body.items) }' } } },
         }),
       ],
       collections: [],
@@ -229,11 +229,11 @@ describe('validateSources — file:line', () => {
     const path = issues.find((i) => i.message.startsWith('path:'))
     expect(path?.line).toBe(3)
 
-    const match = issues.find((i) => i.message.includes('match'))
-    expect(match?.line).toBe(7)
+    const presetTemplate = issues.find((i) => i.message.includes('in preset'))
+    expect(presetTemplate?.line).toBe(7)
 
-    const template = issues.find((i) => i.message.includes('template'))
-    expect(template?.line).toBe(12)
+    const variantTemplate = issues.find((i) => i.message.includes('in variant'))
+    expect(variantTemplate?.line).toBe(12)
 
     // Every issue carries the file.
     for (const issue of issues) {

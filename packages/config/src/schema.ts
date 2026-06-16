@@ -6,21 +6,30 @@ import type { ValidationIssue } from './validate'
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 const StringRecord = v.record(v.string(), v.string())
+/** A preset field: a `${ }` predicate string, or a literal pattern object (ADR-0008). */
+const PredicateOrPattern = v.union([v.string(), StringRecord])
 
-/** One response: status/headers/delay/body (all optional; body is opaque). */
+/**
+ * One response: status/headers/delay/body (all optional; body is opaque). `status`
+ * and `delay` accept a string so they can carry a `${ }` template (ADR-0009),
+ * coerced to a number when the response is built.
+ */
 export const VariantSchema = v.object({
-  status: v.optional(v.pipe(v.number(), v.integer())),
+  status: v.optional(v.union([v.pipe(v.number(), v.integer()), v.string()])),
   headers: v.optional(StringRecord),
-  delay: v.optional(v.pipe(v.number(), v.minValue(0))),
+  delay: v.optional(v.union([v.pipe(v.number(), v.minValue(0)), v.string()])),
   body: v.optional(v.unknown()),
 })
 
-/** Additional request-match conditions layered on a route. */
+/**
+ * Additional request-match conditions layered on a route. Each field is a `${ }`
+ * predicate **string** or a literal **pattern** object (`body` may be any value);
+ * fields are ANDed. `{}` is the catch-all (ADR-0008).
+ */
 export const PresetSchema = v.object({
-  query: v.optional(StringRecord),
-  headers: v.optional(StringRecord),
+  query: v.optional(PredicateOrPattern),
+  headers: v.optional(PredicateOrPattern),
   body: v.optional(v.unknown()),
-  match: v.optional(v.string()),
 })
 
 /** The coarse matcher + namespace: id + method + path, with presets and variants. */
