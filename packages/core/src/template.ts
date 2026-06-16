@@ -3,6 +3,12 @@ import {
   type JSONValue,
   TreeInterpreter,
 } from '@jmespath-community/jmespath'
+import { registerStandardFunctions } from './functions'
+
+// Register the standard-function library into the JMESPath runtime once, at module
+// load — so every `${ }` expression compiled or evaluated below can call `uuid()`
+// and the rest of the set (ADR-0009). Idempotent; see registerStandardFunctions.
+registerStandardFunctions()
 
 /**
  * A pre-compiled renderer: maps a request envelope to the rendered value. Every
