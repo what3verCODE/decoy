@@ -14,6 +14,8 @@ export default defineConfig({
     command: `pnpm exec rsbuild preview --port ${PORT}`,
     port: PORT,
     reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 })
