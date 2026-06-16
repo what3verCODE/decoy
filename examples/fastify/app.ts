@@ -7,9 +7,9 @@ export interface DecoyApp {
   /** The Fastify app, already booted (`ready`) and ready to `listen()`. */
   app: FastifyInstance
   /**
-   * The Decoy plugin's in-process control handle (`setCollection`/`useRoute`/`reset`).
+   * The Decoy plugin's in-process control handle (`useCollection`/`useRoute`/`reset`).
    * Because the mock runs inside this process, scenarios are switched by calling this
-   * directly — no standalone server, no `/admin`.
+   * directly — no standalone server, no `/__decoy__`.
    */
   decoy: DecoyPlugin
 }

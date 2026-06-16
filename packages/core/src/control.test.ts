@@ -51,9 +51,9 @@ describe('createController', () => {
     expect(result.response.status).toBe(200)
   })
 
-  test('setCollection changes the active collection; the next match reflects it atomically', () => {
+  test('useCollection changes the active collection; the next match reflects it atomically', () => {
     const control = createController(defs(), 'happy-path')
-    control.setCollection('error-state')
+    control.useCollection('error-state')
     const result = control.match(get)
     expect(result.type).toBe('matched')
     if (result.type !== 'matched') return
@@ -81,7 +81,7 @@ describe('createController', () => {
 
   test('reset keeps the active collection, not the default one', () => {
     const control = createController(defs(), 'happy-path')
-    control.setCollection('error-state')
+    control.useCollection('error-state')
     control.useRoute('users-list-api', 'default', 'success')
     control.reset()
     const result = control.match(get)
@@ -109,9 +109,9 @@ describe('createController', () => {
     })
   })
 
-  test('setCollection on an undefined collection throws and leaves state unchanged', () => {
+  test('useCollection on an undefined collection throws and leaves state unchanged', () => {
     const control = createController(defs(), 'happy-path')
-    expect(() => control.setCollection('ghost')).toThrow(/not defined/)
+    expect(() => control.useCollection('ghost')).toThrow(/not defined/)
     expect(control.match(get).type).toBe('matched')
     expect(control.selection.collection).toBe('happy-path')
   })
@@ -158,7 +158,7 @@ describe('createController.reload', () => {
 
   test('preserves the active collection by name across a reload', () => {
     const control = createController(defs(), 'happy-path')
-    control.setCollection('error-state')
+    control.useCollection('error-state')
 
     const result = control.reload(changedDefs(), 'happy-path')
 
@@ -182,7 +182,7 @@ describe('createController.reload', () => {
 
   test('falls back to the default collection when the active one vanished', () => {
     const control = createController(defs(), 'happy-path')
-    control.setCollection('error-state')
+    control.useCollection('error-state')
 
     // New definitions drop error-state entirely.
     const next: Definitions = {

@@ -4,9 +4,9 @@ path: bad-no-slash
 presets:
   default: {}
   active:
-    match: "foo["
+    body: "${ foo[ }"
 variants:
   success:
     status: 200
     body:
-      label: "{{ bad[ }}"
+      label: "${ bad[ }"

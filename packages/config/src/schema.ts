@@ -6,21 +6,30 @@ import type { ValidationIssue } from './validate'
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 const StringRecord = v.record(v.string(), v.string())
+/** A preset field: a `${ }` predicate string, or a literal pattern object (ADR-0008). */
+const PredicateOrPattern = v.union([v.string(), StringRecord])
 
-/** One response: status/headers/delay/body (all optional; body is opaque). */
+/**
+ * One response: status/headers/delay/body (all optional; body is opaque). `status`
+ * and `delay` accept a string so they can carry a `${ }` template (ADR-0009),
+ * coerced to a number when the response is built.
+ */
 export const VariantSchema = v.object({
-  status: v.optional(v.pipe(v.number(), v.integer())),
+  status: v.optional(v.union([v.pipe(v.number(), v.integer()), v.string()])),
   headers: v.optional(StringRecord),
-  delay: v.optional(v.pipe(v.number(), v.minValue(0))),
+  delay: v.optional(v.union([v.pipe(v.number(), v.minValue(0)), v.string()])),
   body: v.optional(v.unknown()),
 })
 
-/** Additional request-match conditions layered on a route. */
+/**
+ * Additional request-match conditions layered on a route. Each field is a `${ }`
+ * predicate **string** or a literal **pattern** object (`body` may be any value);
+ * fields are ANDed. `{}` is the catch-all (ADR-0008).
+ */
 export const PresetSchema = v.object({
-  query: v.optional(StringRecord),
-  headers: v.optional(StringRecord),
+  query: v.optional(PredicateOrPattern),
+  headers: v.optional(PredicateOrPattern),
   body: v.optional(v.unknown()),
-  match: v.optional(v.string()),
 })
 
 /** The coarse matcher + namespace: id + method + path, with presets and variants. */
@@ -43,7 +52,7 @@ export const CollectionSchema = v.object({
   routes: v.array(v.string()),
 })
 
-const AdminSchema = v.union([
+const ControlSchema = v.union([
   v.boolean(),
   v.object({ port: v.optional(v.number()), prefix: v.optional(v.string()) }),
 ])
@@ -57,11 +66,40 @@ const PassthroughSchema = v.object({
   ),
 })
 
+/**
+ * Durable request-log store (#70). Structural shape only — the filename-template
+ * token check and the cleanup/store cross-field warnings live in
+ * {@link validateRequestLog} so they can report a precise message.
+ */
+const RequestLogSchema = v.object({
+  store: v.optional(
+    v.picklist(['memory', 'sqlite'], 'requestLog.store must be "memory" or "sqlite"'),
+  ),
+  path: v.optional(v.string()),
+  retention: v.optional(
+    v.object({
+      maxRows: v.optional(
+        v.pipe(
+          v.number(),
+          v.integer('requestLog.retention.maxRows must be an integer'),
+          v.minValue(1, 'requestLog.retention.maxRows must be >= 1'),
+        ),
+      ),
+    }),
+  ),
+  cleanup: v.optional(
+    v.picklist(
+      ['on-exit', 'on-session-end', 'never'],
+      'requestLog.cleanup must be one of "on-exit", "on-session-end", "never"',
+    ),
+  ),
+})
+
 /** One service entry of a Decoy config. */
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
-  port: v.number(),
-  admin: v.optional(AdminSchema),
+  port: v.optional(v.number()),
+  control: v.optional(ControlSchema),
   missStatus: v.optional(
     v.pipe(
       v.number(),
@@ -81,6 +119,7 @@ export const ServiceConfigSchema = v.object({
   routesDir: v.optional(v.string()),
   collectionsFile: v.optional(v.string()),
   defaultCollection: v.optional(v.string()),
+  requestLog: v.optional(RequestLogSchema),
   routes: v.optional(v.array(RouteSchema)),
   collections: v.optional(v.array(CollectionSchema)),
 })

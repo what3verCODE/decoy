@@ -90,10 +90,10 @@ describe('loadConfig', () => {
     expect(ttlIssue?.message).toContain('at sessionIdleTtl')
   })
 
-  test('resolves the admin config to a separate port and normalized prefix', async () => {
+  test('resolves the control config to a separate port and normalized prefix', async () => {
     const service = await loadConfig({ configPath: `${fixtures}yaml-config/decoy.config.yaml` })
 
-    expect(service.admin).toEqual({ enabled: true, prefix: '/control', port: 5101 })
+    expect(service.control).toEqual({ enabled: true, prefix: '/control', port: 5101 })
   })
 
   test('falls back to the default-path source when no config file exists', async () => {
@@ -101,8 +101,8 @@ describe('loadConfig', () => {
 
     expect(service.defaultCollection).toBe('happy-path')
     expect(service.definitions.routes.get('users-list-api')?.path).toBe('/users')
-    // admin defaults to on, same port, `/admin` prefix
-    expect(service.admin).toEqual({ enabled: true, prefix: '/admin' })
+    // control defaults to on, same port, `/__decoy__` prefix
+    expect(service.control).toEqual({ enabled: true, prefix: '/__decoy__' })
   })
 
   test('panics when neither config nor default-path source is present', async () => {
@@ -151,6 +151,24 @@ describe('loadConfig', () => {
     const service = await loadConfig({ cwd: `${fixtures}overlap` })
     expect([...service.definitions.routes.keys()]).toEqual(
       expect.arrayContaining(['users-me-api', 'users-by-id-api']),
+    )
+  })
+
+  test('resolves the in-memory request-log store by default (#70)', async () => {
+    const service = await loadConfig({ cwd: `${fixtures}defaults` })
+    expect(service.requestLog).toEqual({ store: 'memory', cleanup: 'never' })
+  })
+
+  test('resolves a sqlite request-log store, expanding its templated path at boot (#70)', async () => {
+    const service = await loadConfig({
+      configPath: `${fixtures}requestlog-sqlite/decoy.config.ts`,
+    })
+    expect(service.requestLog?.store).toBe('sqlite')
+    expect(service.requestLog?.cleanup).toBe('on-exit')
+    expect(service.requestLog?.maxRows).toBe(500)
+    // `{name}` expanded; the path resolved to an absolute one under the config dir.
+    expect(service.requestLog?.path).toBe(
+      resolve(`${fixtures}requestlog-sqlite`, 'var/users.sqlite'),
     )
   })
 })

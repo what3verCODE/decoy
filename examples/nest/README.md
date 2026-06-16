@@ -4,7 +4,7 @@ Wire **`@decoy/nest` as an in-process module** into a real NestJS app. Matched r
 from mocks; everything else **falls through** to the app's own controllers. This is the
 backend/BFF-dev story in Nest's idiom — and because the mock runs *inside* the app, "start the
 client and the mock" collapses to **starting one app**. There is no standalone server and no
-`/admin`: scenarios are switched in-process through the module's exported `control` handle.
+`/__decoy__`: scenarios are switched in-process through the module's exported `control` handle.
 
 ## Run it
 
@@ -46,9 +46,9 @@ curl -si localhost:3003/orders
 # HTTP/1.1 404 Not Found
 ```
 
-**Switch the scenario in-process** — there's no `/admin` here. A host provider, a feature test,
+**Switch the scenario in-process** — there's no `/__decoy__` here. A host provider, a feature test,
 or any in-process code resolves the exported `control` (the `DECOY_CONTROL` token) and calls
-`control.setCollection(...)` to flip the scenario; the next request sees it. The e2e drives
+`control.useCollection(...)` to flip the scenario; the next request sees it. The e2e drives
 exactly this (see `tests/`).
 
 ## What's here

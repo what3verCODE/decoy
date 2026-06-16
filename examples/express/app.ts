@@ -7,9 +7,9 @@ export interface DecoyApp {
   /** The Express app, ready to `listen()`. */
   app: Express
   /**
-   * The Decoy middleware's in-process control handle (`setCollection`/`useRoute`/
+   * The Decoy middleware's in-process control handle (`useCollection`/`useRoute`/
    * `reset`). Because the mock runs inside this process, scenarios are switched by
-   * calling this directly — no standalone server, no `/admin`.
+   * calling this directly — no standalone server, no `/__decoy__`.
    */
   decoy: DecoyMiddleware
 }

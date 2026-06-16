@@ -1,4 +1,4 @@
-# Scenarios this example can switch between in-process via control.setCollection.
+# Scenarios this example can switch between in-process via control.useCollection.
 - id: happy-path
   routes:
     - users-by-id:default:ada

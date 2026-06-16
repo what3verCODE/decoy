@@ -1,0 +1,25 @@
+# GET /__decoy__/routes/{id} — a route's full presets + variants, fetched when the panel
+# drills into a route. Fixed body (no `{{ }}` templating yet): the detail the e2e opens.
+id: admin-route-detail
+method: GET
+path: /__decoy__/routes/{id}
+presets:
+  default: {}
+variants:
+  detail:
+    status: 200
+    body:
+      id: users-by-id
+      method: GET
+      path: /users/{id}
+      presets:
+        default: {}
+        with-query:
+          query: { page: "2" }
+      variants:
+        success:
+          status: 200
+          body: { id: 42, name: Ada }
+        error:
+          status: 500
+          body: { error: boom }

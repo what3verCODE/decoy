@@ -1,21 +1,15 @@
-import type { Page } from '@playwright/test'
+import { createRouterFixture, type PlaywrightRouter } from '@decoy/playwright'
+import { test as base } from '@playwright/test'
 
-/** A routes-catalog payload shaped exactly like the server's `GET /admin/routes`. */
-export const sampleCatalog = [
-  { id: 'users-by-id', method: 'GET', path: '/users/{id}', presetCount: 1, variantCount: 2 },
-  { id: 'create-order', method: 'POST', path: '/orders', presetCount: 2, variantCount: 2 },
-]
+// Dogfood (ADR-0017): the panel's same-origin control API is faked the way an adopter
+// fakes their own app's API — a decoy.config.ts + mocks/ at the package root, loaded
+// by @decoy/playwright (ADR-0007). Registering the fixture is the whole setup: the
+// router discovers the config from cwd and serves the baseline `default` collection.
+// Tests that need an empty state pin a route's `empty` variant via the `router`
+// handle. Scoped to /__decoy__/** so the SPA's own assets load from the preview server
+// untouched; @decoy/ui ships static assets only, so the e2e never boots a server.
+export const test = base.extend<{ router: PlaywrightRouter }>({
+  router: [createRouterFixture({ url: '**/__decoy__/**' }), { auto: true }],
+})
 
-/**
- * Stub the panel's same-origin data API in the browser, so the e2e renders the SPA
- * against fixture data with **no server** (`@decoy/ui` ships static assets only).
- * The integration against a live `@decoy/server` is covered by the HTTP-seam tests
- * over there; here we prove the panel renders what the API returns.
- */
-export async function stubRoutes(page: Page, catalog: unknown = sampleCatalog): Promise<void> {
-  await page.route('**/admin/routes', (route) =>
-    route.fulfill({ contentType: 'application/json', body: JSON.stringify(catalog) }),
-  )
-}
-
-export { expect, test } from '@playwright/test'
+export { expect } from '@playwright/test'

@@ -444,14 +444,14 @@ describe('createEngine().match — literal preset matching', () => {
   })
 })
 
-describe('createEngine().match — JMESPath match: predicates', () => {
+describe('createEngine().match — ${ } string predicates', () => {
   // a "heavy" condition: serve only when the body carries ≥1 active item
   const orders: Route = {
     id: 'orders',
     method: 'POST',
     path: '/orders',
     presets: {
-      'has-active': { match: "length(body.items[?status=='active']) > `0`" },
+      'has-active': { body: "${ length(body.items[?status=='active']) > `0` }" },
       default: {},
     },
     variants: {
@@ -490,14 +490,14 @@ describe('createEngine().match — JMESPath match: predicates', () => {
     expect(result.address.preset).toBe('default')
   })
 
-  test('match: is ANDed with literal matchers — both must hold', () => {
+  test('a string predicate is ANDed with a literal pattern — both must hold', () => {
     const route: Route = {
       id: 'search',
       method: 'GET',
       path: '/search',
       presets: {
-        // literal query AND a JMESPath predicate over the body
-        both: { query: { tenant: 'acme' }, match: 'length(body.terms) > `1`' },
+        // a literal query pattern AND a ${ } predicate over the body
+        both: { query: { tenant: 'acme' }, body: '${ length(body.terms) > `1` }' },
         default: {},
       },
       variants: { ok: { status: 200, body: { matched: 'both' } }, d: { status: 200, body: {} } },
@@ -542,14 +542,14 @@ describe('createEngine().match — JMESPath match: predicates', () => {
     expect(predicateFails.type === 'matched' && predicateFails.address.preset).toBe('default')
   })
 
-  test('GraphQL works through match: — operationName selects the variant (no special code)', () => {
+  test('GraphQL works through a ${ } predicate — operationName selects the variant', () => {
     const gql: Route = {
       id: 'graphql',
       method: 'POST',
       path: '/graphql',
       presets: {
-        'get-user': { match: "body.operationName == 'GetUser'" },
-        'list-orders': { match: "body.operationName == 'ListOrders'" },
+        'get-user': { body: "${ body.operationName == 'GetUser' }" },
+        'list-orders': { body: "${ body.operationName == 'ListOrders' }" },
       },
       variants: {
         user: { status: 200, body: { data: { user: { id: 1 } } } },
@@ -594,7 +594,7 @@ describe('createEngine().match — JMESPath match: predicates', () => {
       method: 'GET',
       path: '/flagged',
       // a bare path predicate: truthy when body.flag is present and non-empty
-      presets: { 'has-flag': { match: 'body.flag' }, default: {} },
+      presets: { 'has-flag': { body: '${ body.flag }' }, default: {} },
       variants: { y: { status: 200, body: { matched: 'has-flag' } }, d: { status: 200, body: {} } },
     }
     const col: Collection = { id: 'f', routes: ['flagged:has-flag:y', 'flagged:default:d'] }
@@ -635,15 +635,82 @@ describe('createEngine().match — JMESPath match: predicates', () => {
     })
   })
 
-  test('an invalid JMESPath match: predicate throws at engine creation', () => {
+  test('an invalid ${ } predicate throws at engine creation', () => {
     const bad: Route = {
       id: 'bad',
       method: 'GET',
       path: '/bad',
-      presets: { broken: { match: 'length(' } },
+      presets: { broken: { body: '${ length( }' } },
       variants: { ok: { status: 200, body: {} } },
     }
     const col: Collection = { id: 'b', routes: ['bad:broken:ok'] }
-    expect(() => createEngine(definitions([bad], [col]))).toThrow(/match:/)
+    expect(() => createEngine(definitions([bad], [col]))).toThrow(/preset "broken"/)
+  })
+
+  test('an invalid ${ } variant template throws at engine creation', () => {
+    const bad: Route = {
+      id: 'bad',
+      method: 'GET',
+      path: '/bad',
+      presets: { default: {} },
+      variants: { ok: { status: 200, body: { x: '${ length( }' } } },
+    }
+    const col: Collection = { id: 'b', routes: ['bad:default:ok'] }
+    expect(() => createEngine(definitions([bad], [col]))).toThrow(/variant "ok"/)
+  })
+})
+
+describe('createEngine().match — ${ } response templating', () => {
+  const route: Route = {
+    id: 'users',
+    method: 'GET',
+    path: '/users/{id}',
+    presets: { default: {} },
+    variants: {
+      tpl: {
+        status: '${ body.code }',
+        headers: { 'x-count': '${ length(body.items) }' },
+        body: {
+          id: '${ pathParams.id }',
+          count: '${ length(body.items) }',
+          greeting: 'Hi ${ body.name }!',
+          label: 'static',
+        },
+      },
+    },
+  }
+  const collection: Collection = { id: 'c', routes: ['users:default:tpl'] }
+  const engine = createEngine(definitions([route], [collection]))
+
+  test('renders typed leaves, interpolates embedded text, and coerces templated status', () => {
+    const result = engine.match(
+      envelope({
+        method: 'GET',
+        path: '/users/42',
+        body: { code: 201, items: [1, 2, 3], name: 'Ada' },
+      }),
+      { collection: 'c' },
+    )
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.response.status).toBe(201)
+    expect(result.response.headers['x-count']).toBe('3')
+    expect(result.response.body).toEqual({
+      id: '42',
+      count: 3,
+      greeting: 'Hi Ada!',
+      label: 'static',
+    })
+  })
+
+  test('a missing path renders as null in a whole-string leaf', () => {
+    const result = engine.match(
+      envelope({ method: 'GET', path: '/users/7', body: { code: 200, items: [] } }),
+      { collection: 'c' },
+    )
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect((result.response.body as { greeting: unknown }).greeting).toBe('Hi !')
+    expect((result.response.body as { count: unknown }).count).toBe(0)
   })
 })

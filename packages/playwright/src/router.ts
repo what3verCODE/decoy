@@ -1,17 +1,14 @@
+import { loadConfig } from '@decoy/config'
 import type { Router } from '@decoy/control'
 import {
   type Controller,
   createController,
-  type Definitions,
   type MatchResult,
   type MockResponse,
   type Selection,
 } from '@decoy/core'
 import { toEnvelope } from './envelope'
 import type { FulfillOptions, PlaywrightRoutable, PlaywrightRoute } from './playwright-types'
-
-/** Default fail-closed miss status (ADR-0005), matching the server. */
-const DEFAULT_MISS_STATUS = 501
 
 /** A {@link Router} backed by the in-process engine over Playwright `page.route`. */
 export interface PlaywrightRouter extends Router {
@@ -21,15 +18,31 @@ export interface PlaywrightRouter extends Router {
   dispose(): Promise<void>
 }
 
-/** Options for {@link createPlaywrightRouter}. */
+/**
+ * Options for {@link createPlaywrightRouter}. All optional: with none, the router
+ * discovers and loads the project's `decoy.config.*` from {@link process.cwd}. The
+ * mocks (routes + collections) the router serves always come from that config — the
+ * same yaml/json sources the standalone server reads (ADR-0007), never hand-built
+ * in-code definitions.
+ */
 export interface PlaywrightRouterOptions {
-  /** Engine definitions to match requests against. */
-  definitions: Definitions
-  /** Collection to start on (the baseline scenario). */
-  defaultCollection: string
-  /** Status returned for a fail-closed miss; defaults to 501 (ADR-0005). */
-  missStatus?: number
-  /** Playwright route URL matcher; defaults to `'**\/*'` (intercept everything). */
+  /**
+   * Path to a `decoy.config.*` file. When omitted, the config is discovered from
+   * {@link cwd} (the same search as `decoy start`).
+   */
+  configPath?: string
+  /**
+   * Directory config discovery and the config's relative paths (`routesDir`,
+   * `collectionsFile`) resolve against; defaults to `process.cwd()`.
+   */
+  cwd?: string
+  /**
+   * Which browser requests this router intercepts — a Playwright `page.route` URL
+   * matcher, defaulting to `'**\/*'` (everything). A transport concern, not a mock
+   * one: scope it (e.g. `/\/api\//`) so the app's own HTML/JS load untouched, or to
+   * mount several routers on one page each owning a different path. The fail-closed
+   * miss status comes from the config (`missStatus`, ADR-0005).
+   */
   url?: string | RegExp
 }
 
@@ -80,21 +93,25 @@ function toFulfill(result: MatchResult, missStatus: number): FulfillOptions {
 }
 
 /**
- * Create a {@link PlaywrightRouter}: install request interception on a Playwright
- * `BrowserContext` / `Page` and drive the **in-process** engine over it. Each
- * router owns its own {@link Controller} (selection), so installing one per
- * Playwright context gives parallel tests isolation for free — no standalone
- * server, no `x-mock-session`. Intercepted requests are matched against the
- * current selection and fulfilled with the resulting variant, or fail closed on a
- * miss. `useCollection`/`useRoute`/`reset` mutate the selection atomically, so the
- * next intercepted request reflects the change.
+ * Create a {@link PlaywrightRouter}: load the project's `decoy.config.*`, install
+ * request interception on a Playwright `BrowserContext` / `Page`, and drive the
+ * **in-process** engine over it. The mocks come from the config's yaml/json sources
+ * (ADR-0007) — the only required argument is the `target` to intercept; with no
+ * options the config is discovered from `process.cwd()`. Each router owns its own
+ * {@link Controller} (selection), so installing one per Playwright context gives
+ * parallel tests isolation for free — no standalone server, no `x-mock-session`.
+ * Intercepted requests are matched against the current selection and fulfilled with
+ * the resulting variant, or fail closed on a miss. `useCollection`/`useRoute`/
+ * `reset` mutate the selection atomically, so the next intercepted request reflects
+ * the change.
  */
 export async function createPlaywrightRouter(
   target: PlaywrightRoutable,
-  options: PlaywrightRouterOptions,
+  options: PlaywrightRouterOptions = {},
 ): Promise<PlaywrightRouter> {
-  const controller: Controller = createController(options.definitions, options.defaultCollection)
-  const missStatus = options.missStatus ?? DEFAULT_MISS_STATUS
+  const service = await loadConfig({ cwd: options.cwd, configPath: options.configPath })
+  const controller: Controller = createController(service.definitions, service.defaultCollection)
+  const missStatus = service.missStatus
   const url = options.url ?? '**/*'
 
   const handler = (route: PlaywrightRoute) => {
@@ -109,7 +126,7 @@ export async function createPlaywrightRouter(
       return controller.selection
     },
     async useCollection(name) {
-      controller.setCollection(name)
+      controller.useCollection(name)
       return controller.selection
     },
     async useRoute(route, preset, variant) {

@@ -1,4 +1,6 @@
+import { scanTemplateExpressions } from '@decoy/core'
 import { compile as compileJmespath } from '@jmespath-community/jmespath'
+import { validateRequestLog } from './request-log'
 import { CollectionSchema, RouteSchema, validateServiceConfig, validateWithSchema } from './schema'
 import type { LineAt, ValuePath } from './source'
 
@@ -120,18 +122,6 @@ function pathsOverlap(a: string, b: string): boolean {
   return true
 }
 
-/** Extract the inner expressions of every `{{ ... }}` occurrence in a string. */
-function extractTemplates(value: string): string[] {
-  const expressions: string[] = []
-  const re = /\{\{([\s\S]*?)\}\}/g
-  let match: RegExpExecArray | null = re.exec(value)
-  while (match !== null) {
-    expressions.push((match[1] ?? '').trim())
-    match = re.exec(value)
-  }
-  return expressions
-}
-
 /** Visit every string leaf of a value, reporting its path relative to the value root. */
 function walkStrings(
   value: unknown,
@@ -170,8 +160,9 @@ function jmespathError(expression: string): string | undefined {
  * **all** issues together (never bailing on the first): schema, cross-reference
  * of every `route:preset:variant` address, `extends` resolution and cycles,
  * duplicate route ids (error) and overlapping `method`+`path` (warning), and
- * JMESPath parse of every `match:` predicate and `{{ }}` template. Pure: it does
- * no IO, operating only on the already-read, line-aware sources.
+ * JMESPath parse of every `${ }` expression in every preset field and variant
+ * (ADR-0009). Pure: it does no IO, operating only on the already-read, line-aware
+ * sources.
  */
 export function validateSources(input: ValidationInput): ValidationIssue[] {
   const issues: ValidationIssue[] = []
@@ -181,6 +172,15 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     issues.push(
       ...validateServiceConfig(input.config.data, input.config.file, input.config.service),
     )
+    if (isRecord(input.config.data)) {
+      issues.push(
+        ...validateRequestLog(
+          input.config.data.requestLog,
+          input.config.file,
+          input.config.service,
+        ),
+      )
+    }
   }
   for (const route of input.routes) {
     issues.push(...validateWithSchema(RouteSchema, route.data, route.file, route.lineAt))
@@ -334,34 +334,36 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     })
   }
 
-  // 6. JMESPath parse — `match:` predicates and `{{ }}` templates in variants.
+  // 6. JMESPath parse — every `${ }` expression in every preset field (string
+  // predicate or pattern leaf) and every variant string (ADR-0009).
   for (const route of input.routes) {
     const view = asRouteView(route.data)
     if (!view) {
       continue
     }
     for (const [presetName, preset] of Object.entries(view.presets)) {
-      const match = isRecord(preset) ? preset.match : undefined
-      if (typeof match === 'string') {
-        const error = jmespathError(match)
-        if (error) {
-          issues.push({
-            severity: 'error',
-            message: `invalid JMESPath in preset "${presetName}" match: ${error}`,
-            file: route.file,
-            line: route.lineAt(['presets', presetName, 'match']) ?? route.lineAt([]),
-          })
-        }
-      }
-    }
-    for (const [variantName, variant] of Object.entries(view.variants)) {
-      walkStrings(variant, ['variants', variantName], (text, at) => {
-        for (const expression of extractTemplates(text)) {
+      walkStrings(preset, ['presets', presetName], (text, at) => {
+        for (const expression of scanTemplateExpressions(text)) {
           const error = jmespathError(expression)
           if (error) {
             issues.push({
               severity: 'error',
-              message: `invalid JMESPath template "{{ ${expression} }}" in variant "${variantName}": ${error}`,
+              message: `invalid JMESPath template "\${ ${expression} }" in preset "${presetName}": ${error}`,
+              file: route.file,
+              line: route.lineAt(at) ?? route.lineAt([]),
+            })
+          }
+        }
+      })
+    }
+    for (const [variantName, variant] of Object.entries(view.variants)) {
+      walkStrings(variant, ['variants', variantName], (text, at) => {
+        for (const expression of scanTemplateExpressions(text)) {
+          const error = jmespathError(expression)
+          if (error) {
+            issues.push({
+              severity: 'error',
+              message: `invalid JMESPath template "\${ ${expression} }" in variant "${variantName}": ${error}`,
               file: route.file,
               line: route.lineAt(at) ?? route.lineAt([]),
             })

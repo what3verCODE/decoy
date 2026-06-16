@@ -3,7 +3,7 @@
 Mount **`@decoy/express` as in-process middleware** in a real Express app. Matched routes are
 served from mocks; everything else **falls through** to the app's own handlers. This is the
 frontend/BFF-dev story — and because the mock runs *inside* the app, "start the client and the
-mock" collapses to **starting one app**. There is no standalone server and no `/admin`:
+mock" collapses to **starting one app**. There is no standalone server and no `/__decoy__`:
 scenarios are switched in-process through the middleware's `control` handle.
 
 ## Run it
@@ -45,8 +45,8 @@ curl -si localhost:3002/orders
 # HTTP/1.1 404 Not Found
 ```
 
-**Switch the scenario in-process** — there's no `/admin` here. A host route, a feature test, or
-any in-process code calls `control.setCollection(...)` on the middleware to flip the scenario;
+**Switch the scenario in-process** — there's no `/__decoy__` here. A host route, a feature test, or
+any in-process code calls `control.useCollection(...)` on the middleware to flip the scenario;
 the next request sees it. The e2e drives exactly this (see `tests/`).
 
 ## What's here

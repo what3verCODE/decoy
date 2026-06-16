@@ -17,19 +17,19 @@ export interface ReloadResult {
 
 /**
  * The canonical JS control API (ADR-0010). A controller owns the **selection** —
- * the only mutable state — and drives the pure engine. `setCollection`,
+ * the only mutable state — and drives the pure engine. `useCollection`,
  * `useRoute`, and `reset` mutate the selection; switching is atomic, so the next
  * `match` sees the new state. Every control call validates against the
  * definitions and fails loud on an unknown collection/route/preset/variant.
  *
  * The engine stays stateless (ADR-0012); this is the stateful holder around it.
- * Cross-process control (`/admin`) and sessions wrap this same surface (#28/#39).
+ * Cross-process control (`/__decoy__`) and sessions wrap this same surface (#28/#39).
  */
 export interface Controller {
   /** Match a request against the current selection. */
   match(request: RequestEnvelope): MatchResult
   /** Switch the active collection. Throws if `name` is not defined. */
-  setCollection(name: string): void
+  useCollection(name: string): void
   /** Pin a single route's `preset` slot to `variant` within the active collection. */
   useRoute(route: string, preset: string, variant: string): void
   /** Drop all per-route overrides, returning to the active collection's baseline. */
@@ -90,7 +90,7 @@ export function createController(definitions: Definitions, defaultCollection: st
     match(request) {
       return engine.match(request, { collection, overrides })
     },
-    setCollection(name) {
+    useCollection(name) {
       if (!defs.collections.has(name)) {
         throw new Error(`decoy: collection "${name}" is not defined`)
       }

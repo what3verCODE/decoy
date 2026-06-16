@@ -1,6 +1,6 @@
 import { createPlaywrightRouter } from '@decoy/playwright'
 import type { Page } from '@playwright/test'
-import { API_URL, expect, loadService, test } from './fixtures'
+import { expect, test } from './fixtures'
 
 // Helpers driving the SPA from the user's side: click a button to fire the fetch.
 async function loadUser(page: Page) {
@@ -52,14 +52,9 @@ test('a miss fails closed (501 + x-mock-miss) and the UI surfaces it', async ({ 
 })
 
 test('parallel browser contexts stay isolated', async ({ browser, baseURL }) => {
-  const service = await loadService()
   const open = async () => {
     const context = await browser.newContext({ baseURL })
-    const router = await createPlaywrightRouter(context, {
-      definitions: service.definitions,
-      defaultCollection: service.defaultCollection,
-      url: API_URL,
-    })
+    const router = await createPlaywrightRouter(context, { url: /\/api\// })
     const page = await context.newPage()
     await page.goto('/')
     return { context, router, page }

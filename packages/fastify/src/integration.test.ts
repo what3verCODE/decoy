@@ -74,16 +74,16 @@ describe('@decoy/fastify integration — real Fastify app over HTTP (supertest)'
     expect(response.body).toHaveProperty('error')
   })
 
-  test('in-process control.setCollection changes what the next HTTP request sees', async () => {
+  test('in-process control.useCollection changes what the next HTTP request sees', async () => {
     expect((await request(app.server).get('/users/42')).status).toBe(200)
 
-    plugin.control.setCollection('error-state')
+    plugin.control.useCollection('error-state')
     const errored = await request(app.server).get('/users/42')
     expect(errored.status).toBe(500)
     expect(errored.body).toEqual({ error: 'upstream exploded' })
 
     // restore the baseline for any later use
-    plugin.control.setCollection('happy-path')
+    plugin.control.useCollection('happy-path')
     expect((await request(app.server).get('/users/42')).status).toBe(200)
   })
 })

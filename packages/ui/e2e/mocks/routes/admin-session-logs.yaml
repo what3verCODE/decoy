@@ -1,0 +1,31 @@
+# GET /__decoy__/sessions/{id}/logs — a session's request timeline, ordered across all
+# services (one timeline). `timeline` spans two services (users + orders) to show
+# the cross-service ordering; `empty` drives the no-requests state.
+id: admin-session-logs
+method: GET
+path: /__decoy__/sessions/{id}/logs
+presets:
+  default: {}
+variants:
+  timeline:
+    status: 200
+    body:
+      - seq: 1
+        method: GET
+        path: /users/7
+        outcome: { type: matched, address: { route: users-by-id, preset: default, variant: success } }
+        status: 200
+        latencyMs: 1.1
+        session: sess-1
+        service: users
+      - seq: 2
+        method: POST
+        path: /orders
+        outcome: { type: matched, address: { route: orders-create, preset: default, variant: created } }
+        status: 201
+        latencyMs: 2.4
+        session: sess-1
+        service: orders
+  empty:
+    status: 200
+    body: []

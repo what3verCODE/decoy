@@ -28,6 +28,9 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 
+# --- decoy durable request-log store (default base path, #70) ---
+.decoy/
+
 # --- editor / OS ---
 .DS_Store
 .idea/

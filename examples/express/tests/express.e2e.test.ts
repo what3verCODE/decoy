@@ -21,14 +21,14 @@ describe('examples/express — in-process middleware: serve mocks, fall through 
   })
 
   test('switching the collection in-process flips what the next request sees', async () => {
-    app.control.setCollection('error-state')
+    app.control.useCollection('error-state')
 
     const errored = await fetch(`${app.base}/users/42`)
     expect(errored.status).toBe(500)
     expect(await errored.json()).toEqual({ error: 'upstream exploded' })
 
     // Restore the baseline scenario for the following tests.
-    app.control.setCollection('happy-path')
+    app.control.useCollection('happy-path')
     expect((await fetch(`${app.base}/users/42`)).status).toBe(200)
   })
 

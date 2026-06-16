@@ -22,7 +22,7 @@ export interface DecoyMiddlewareOptions {
  * JS control API attached. Serves matched routes from mocks and **falls through**
  * (`next()`) on a miss, so it composes with a real Nest app: mock what you want, let
  * everything else hit the host's own controllers. Drive scenarios in-process via
- * {@link DecoyMiddleware.control} — `setCollection`/`useRoute`/`reset` mutate the
+ * {@link DecoyMiddleware.control} — `useCollection`/`useRoute`/`reset` mutate the
  * selection atomically, so the next request reflects the change.
  */
 export interface DecoyMiddleware extends DecoyMiddlewareFn {
@@ -67,7 +67,7 @@ function writeMatched(res: NestResponse, response: MockResponse): void {
 /**
  * Create a {@link DecoyMiddleware} over the given definitions, starting on
  * `defaultCollection`. Each middleware owns its own {@link Controller}, so the host
- * app drives scenarios entirely in-process — no standalone server, no `/admin`. A
+ * app drives scenarios entirely in-process — no standalone server, no `/__decoy__`. A
  * matched request is served from its variant and ends here; a miss calls `next()` to
  * fall through to the rest of the Nest stack. An unexpected failure while building the
  * envelope or response is passed to `next(error)` for Nest's exception layer. Throws

@@ -115,7 +115,7 @@ describe('DecoyModule.forRoot', () => {
     const dynamic = DecoyModule.forRoot({ definitions: defs(), defaultCollection: 'happy-path' })
     const middleware = providerValue(dynamic, DECOY_MIDDLEWARE) as DecoyMiddleware
 
-    middleware.control.setCollection('error-state')
+    middleware.control.useCollection('error-state')
     expect(middleware.selection.collection).toBe('error-state')
   })
 
@@ -126,10 +126,10 @@ describe('DecoyModule.forRoot', () => {
     expect(a.module).not.toBe(b.module)
     const aMw = providerValue(a, DECOY_MIDDLEWARE) as DecoyMiddleware
     const bMw = providerValue(b, DECOY_MIDDLEWARE) as DecoyMiddleware
-    aMw.control.setCollection('error-state')
+    aMw.control.useCollection('error-state')
     expect(aMw.selection.collection).toBe('error-state')
     expect(bMw.selection.collection).toBe('error-state')
-    bMw.control.setCollection('happy-path')
+    bMw.control.useCollection('happy-path')
     expect(bMw.selection.collection).toBe('happy-path')
     expect(aMw.selection.collection).toBe('error-state')
   })
@@ -150,7 +150,7 @@ describe('DecoyModule.forService', () => {
       missStatus: 501,
       sessionIdleTtlMs: 0,
       definitions: defs(),
-      admin: { enabled: false, prefix: '/admin' },
+      control: { enabled: false, prefix: '/__decoy__' },
     })
 
     const middleware = providerValue(dynamic, DECOY_MIDDLEWARE) as DecoyMiddleware

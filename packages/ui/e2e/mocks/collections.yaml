@@ -1,0 +1,23 @@
+# The e2e baseline: a populated catalog, a two-record live stream, and the
+# collections control surface (list/detail/selection + the switch/pin/reset POSTs).
+# Tests that need an empty state pin the route's `empty` variant via the router
+# control handle.
+- id: default
+  routes:
+    - admin-services:default:list
+    # The orders preset is tried first (array order, first match wins): a
+    # ?service=orders catalog request resolves here; everything else (users) falls
+    # through to the default catch-all below.
+    - admin-routes:orders:orders-catalog
+    - admin-routes:default:catalog
+    - admin-route-detail:default:detail
+    - admin-try:default:resolved
+    - admin-logs:default:stream
+    - admin-collections:default:list
+    - admin-collection-detail:default:detail
+    - admin-selection:default:default
+    - admin-collection-switch:default:switched
+    - admin-route-pin:default:pinned
+    - admin-reset:default:cleared
+    - admin-sessions:default:list
+    - admin-session-logs:default:timeline

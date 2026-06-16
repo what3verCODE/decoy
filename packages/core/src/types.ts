@@ -14,31 +14,40 @@ export interface RequestEnvelope {
   body: unknown
 }
 
-/** One response for a route. v1 ships inline `body` only. */
+/**
+ * One response for a route. v1 ships inline `body` only. Every field is rendered
+ * through `${ }` templating against the request envelope (ADR-0009): `status` and
+ * `delay` widen to `number | string` so they too can be templated (a whole-string
+ * `"${ expr }"` yields a typed number; an interpolated value is coerced).
+ */
 export interface Variant {
-  /** HTTP status, default 200. */
-  status?: number
+  /** HTTP status, default 200. Templated `${ }` strings are coerced to a number. */
+  status?: number | string
   /** Response headers; `Content-Type` is inferred for object/array bodies unless set. */
   headers?: Record<string, string>
   /** Artificial latency in ms (reserved; not applied by the tracer-bullet engine). */
-  delay?: number
+  delay?: number | string
   /** Inline response body. */
   body?: unknown
 }
 
 /**
  * Additional request-match conditions layered on a route, evaluated against the
- * request envelope and ANDed together. `query`/`headers` match as a subset
- * (request must *contain* the pairs; extras ignored); `body` matches deep-partial
- * (nested subset). `{}` is the catch-all (no conditions → always matches). The
- * JMESPath `match:` predicate is evaluated against the request envelope and ANDed
- * with the literal matchers — every condition must hold (ADR-0008).
+ * request envelope and **ANDed** together. `{}` is the catch-all (no conditions →
+ * always matches). Each field is either an **object pattern** or a **string
+ * predicate** (ADR-0008):
+ * - **object** → a literal pattern: `query`/`headers` match as a subset (request
+ *   must *contain* the pairs; extras ignored), `body` matches deep-partial (nested
+ *   subset). Its string leaves are `${ }`-rendered first, so expected values can be
+ *   computed from the request.
+ * - **string** → a `${ }` predicate: rendered against the envelope, then gated on
+ *   JMESPath truthiness (the field name documents what is checked; the expression
+ *   roots at the whole envelope regardless).
  */
 export interface Preset {
-  query?: Record<string, string>
-  headers?: Record<string, string>
+  query?: string | Record<string, string>
+  headers?: string | Record<string, string>
   body?: unknown
-  match?: string
 }
 
 /** The coarse matcher + namespace: `method` + `path` (OpenAPI `{id}` params) + `id`. */

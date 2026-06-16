@@ -1,0 +1,12 @@
+# GET /__decoy__/selection — the current selection the panel seeds active + overrides from.
+id: admin-selection
+method: GET
+path: /__decoy__/selection
+presets:
+  default: {}
+variants:
+  default:
+    status: 200
+    body:
+      collection: happy-path
+      overrides: []

@@ -1,0 +1,14 @@
+# POST /__decoy__/collection — the active-collection switch. The response is fixed (the
+# tracer-bullet engine has no `{{ }}` templating yet), so the e2e switches to
+# error-state, the value this variant encodes.
+id: admin-collection-switch
+method: POST
+path: /__decoy__/collection
+presets:
+  default: {}
+variants:
+  switched:
+    status: 200
+    body:
+      collection: error-state
+      overrides: []

@@ -1,7 +1,7 @@
 # examples/
 
 Per-surface **example projects** — each one a self-contained showcase of Decoy through a
-single integration surface (the standalone server + `/admin`, the Express middleware, the
+single integration surface (the standalone server + `/__decoy__`, the Express middleware, the
 Nest module, the Playwright router, …). They are the **e2e tier** of the test taxonomy:
 
 - **Unit** — `packages/*/src/*.test.ts`. Fakes / hand-built definitions, no IO.

@@ -1,0 +1,9 @@
+# Same mocks as users-api, but with a custom fail-closed miss status (ADR-0005) — the
+# router reads it from here, there is no in-code override. Reuses the sibling fixture's
+# routes/collections so the mock data stays single-sourced.
+name: users-api
+port: 0
+missStatus: 503
+routesDir: ../users-api/mocks/routes
+collectionsFile: ../users-api/mocks/collections.yaml
+defaultCollection: happy-path

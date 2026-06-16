@@ -30,7 +30,7 @@ export interface DecoyPluginOptions {
  * mock what you want, let everything else hit the host's own routes. When neither a
  * mock nor a real route answers, the request **fails closed** (`501 + x-mock-miss`).
  * Drive scenarios in-process via {@link DecoyPlugin.control} —
- * `setCollection`/`useRoute`/`reset` mutate the selection atomically, so the next
+ * `useCollection`/`useRoute`/`reset` mutate the selection atomically, so the next
  * request reflects the change.
  */
 export interface DecoyPlugin extends FastifyPluginCallback {
@@ -84,7 +84,7 @@ function writeMiss(reply: FastifyMockReply, message: string, status: number): vo
 /**
  * Create a {@link DecoyPlugin} over the given definitions, starting on
  * `defaultCollection`. Each plugin owns its own {@link Controller}, so the host app
- * drives scenarios entirely in-process — no standalone server, no `/admin`.
+ * drives scenarios entirely in-process — no standalone server, no `/__decoy__`.
  *
  * The plugin registers two seams on the host instance:
  * - a `preHandler` hook that, for a request whose path a real route already owns,

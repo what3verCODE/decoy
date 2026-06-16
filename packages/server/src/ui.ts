@@ -7,12 +7,9 @@ import {
   type ServerResponse,
 } from 'node:http'
 import { extname, join, normalize, sep } from 'node:path'
-import { handleAdmin, isAdminPath } from './admin'
+import { CONTROL_PREFIX, isUnderPrefix } from './control'
 import { consoleLogger, type Logger } from './logger'
 import type { DecoyServer } from './server'
-
-/** The path prefix the UI server mounts its (same-origin) data API under. */
-const UI_ADMIN_PREFIX = '/admin'
 
 /** A running `--ui` server: the web control panel on its own loopback port. */
 export interface DecoyUiServer {
@@ -70,6 +67,26 @@ function pathOf(url: string | undefined): string {
   return new URL(url ?? '/', 'http://localhost').pathname
 }
 
+/** The `?service=<name>` selector naming which instance a control request targets. */
+function serviceOf(url: string | undefined): string | null {
+  return new URL(url ?? '/', 'http://localhost').searchParams.get('service')
+}
+
+/**
+ * Pick the instance a `?service=` control request targets: the one whose name
+ * matches, else the first (the degenerate single-service default, and the safe
+ * fallback for an unknown name — the switcher only ever offers known services).
+ */
+function selectInstance(instances: DecoyServer[], name: string | null): DecoyServer | undefined {
+  if (name !== null) {
+    const match = instances.find((instance) => instance.name === name)
+    if (match) {
+      return match
+    }
+  }
+  return instances[0]
+}
+
 /**
  * Resolve a request path to a file under `assetDir`, defending against `..`
  * traversal. Returns the asset path, or `undefined` if it escapes the root.
@@ -112,9 +129,6 @@ export function createUiServer(
 ): DecoyUiServer {
   const logger = options.logger ?? consoleLogger
   const { assetDir } = options
-  // v1 walking skeleton controls a single instance; the service switcher across
-  // multiple instances (ADR-0017) lands with the multi-instance aggregator.
-  const instance = instances[0]
 
   const bindHost = options.host ?? '127.0.0.1'
   const bindPort = options.port ?? 0
@@ -148,10 +162,26 @@ export function createUiServer(
       return
     }
 
-    // Same-origin data API (no CORS): drive the in-process instance directly.
-    if (instance && isAdminPath(req.url, UI_ADMIN_PREFIX)) {
-      await handleAdmin(req, res, instance.sessions, UI_ADMIN_PREFIX, logger, instance.definitions)
-      return
+    // Same-origin data API (no CORS): drive the in-process instances directly.
+    if (isUnderPrefix(req.url, CONTROL_PREFIX)) {
+      // The service axis (ADR-0017): list every instance for the SPA's switcher.
+      // Inherently cross-instance, so the aggregator serves it (not `serveControl`).
+      if (req.method === 'GET' && pathOf(req.url) === `${CONTROL_PREFIX}/services`) {
+        res.statusCode = 200
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify(instances.map((instance) => ({ name: instance.name }))))
+        return
+      }
+      // Every per-instance endpoint goes through the `?service=`-selected instance's
+      // `serveControl` (ADR-0010), which closes over that instance's own store. The
+      // CLI shares **one** store across instances (ADR-0017), so the logs endpoints
+      // aggregate across services regardless of the selected service; control/catalog
+      // endpoints are per-instance.
+      const target = selectInstance(instances, serviceOf(req.url))
+      if (target) {
+        target.serveControl(req, res)
+        return
+      }
     }
 
     const urlPath = pathOf(req.url)

@@ -3,6 +3,11 @@ import type { LoadedService } from '@decoy/config'
 import type { Collection, Route } from '@decoy/core'
 import { afterEach, beforeEach, describe, expect, test } from '@rstest/core'
 import type { Logger, RequestLog } from './logger'
+import {
+  createMemoryRequestLogStore,
+  createSharedRequestLogStore,
+  type RequestLogStore,
+} from './request-log-store'
 import { createServer, type DecoyServer } from './server'
 import type { Scheduler, WatchFn } from './watch'
 
@@ -83,7 +88,7 @@ function service(): LoadedService {
     defaultCollection: 'happy-path',
     missStatus: 501,
     sessionIdleTtlMs: 1_800_000,
-    admin: { enabled: true, prefix: '/admin' },
+    control: { enabled: true, prefix: '/__decoy__' },
     definitions: {
       routes: new Map([
         [usersRoute.id, usersRoute],
@@ -129,7 +134,7 @@ describe('createServer (HTTP)', () => {
   })
 
   test('route matched but no active preset matched fails closed with a presets-tried diagnostic', async () => {
-    server.control.setCollection('strict')
+    server.control.useCollection('strict')
     // /search matches by method+path, but its only active preset (with-query) needs q=ada
     const response = await fetch(`${base}/search`)
 
@@ -159,10 +164,10 @@ describe('createServer (HTTP)', () => {
     expect(response.headers.get('x-mock-miss')).toBe('true')
   })
 
-  test('in-process setCollection changes the next response atomically', async () => {
+  test('in-process useCollection changes the next response atomically', async () => {
     expect((await fetch(`${base}/users/42`)).status).toBe(200)
 
-    server.control.setCollection('error-state')
+    server.control.useCollection('error-state')
     const switched = await fetch(`${base}/users/42`)
     expect(switched.status).toBe(500)
     expect(await switched.json()).toEqual({ error: 'boom' })
@@ -170,6 +175,62 @@ describe('createServer (HTTP)', () => {
     server.control.reset()
     server.control.useRoute('users-by-id', 'default', 'error')
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
+  })
+
+  test('exposes the service name (the aggregator routes control by it, #72)', () => {
+    expect(server.name).toBe('users')
+  })
+})
+
+describe('createServer (shared request-log store, #72, #80)', () => {
+  test('records into a shared store tagged by service, closing it once after the last instance', async () => {
+    // One store shared across two instances (ADR-0017): the aggregator's logs view.
+    // Count the underlying close to prove the ref-counted close-once seam (#80).
+    const inner = createMemoryRequestLogStore()
+    let closeCount = 0
+    const counting: RequestLogStore = {
+      ...inner,
+      close() {
+        closeCount += 1
+        inner.close()
+      },
+    }
+    const shared = createSharedRequestLogStore(counting)
+
+    const users = createServer(
+      { ...service(), name: 'users' },
+      {
+        logger: silent,
+        requestLog: shared,
+      },
+    )
+    const orders = createServer(
+      {
+        ...service(),
+        name: 'orders',
+        definitions: {
+          routes: new Map([[usersRoute.id, usersRoute]]),
+          collections: new Map([[happyPath.id, happyPath]]),
+        },
+      },
+      { logger: silent, requestLog: shared },
+    )
+    const usersPort = await users.listen()
+    const ordersPort = await orders.listen()
+    await fetch(`http://localhost:${usersPort}/users/42`)
+    await fetch(`http://localhost:${ordersPort}/users/7`)
+
+    const records = counting.snapshot()
+    expect(records.map((r) => r.service)).toEqual(['users', 'orders'])
+    // The shared store gives one monotonic seq across services (one timeline).
+    expect(records.map((r) => r.seq)).toEqual([1, 2])
+
+    // Closing one instance releases only its handle — the shared store stays open.
+    await users.close()
+    expect(closeCount).toBe(0)
+    // Closing the last instance closes the shared store exactly once (#80).
+    await orders.close()
+    expect(closeCount).toBe(1)
   })
 })
 
@@ -230,7 +291,7 @@ describe('createServer (hot reload)', () => {
     })
     const port = await server.listen()
     try {
-      server.control.setCollection('error-state')
+      server.control.useCollection('error-state')
       expect((await fetch(`http://localhost:${port}/users/42`)).status).toBe(500)
 
       cap.fire()

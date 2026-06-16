@@ -22,7 +22,7 @@ export interface DecoyMiddlewareOptions {
  * control API attached. Serves matched routes from mocks and **falls through**
  * (`next()`) on a miss, so it composes with a real app: mock what you want,
  * let everything else hit the host's own handlers. Drive scenarios in-process
- * via {@link DecoyMiddleware.control} — `setCollection`/`useRoute`/`reset` mutate
+ * via {@link DecoyMiddleware.control} — `useCollection`/`useRoute`/`reset` mutate
  * the selection atomically, so the next request reflects the change.
  */
 export interface DecoyMiddleware extends RequestHandler {
@@ -68,7 +68,7 @@ function writeMatched(res: ExpressResponse, response: MockResponse): void {
  * Create a {@link DecoyMiddleware} over the given definitions, starting on
  * `defaultCollection`. Each middleware owns its own {@link Controller}, so the
  * host app drives scenarios entirely in-process — no standalone server, no
- * `/admin`. A matched request is served from its variant and ends here; a miss
+ * `/__decoy__`. A matched request is served from its variant and ends here; a miss
  * calls `next()` to fall through to the rest of the app's stack. An unexpected
  * failure while building the envelope or response is passed to `next(error)` for
  * the app's error handler. Throws if `defaultCollection` is not defined.

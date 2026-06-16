@@ -89,13 +89,13 @@ describe('@decoy/nest integration — real NestJS app over HTTP (forRoot)', () =
 
     expect((await request(app.getHttpServer()).get('/users/42')).status).toBe(200)
 
-    control.setCollection('error-state')
+    control.useCollection('error-state')
     const errored = await request(app.getHttpServer()).get('/users/42')
     expect(errored.status).toBe(500)
     expect(errored.body).toEqual({ error: 'upstream exploded' })
 
     // restore the baseline for any later use
-    control.setCollection('happy-path')
+    control.useCollection('happy-path')
     expect((await request(app.getHttpServer()).get('/users/42')).status).toBe(200)
   })
 })

@@ -12,7 +12,7 @@ const configPath = resolve(process.cwd(), 'decoy.config.ts')
 const silent: Logger = { info() {}, warn() {}, request() {} }
 
 export interface RunningServer {
-  /** Base URL of the standalone Decoy server. Its `/admin` API rides the same port. */
+  /** Base URL of the standalone Decoy server. Its `/__decoy__` API rides the same port. */
   base: string
   /** Stop the server. */
   stop(): Promise<void>

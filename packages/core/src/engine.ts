@@ -1,12 +1,9 @@
-import {
-  compile as compileJmespath,
-  type JSONValue,
-  TreeInterpreter,
-} from '@jmespath-community/jmespath'
+import type { JSONValue } from '@jmespath-community/jmespath'
+import { parseAddress, resolveCollections, slotOf } from './collections'
 import { type CompiledPath, compilePath, matchPath } from './path'
 import { buildResponse } from './response'
+import { compileTemplate, hasTemplates, type Renderer } from './template'
 import type {
-  Collection,
   Definitions,
   Engine,
   MatchResult,
@@ -15,20 +12,28 @@ import type {
   RouteOverride,
   Selection,
   TriedPreset,
-  VariantAddress,
+  Variant,
 } from './types'
 
-/** A pre-compiled JMESPath `match:` predicate (parsed once at engine creation). */
-type Predicate = ReturnType<typeof compileJmespath>
+/**
+ * A compiled preset field, tagged by how its rendered result is checked: a
+ * `predicate` (string field) gates on JMESPath truthiness; `query`/`headers`/`body`
+ * (object patterns) match structurally after their string leaves are rendered.
+ */
+type FieldMatcher =
+  | { mode: 'predicate'; render: Renderer }
+  | { mode: 'query'; render: Renderer }
+  | { mode: 'headers'; render: Renderer }
+  | { mode: 'body'; render: Renderer }
 
 /**
  * JMESPath truthiness: a value is *false* iff it is `null`/absent, the boolean
  * `false`, or an empty string/array/object — everything else (including `0`) is
- * truthy. A `match:` predicate matches when its evaluated result is truthy, so a
+ * truthy. A string predicate matches when its rendered result is truthy, so a
  * boolean comparison (`a == 'x'`) and a bare path (`body.flag`) both read
  * naturally, mirroring JMESPath filter (`[?expr]`) semantics.
  */
-function isTruthy(value: JSONValue): boolean {
+function isTruthy(value: unknown): boolean {
   if (value === null || value === false) {
     return false
   }
@@ -42,68 +47,6 @@ function isTruthy(value: JSONValue): boolean {
     return Object.keys(value).length > 0
   }
   return true
-}
-
-function parseAddress(entry: string): VariantAddress | null {
-  const parts = entry.split(':')
-  if (parts.length !== 3) {
-    return null
-  }
-  const [route, preset, variant] = parts
-  if (!route || !preset || !variant) {
-    return null
-  }
-  return { route, preset, variant }
-}
-
-/**
- * Resolve every collection's `extends` chain into a flat, ordered entry list.
- * A child inherits its parent's entries; an entry whose `route:preset` slot
- * already exists in the parent overrides it **in place** (keeping the parent's
- * order position), and any new slot is appended in child order. Cyclic chains
- * and references to undefined collections throw — this is static, IO-free, and
- * fails fast at engine creation.
- */
-function resolveCollections(collections: Map<string, Collection>): Map<string, string[]> {
-  const resolved = new Map<string, string[]>()
-  const resolving = new Set<string>()
-
-  function resolve(id: string): string[] {
-    const cached = resolved.get(id)
-    if (cached) {
-      return cached
-    }
-    const collection = collections.get(id)
-    if (!collection) {
-      throw new Error(`collection "${id}" is not defined`)
-    }
-    if (resolving.has(id)) {
-      throw new Error(`collection "${id}" has a cyclic "extends" chain`)
-    }
-    resolving.add(id)
-
-    let entries: string[]
-    if (collection.extends) {
-      entries = mergeEntries(resolve(collection.extends), collection.routes)
-    } else {
-      entries = [...collection.routes]
-    }
-
-    resolving.delete(id)
-    resolved.set(id, entries)
-    return entries
-  }
-
-  for (const id of collections.keys()) {
-    resolve(id)
-  }
-  return resolved
-}
-
-/** The `route:preset` slot of an entry — the unit `extends`/overrides key on. */
-function slotOf(entry: string): string | null {
-  const address = parseAddress(entry)
-  return address ? `${address.route}:${address.preset}` : null
 }
 
 /**
@@ -136,21 +79,6 @@ function applyOverrides(entries: string[], overrides: RouteOverride[] | undefine
   for (const [slot, variant] of bySlot) {
     if (!used.has(slot)) {
       result.push(`${slot}:${variant}`)
-    }
-  }
-  return result
-}
-
-/** Merge child entries onto parent entries: same slot overrides in place, new slots append. */
-function mergeEntries(parent: string[], child: string[]): string[] {
-  const result = [...parent]
-  for (const entry of child) {
-    const slot = slotOf(entry)
-    const index = slot === null ? -1 : result.findIndex((existing) => slotOf(existing) === slot)
-    if (index >= 0) {
-      result[index] = entry
-    } else {
-      result.push(entry)
     }
   }
   return result
@@ -215,35 +143,74 @@ function deepPartialMatch(pattern: unknown, value: unknown): boolean {
   return pattern === value
 }
 
+/** Coerce a rendered pattern object's leaves to strings for query/headers comparison. */
+function stringifyRecord(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, leaf] of Object.entries(value)) {
+      out[key] = typeof leaf === 'string' ? leaf : leaf == null ? '' : String(leaf)
+    }
+  }
+  return out
+}
+
 /**
- * A preset matches when *all* of its conditions hold against the request
- * envelope: `query`/`headers` as subset, `body` as deep-partial, and a JMESPath
- * `match:` predicate (pre-compiled) ANDed with them — every literal matcher and
- * the predicate must pass. A catch-all (`{}`) has no conditions and always
- * matches. The predicate is evaluated against the whole envelope and gates on
- * JMESPath truthiness (ADR-0008).
+ * Compile a preset into its field matchers (ADR-0008): a **string** field is a
+ * `${ }` predicate (gated on truthiness); an **object** field is a literal pattern
+ * (`query`/`headers` subset, `body` deep-partial) whose string leaves are rendered
+ * before matching. A catch-all (`{}`) compiles to no fields. Throws on a malformed
+ * `${ }` expression (the engine's fail-fast backstop; validation catches it earlier
+ * with `file:line`).
  */
-function presetMatches(
-  preset: Preset,
-  request: RequestEnvelope,
-  predicate: Predicate | undefined,
-): boolean {
-  if (preset.query !== undefined && !queryMatches(preset.query, request.query)) {
-    return false
+function compilePreset(preset: Preset): FieldMatcher[] {
+  const fields: FieldMatcher[] = []
+  if (preset.query !== undefined) {
+    const render = compileTemplate(preset.query)
+    fields.push(
+      typeof preset.query === 'string' ? { mode: 'predicate', render } : { mode: 'query', render },
+    )
   }
-  if (preset.headers !== undefined && !headersMatch(preset.headers, request.headers)) {
-    return false
+  if (preset.headers !== undefined) {
+    const render = compileTemplate(preset.headers)
+    fields.push(
+      typeof preset.headers === 'string'
+        ? { mode: 'predicate', render }
+        : { mode: 'headers', render },
+    )
   }
-  if (preset.body !== undefined && !deepPartialMatch(preset.body, request.body)) {
-    return false
+  if (preset.body !== undefined) {
+    const render = compileTemplate(preset.body)
+    fields.push(
+      typeof preset.body === 'string' ? { mode: 'predicate', render } : { mode: 'body', render },
+    )
   }
-  if (
-    predicate !== undefined &&
-    !isTruthy(TreeInterpreter.search(predicate, request as unknown as JSONValue))
-  ) {
-    return false
+  return fields
+}
+
+/**
+ * Render one compiled field and check it against the request: a `predicate` gates
+ * on JMESPath truthiness; `query`/`headers`/`body` patterns match structurally.
+ */
+function fieldMatches(field: FieldMatcher, request: RequestEnvelope, env: JSONValue): boolean {
+  switch (field.mode) {
+    case 'predicate':
+      return isTruthy(field.render(env))
+    case 'query':
+      return queryMatches(stringifyRecord(field.render(env)), request.query)
+    case 'headers':
+      return headersMatch(stringifyRecord(field.render(env)), request.headers)
+    case 'body':
+      return deepPartialMatch(field.render(env), request.body)
   }
-  return true
+}
+
+/**
+ * A preset matches when *all* of its compiled fields hold against the request
+ * envelope (with `pathParams` known) — fields are ANDed. A catch-all (no fields)
+ * always matches.
+ */
+function presetMatches(fields: FieldMatcher[], request: RequestEnvelope, env: JSONValue): boolean {
+  return fields.every((field) => fieldMatches(field, request, env))
 }
 
 /**
@@ -280,24 +247,30 @@ function describeNoPresetMiss(
  */
 export function createEngine(definitions: Definitions): Engine {
   const compiled = new Map<string, CompiledPath>()
-  // Pre-compile every preset's JMESPath `match:` predicate once, keyed by preset
-  // identity. An unparseable predicate throws here (fail-fast at creation, like a
-  // cyclic extends) — config validation (#36) catches it earlier at load with
-  // file:line; this is the engine's own backstop for programmatic definitions.
-  const predicates = new Map<Preset, Predicate>()
+  // Pre-compile every preset's field matchers and every variant's `${ }` renderer
+  // once, keyed by identity (ADR-0009: no per-request compile). A malformed
+  // expression throws here (fail-fast at creation, like a cyclic extends) — config
+  // validation catches it earlier at load with file:line; this is the engine's own
+  // backstop for programmatic definitions. A variant with no templates is stored as
+  // `null` (the no-template fast path: served verbatim, no per-request render).
+  const presets = new Map<Preset, FieldMatcher[]>()
+  const variantRenderers = new Map<Variant, Renderer | null>()
   for (const [id, route] of definitions.routes) {
     compiled.set(id, compilePath(route.path))
     for (const [name, preset] of Object.entries(route.presets)) {
-      if (preset.match === undefined) {
-        continue
-      }
       try {
-        predicates.set(preset, compileJmespath(preset.match))
+        presets.set(preset, compilePreset(preset))
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error)
-        throw new Error(
-          `route "${id}" preset "${name}" has an invalid match: predicate "${preset.match}": ${reason}`,
-        )
+        throw new Error(`route "${id}" preset "${name}" has an invalid \${ } expression: ${reason}`)
+      }
+    }
+    for (const [name, variant] of Object.entries(route.variants)) {
+      try {
+        variantRenderers.set(variant, hasTemplates(variant) ? compileTemplate(variant) : null)
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new Error(`route "${id}" variant "${name}" has an invalid \${ } template: ${reason}`)
       }
     }
   }
@@ -336,9 +309,12 @@ export function createEngine(definitions: Definitions): Engine {
           continue
         }
         // The route matched by method+path: from here, any failure to serve is a
-        // no-preset miss, not a no-route miss.
+        // no-preset miss, not a no-route miss. Templating roots at the request
+        // envelope with the now-known pathParams folded in (ADR-0009).
+        const env = { ...request, pathParams } as unknown as JSONValue
         const preset = route.presets[address.preset]
-        if (!preset || !presetMatches(preset, request, predicates.get(preset))) {
+        const fields = preset && presets.get(preset)
+        if (!preset || !fields || !presetMatches(fields, request, env)) {
           tried.push({ route: address.route, preset: address.preset })
           continue
         }
@@ -347,11 +323,13 @@ export function createEngine(definitions: Definitions): Engine {
           tried.push({ route: address.route, preset: address.preset })
           continue
         }
+        const renderer = variantRenderers.get(variant)
+        const rendered = renderer ? (renderer(env) as Variant) : variant
         return {
           type: 'matched',
           address,
           pathParams,
-          response: buildResponse(variant),
+          response: buildResponse(rendered),
         }
       }
 

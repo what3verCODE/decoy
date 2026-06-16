@@ -3,7 +3,7 @@
 Fake the **browser→API edge against a live server**. A real SPA (served by Rsbuild) makes real
 `fetch` calls to a **standalone [Decoy](../../packages/server) server**; real Chromium
 (`@playwright/test`) drives the UI. Scenario control runs over the server's
-[`/admin`](../../packages/server) HTTP API, scoped per browser session via the
+[`/__decoy__`](../../packages/server) HTTP API, scoped per browser session via the
 [`SessionRouter`](../../packages/control) and the `x-mock-session` header — so the headline demo
 is **parallel session isolation**: one context switching its scenario does not leak into another.
 
@@ -19,11 +19,11 @@ pnpm --filter ./examples/playwright-server dev
 
 It prints the SPA URL (open it) and the Decoy server URL. The SPA's `/api/*` calls are proxied to
 the Decoy server. In `dev` the SPA uses the **global** session, so switch its scenario by curling
-`/admin`:
+`/__decoy__`:
 
 ```sh
-curl -X POST localhost:3004/admin/collection -d '{"name":"error-state"}'   # then reload the SPA
-curl -X POST localhost:3004/admin/collection -d '{"name":"happy-path"}'
+curl -X POST localhost:3004/__decoy__/collection -d '{"name":"error-state"}'   # then reload the SPA
+curl -X POST localhost:3004/__decoy__/collection -d '{"name":"happy-path"}'
 ```
 
 ```sh

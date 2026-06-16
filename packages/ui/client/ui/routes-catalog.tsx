@@ -1,42 +1,9 @@
-import { computed, signal } from '@preact/signals'
 import type { JSX } from 'preact'
-import { fetchRoutes, type RouteCatalogEntry } from './api'
+import { openRoute } from '../model/route-detail'
+import { load } from '../model/routes'
 import { MethodBadge } from './badges'
 
-type Load =
-  | { state: 'loading' }
-  | { state: 'ready'; routes: RouteCatalogEntry[] }
-  | { state: 'error'; message: string }
-
-const load = signal<Load>({ state: 'loading' })
-const routeCount = computed(() => (load.value.state === 'ready' ? load.value.routes.length : 0))
-
-/** Fetch the routes catalog into the `load` signal — called once on boot. */
-export async function loadRoutes(): Promise<void> {
-  load.value = { state: 'loading' }
-  try {
-    load.value = { state: 'ready', routes: await fetchRoutes() }
-  } catch (error) {
-    load.value = { state: 'error', message: error instanceof Error ? error.message : String(error) }
-  }
-}
-
-function TopBar(): JSX.Element {
-  return (
-    <header class="flex items-center gap-3 h-12 px-4 border-b border-border bg-card shrink-0">
-      <span class="font-semibold tracking-tight text-foreground select-none">decoy</span>
-      <span class="text-[11px] uppercase tracking-wider text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-        control panel
-      </span>
-      <div class="flex-1" />
-      <span class="text-muted-foreground">
-        <span class="text-foreground tabular-nums">{routeCount.value}</span> routes
-      </span>
-    </header>
-  )
-}
-
-function RoutesCatalog(): JSX.Element {
+export function RoutesCatalog(): JSX.Element {
   const current = load.value
   return (
     <section class="flex-1 min-w-0 flex flex-col overflow-hidden" data-testid="routes-catalog">
@@ -79,8 +46,15 @@ function RoutesCatalog(): JSX.Element {
                     <MethodBadge method={route.method} />
                   </td>
                   <td class="px-2 py-1.5 font-mono text-[12px] text-foreground">{route.path}</td>
-                  <td class="px-2 py-1.5 font-mono text-[12px] text-muted-foreground">
-                    {route.id}
+                  <td class="px-2 py-1.5">
+                    <button
+                      type="button"
+                      data-testid="route-open"
+                      onClick={() => void openRoute(route.id)}
+                      class="font-mono text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      {route.id}
+                    </button>
                   </td>
                   <td class="px-2 py-1.5 font-mono text-[12px] text-foreground text-right tabular-nums">
                     {route.presetCount}
@@ -95,16 +69,5 @@ function RoutesCatalog(): JSX.Element {
         )}
       </div>
     </section>
-  )
-}
-
-export function App(): JSX.Element {
-  return (
-    <div class="h-full flex flex-col bg-background text-foreground">
-      <TopBar />
-      <div class="flex-1 flex min-h-0">
-        <RoutesCatalog />
-      </div>
-    </div>
   )
 }

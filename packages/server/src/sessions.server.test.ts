@@ -26,7 +26,7 @@ function service(): LoadedService {
     port: 0,
     defaultCollection: 'happy-path',
     missStatus: 501,
-    admin: { enabled: true, prefix: '/admin' },
+    control: { enabled: true, prefix: '/__decoy__' },
     sessionIdleTtlMs: 1_800_000,
     definitions: {
       routes: new Map([[usersRoute.id, usersRoute]]),
@@ -53,7 +53,7 @@ describe('sessions over HTTP', () => {
   })
 
   async function createSession(): Promise<string> {
-    const res = await fetch(`${base}/admin/sessions`, { method: 'POST' })
+    const res = await fetch(`${base}/__decoy__/sessions`, { method: 'POST' })
     expect(res.status).toBe(201)
     return ((await res.json()) as { id: string }).id
   }
@@ -63,14 +63,14 @@ describe('sessions over HTTP', () => {
     if (sessionId) {
       headers['x-mock-session'] = sessionId
     }
-    return fetch(`${base}/admin/collection`, {
+    return fetch(`${base}/__decoy__/collection`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ name }),
     })
   }
 
-  test('POST /admin/sessions creates a session with an id', async () => {
+  test('POST /__decoy__/sessions creates a session with an id', async () => {
     const id = await createSession()
     expect(typeof id).toBe('string')
     expect(id.length).toBeGreaterThan(0)
@@ -97,7 +97,7 @@ describe('sessions over HTTP', () => {
     expect((await fetch(`${base}/users/42`, { headers: { 'x-mock-session': b } })).status).toBe(200)
   })
 
-  test('setCollection with no session header mutates the global session', async () => {
+  test('useCollection with no session header mutates the global session', async () => {
     expect((await switchCollection('error-state')).status).toBe(200)
     expect((await fetch(`${base}/users/42`)).status).toBe(500)
     // A fresh session still starts from the default collection, not the global mutation.
@@ -107,23 +107,23 @@ describe('sessions over HTTP', () => {
     )
   })
 
-  test('GET /admin/selection is session-scoped', async () => {
+  test('GET /__decoy__/selection is session-scoped', async () => {
     const id = await createSession()
     await switchCollection('error-state', id)
 
-    const scoped = await fetch(`${base}/admin/selection`, { headers: { 'x-mock-session': id } })
+    const scoped = await fetch(`${base}/__decoy__/selection`, { headers: { 'x-mock-session': id } })
     expect(await scoped.json()).toEqual({ collection: 'error-state', overrides: [] })
 
-    const global = await fetch(`${base}/admin/selection`)
+    const global = await fetch(`${base}/__decoy__/selection`)
     expect(await global.json()).toEqual({ collection: 'happy-path', overrides: [] })
   })
 
-  test('DELETE /admin/sessions/{id} destroys a session; unknown is a 404', async () => {
+  test('DELETE /__decoy__/sessions/{id} destroys a session; unknown is a 404', async () => {
     const id = await createSession()
-    const destroyed = await fetch(`${base}/admin/sessions/${id}`, { method: 'DELETE' })
+    const destroyed = await fetch(`${base}/__decoy__/sessions/${id}`, { method: 'DELETE' })
     expect(destroyed.status).toBe(200)
 
-    const missing = await fetch(`${base}/admin/sessions/${id}`, { method: 'DELETE' })
+    const missing = await fetch(`${base}/__decoy__/sessions/${id}`, { method: 'DELETE' })
     expect(missing.status).toBe(404)
   })
 })

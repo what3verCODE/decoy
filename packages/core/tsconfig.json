@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "outDir": "./dist"
+    "outDir": "./dist",
+    // Node is core's only runtime: it types the Web Crypto `globalThis.crypto` global
+    // (used by the `uuid()` standard function). Listed explicitly so rslib's isolated
+    // declaration generation resolves it, not just `tsc` typecheck. Types only — no
+    // runtime `node:` import, so the core-purity guard stays green.
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["**/*.test.ts"]

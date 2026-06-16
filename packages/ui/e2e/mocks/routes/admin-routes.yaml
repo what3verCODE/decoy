@@ -1,0 +1,37 @@
+# GET /__decoy__/routes — the routes catalog the panel lists. The catalog is
+# per-instance (ADR-0017): the panel sends the active service as `?service=`, so the
+# `orders` preset (query service=orders) returns the orders instance's routes while
+# `default` (no service / service=users) returns the users instance's — proving the
+# switcher re-targets control. `catalog` is the populated baseline; `empty` drives
+# the panel's empty state (switch with router.useRoute('admin-routes','default','empty')).
+id: admin-routes
+method: GET
+path: /__decoy__/routes
+presets:
+  orders: { query: { service: orders } }
+  default: {}
+variants:
+  catalog:
+    status: 200
+    body:
+      - id: users-by-id
+        method: GET
+        path: /users/{id}
+        presetCount: 1
+        variantCount: 2
+      - id: create-order
+        method: POST
+        path: /orders
+        presetCount: 2
+        variantCount: 2
+  orders-catalog:
+    status: 200
+    body:
+      - id: orders-by-id
+        method: GET
+        path: /orders/{id}
+        presetCount: 1
+        variantCount: 1
+  empty:
+    status: 200
+    body: []

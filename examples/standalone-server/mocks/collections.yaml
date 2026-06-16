@@ -1,4 +1,4 @@
-# Scenarios this standalone server can switch between over /admin.
+# Scenarios this standalone server can switch between over /__decoy__.
 - id: happy-path
   routes:
     - users-by-id:default:ada

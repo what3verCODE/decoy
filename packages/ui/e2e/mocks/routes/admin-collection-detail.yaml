@@ -1,0 +1,16 @@
+# GET /__decoy__/collections/{name} — a collection's resolved, pinnable entries. The
+# panel fetches this for the active collection so each entry can be pinned.
+id: admin-collection-detail
+method: GET
+path: /__decoy__/collections/{name}
+presets:
+  default: {}
+variants:
+  detail:
+    status: 200
+    body:
+      name: happy-path
+      active: true
+      entries:
+        - { route: users-by-id, preset: default, variant: success }
+        - { route: create-order, preset: default, variant: created }

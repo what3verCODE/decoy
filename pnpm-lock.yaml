@@ -254,6 +254,10 @@ importers:
       '@jmespath-community/jmespath':
         specifier: ^1.3.0
         version: 1.3.0
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.2
 
   packages/express:
     dependencies:
@@ -338,6 +342,9 @@ importers:
 
   packages/playwright:
     dependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../config
       '@decoy/control':
         specifier: workspace:*
         version: link:../control
@@ -367,6 +374,15 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@decoy/config':
+        specifier: workspace:*
+        version: link:../config
+      '@decoy/core':
+        specifier: workspace:*
+        version: link:../core
+      '@decoy/playwright':
+        specifier: workspace:*
+        version: link:../playwright
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0

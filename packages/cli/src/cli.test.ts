@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { type DecoyServer, type DecoyUiServer, type Logger, version } from '@decoy/server'
@@ -10,6 +10,7 @@ const silent: Logger = { info() {}, warn() {}, request() {} }
 const configPath = resolve(process.cwd(), 'fixtures/basic/decoy.config.ts')
 const invalidConfigPath = resolve(process.cwd(), 'fixtures/invalid/decoy.config.ts')
 const multiConfigPath = resolve(process.cwd(), 'fixtures/multi/decoy.config.ts')
+const badRequestLogConfigPath = resolve(process.cwd(), 'fixtures/bad-requestlog/decoy.config.ts')
 
 /** The bound port of a running server (its raw address). */
 function portOf(server: DecoyServer | undefined): number {
@@ -131,7 +132,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
       expect(page.status).toBe(200)
       expect(await page.text()).toContain('id="root"')
 
-      const routes = await fetch(`http://localhost:${uiPort}/admin/routes`)
+      const routes = await fetch(`http://localhost:${uiPort}/__decoy__/routes`)
       expect(routes.status).toBe(200)
       expect((await routes.json()) as unknown[]).toHaveLength(1)
     })
@@ -228,6 +229,103 @@ describe('decoy start (end-to-end through the CLI)', () => {
       const fromOrders = await fetch(`http://localhost:${portOf(orders)}/orders/1`)
       expect(fromOrders.status).toBe(200)
       expect(await fromOrders.json()).toEqual({ svc: 'orders' })
+    })
+
+    test('a shared sqlite store with cleanup:on-exit is released once on shutdown (#78, #80)', async () => {
+      // A multi-instance config shares **one** request-log store (ADR-0017); each
+      // instance holds a ref-counted handle on it (#80), so the store closes after
+      // the last instance closes, exactly once (a per-instance close would double-
+      // close the db and throw). With sqlite + cleanup:on-exit that final close
+      // removes the file. The store's config comes from the first service.
+      const configDir = mkdtempSync(join(tmpdir(), 'decoy-shared-store-'))
+      const dbPath = join(configDir, '.decoy', 'shared.sqlite')
+      const service = (name: string, route: string, path: string) => `
+        { name: '${name}', port: 0, defaultCollection: 'happy',
+          routes: [{ id: '${route}', method: 'GET', path: '${path}', presets: { default: {} },
+            variants: { success: { status: 200, body: { svc: '${name}' } } } }],
+          collections: [{ id: 'happy', routes: ['${route}:default:success'] }] }`
+      writeFileSync(
+        join(configDir, 'decoy.config.ts'),
+        `export default [
+          { ...${service('users', 'users-route', '/users/{id}')},
+            requestLog: { store: 'sqlite', path: '.decoy/shared.sqlite', cleanup: 'on-exit' } },
+          ${service('orders', 'orders-route', '/orders/{id}')},
+        ]`,
+      )
+
+      try {
+        const booted = (await run(['start', '--config', join(configDir, 'decoy.config.ts')], {
+          logger: silent,
+        })) as DecoyServer[]
+        expect(booted).toHaveLength(2)
+
+        // Drive a request through each instance so both record into the one shared
+        // sqlite store, materialising the file.
+        await fetch(`http://localhost:${portOf(booted[0])}/users/1`)
+        await fetch(`http://localhost:${portOf(booted[1])}/orders/1`)
+        expect(existsSync(dbPath)).toBe(true)
+
+        // Closing every instance releases the shared store exactly once: no
+        // double-close throw, and on-exit cleanup removes the file + sidecars.
+        await Promise.all(booted.map((s) => s.close()))
+        for (const suffix of ['', '-journal', '-wal', '-shm']) {
+          expect(existsSync(`${dbPath}${suffix}`)).toBe(false)
+        }
+      } finally {
+        rmSync(configDir, { recursive: true, force: true })
+      }
+    })
+
+    describe('--ui aggregator (#72)', () => {
+      let assetDir: string
+      let ui: DecoyUiServer | undefined
+
+      beforeEach(() => {
+        assetDir = mkdtempSync(join(tmpdir(), 'decoy-cli-multi-ui-'))
+        writeFileSync(join(assetDir, 'index.html'), '<!doctype html><div id="root">decoy</div>')
+      })
+
+      afterEach(async () => {
+        await ui?.close()
+        ui = undefined
+        rmSync(assetDir, { recursive: true, force: true })
+      })
+
+      test('one UI server aggregates every instance: service list, per-instance control, shared logs', async () => {
+        servers = (await run(['start', '--config', multiConfigPath, '--ui', '--ui-port', '0'], {
+          logger: silent,
+          resolveUi: async () => ({ uiAssetDir: () => assetDir, version }),
+          onUiServer: (started) => {
+            ui = started
+          },
+        })) as DecoyServer[]
+        expect(servers).toHaveLength(2)
+        const uiPort = (ui?.raw.address() as { port: number }).port
+
+        // The switcher lists every booted instance (the service axis, ADR-0017).
+        const services = (await (
+          await fetch(`http://localhost:${uiPort}/__decoy__/services`)
+        ).json()) as Array<{
+          name: string
+        }>
+        expect(services).toEqual([{ name: 'users' }, { name: 'orders' }])
+
+        // A ?service= catalog request targets that instance's routes.
+        const ordersRoutes = (await (
+          await fetch(`http://localhost:${uiPort}/__decoy__/routes?service=orders`)
+        ).json()) as Array<{ id: string }>
+        expect(ordersRoutes.map((r) => r.id)).toEqual(['orders-route'])
+
+        // Drive a real request through each instance so both record to the shared
+        // store, then confirm the aggregated timeline carries both, each labelled.
+        await fetch(`http://localhost:${portOf(servers[0])}/users/1`)
+        await fetch(`http://localhost:${portOf(servers[1])}/orders/1`)
+        const timeline = (await (
+          await fetch(`http://localhost:${uiPort}/__decoy__/sessions/global/logs`)
+        ).json()) as Array<{ service: string; path: string }>
+        expect(timeline.map((r) => r.service)).toEqual(['users', 'orders'])
+        expect(timeline.map((r) => r.path)).toEqual(['/users/1', '/orders/1'])
+      })
     })
   })
 
@@ -341,5 +439,18 @@ describe('decoy check (CI validation gate)', () => {
     const report = text()
     expect(report).toMatch(/undefined variant "missing"/)
     expect(report).toMatch(/collections\.yaml:\d+/)
+  })
+
+  test('an unknown requestLog filename token fails check and names the token (#70)', async () => {
+    const { out, text } = capture()
+
+    await expect(run(['check', '--config', badRequestLogConfigPath], { out })).rejects.toThrow(
+      /validation failed/,
+    )
+
+    const report = text()
+    expect(report).toMatch(/requestLog\.path has unknown token/)
+    expect(report).toMatch(/\{bogus\}/)
+    expect(report).toMatch(/%Q/)
   })
 })
