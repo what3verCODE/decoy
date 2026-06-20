@@ -7,7 +7,11 @@ import { defineConfig } from '@decoy/config'
 // surface needs just the mock sources. The e2e fixture only registers the router
 // (see e2e/fixtures.ts).
 export default defineConfig({
-  routesDir: './e2e/mocks/routes',
-  collectionsFile: './e2e/mocks/collections.yaml',
+  routesDir: './mocks/routes',
+  collectionsFile: './mocks/collections.yaml',
   defaultCollection: 'default',
+  // TODO: issue #87
+  control: {
+    prefix: '/__panel__',
+  },
 })

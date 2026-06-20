@@ -1,10 +1,15 @@
+import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
-import { openRoute } from '../model/route-detail'
-import { load } from '../model/routes'
+import { routeModel, routesModel } from '../model'
 import { MethodBadge } from './badges'
 
 export function RoutesCatalog(): JSX.Element {
-  const current = load.value
+  const [routes, pending, error, openRoute] = useUnit([
+    routesModel.$routes,
+    routesModel.$pending,
+    routesModel.$error,
+    routeModel.load,
+  ])
   return (
     <section class="flex-1 min-w-0 flex flex-col overflow-hidden" data-testid="routes-catalog">
       <div class="flex items-center h-9 px-4 border-b border-border shrink-0">
@@ -13,18 +18,16 @@ export function RoutesCatalog(): JSX.Element {
         </h2>
       </div>
       <div class="overflow-y-auto flex-1">
-        {current.state === 'loading' && (
-          <p class="px-4 py-6 text-muted-foreground text-[12px]">loading routes…</p>
-        )}
-        {current.state === 'error' && (
+        {pending && <p class="px-4 py-6 text-muted-foreground text-[12px]">loading routes…</p>}
+        {error !== null && (
           <p class="px-4 py-6 text-rose text-[12px]" data-testid="routes-error">
-            {current.message}
+            {error}
           </p>
         )}
-        {current.state === 'ready' && current.routes.length === 0 && (
+        {!pending && error === null && routes.length === 0 && (
           <p class="px-4 py-6 text-muted-foreground text-[12px]">no routes defined</p>
         )}
-        {current.state === 'ready' && current.routes.length > 0 && (
+        {routes.length > 0 && (
           <table class="w-full border-collapse">
             <thead class="sticky top-0 bg-card z-10">
               <tr class="text-[10px] uppercase tracking-wider text-muted-foreground text-left">
@@ -36,7 +39,7 @@ export function RoutesCatalog(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {current.routes.map((route) => (
+              {routes.map((route) => (
                 <tr
                   key={route.id}
                   data-testid="route-row"

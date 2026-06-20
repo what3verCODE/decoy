@@ -1,21 +1,21 @@
+import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
 import { resolutionOf } from '../api'
-import {
-  closeSession,
-  openSession,
-  selectedSessionId,
-  sessionsLoad,
-  timeline,
-} from '../model/sessions'
+import { sessionsModel } from '../model'
 import { MethodBadge, StatusBadge } from './badges'
 
 /** The selected session's request timeline — ordered, cross-service, survives destroy. */
 function Timeline(): JSX.Element | null {
-  const id = selectedSessionId.value
+  const [id, records, error, pending, close] = useUnit([
+    sessionsModel.$selectedSession,
+    sessionsModel.$timeline,
+    sessionsModel.$timelineError,
+    sessionsModel.$timelinePending,
+    sessionsModel.close,
+  ])
   if (id === null) {
     return null
   }
-  const current = timeline.value
   return (
     <div data-testid="session-timeline" class="border-t border-border">
       <div class="flex items-center gap-2 h-7 px-4">
@@ -27,24 +27,22 @@ function Timeline(): JSX.Element | null {
         <button
           type="button"
           data-testid="session-timeline-close"
-          onClick={closeSession}
+          onClick={() => close()}
           class="text-[11px] px-1.5 h-[18px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
         >
           close
         </button>
       </div>
-      {current.state === 'loading' && (
-        <p class="px-4 py-4 text-muted-foreground text-[12px]">loading timeline…</p>
-      )}
-      {current.state === 'error' && (
+      {pending && <p class="px-4 py-4 text-muted-foreground text-[12px]">loading timeline…</p>}
+      {error !== null && (
         <p class="px-4 py-4 text-rose text-[12px]" data-testid="session-timeline-error">
-          {current.message}
+          {error}
         </p>
       )}
-      {current.state === 'ready' && current.records.length === 0 && (
+      {!pending && error === null && records.length === 0 && (
         <p class="px-4 py-4 text-muted-foreground text-[12px]">no requests in this session</p>
       )}
-      {current.state === 'ready' && current.records.length > 0 && (
+      {records.length > 0 && (
         <table class="w-full border-collapse">
           <thead class="sticky top-0 bg-card z-10">
             <tr class="text-[10px] uppercase tracking-wider text-muted-foreground text-left">
@@ -56,7 +54,7 @@ function Timeline(): JSX.Element | null {
             </tr>
           </thead>
           <tbody>
-            {current.records.map((record) => {
+            {records.map((record) => {
               const miss = record.outcome.type === 'miss'
               return (
                 <tr
@@ -94,8 +92,13 @@ function Timeline(): JSX.Element | null {
 }
 
 export function SessionsPanel(): JSX.Element {
-  const current = sessionsLoad.value
-  const selected = selectedSessionId.value
+  const [sessions, error, pending, selected, open] = useUnit([
+    sessionsModel.$sessions,
+    sessionsModel.$sessionsError,
+    sessionsModel.$sessionsPending,
+    sessionsModel.$selectedSession,
+    sessionsModel.open,
+  ])
   return (
     <section class="flex-1 min-w-0 flex flex-col overflow-hidden" data-testid="sessions-panel">
       <div class="flex items-center h-9 px-4 border-b border-border shrink-0">
@@ -104,18 +107,16 @@ export function SessionsPanel(): JSX.Element {
         </h2>
       </div>
       <div class="overflow-y-auto flex-1">
-        {current.state === 'loading' && (
-          <p class="px-4 py-6 text-muted-foreground text-[12px]">loading sessions…</p>
-        )}
-        {current.state === 'error' && (
+        {pending && <p class="px-4 py-6 text-muted-foreground text-[12px]">loading sessions…</p>}
+        {error !== null && (
           <p class="px-4 py-6 text-rose text-[12px]" data-testid="sessions-error">
-            {current.message}
+            {error}
           </p>
         )}
-        {current.state === 'ready' && (
+        {error === null && (
           <>
             <ul>
-              {current.sessions.map((session) => {
+              {sessions.map((session) => {
                 const isSelected = session.id === selected
                 return (
                   <li key={session.id}>
@@ -124,7 +125,7 @@ export function SessionsPanel(): JSX.Element {
                       data-testid="session-row"
                       data-session-id={session.id}
                       data-selected={isSelected ? 'true' : 'false'}
-                      onClick={() => void openSession(session.id)}
+                      onClick={() => open(session.id)}
                       class={`w-full flex items-center gap-2 px-4 py-1.5 text-left border-l-2 transition-colors ${
                         isSelected
                           ? 'border-emerald bg-muted/60 text-foreground'

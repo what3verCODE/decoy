@@ -11,5 +11,17 @@ export default defineConfig({
     distPath: { root: 'dist/client' },
     cleanDistPath: true,
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // Dev only: the SPA fetches its control API same-origin (`/__decoy__/*`), so
+    // proxy those to the `pnpm dev:server` Decoy on :4000 (decoy.config.ts port).
+    // `ws: true` keeps the live request-log SSE stream (GET /__decoy__/logs) open.
+    // The published build serves SPA + control from one origin, so no proxy ships.
+    proxy: {
+      '/__decoy__': {
+        target: 'http://localhost:4000',
+        ws: true,
+      },
+    },
+  },
 })

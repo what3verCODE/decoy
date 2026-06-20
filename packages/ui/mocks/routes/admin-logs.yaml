@@ -1,0 +1,26 @@
+# GET /__decoy__/logs — the aggregated SSE request stream the live-stream panel reads.
+# `stream` is the baseline: it replays two records (a match + a miss). `empty` pins the
+# waiting state (switch with router.useRoute('admin-logs','default','empty')). The `|+`
+# block keeps the trailing blank line so each SSE event terminates with `\n\n`.
+id: admin-logs
+method: GET
+path: /__decoy__/logs
+presets:
+  default: {}
+variants:
+  stream:
+    status: 200
+    headers:
+      content-type: text/event-stream
+    body: |+
+      id: 1
+      data: {"seq":1,"service":"users","method":"GET","path":"/users/42","outcome":{"type":"matched","address":{"route":"users-by-id","preset":"default","variant":"success"}},"status":200,"latencyMs":1.2,"session":"global"}
+
+      id: 2
+      data: {"seq":2,"service":"orders","method":"GET","path":"/missing","outcome":{"type":"miss","reason":"no-route"},"status":501,"latencyMs":0.4,"session":"global"}
+
+  empty:
+    status: 200
+    headers:
+      content-type: text/event-stream
+    body: ""

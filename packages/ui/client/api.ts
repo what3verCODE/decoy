@@ -1,24 +1,13 @@
 // The data API the SPA fetches from its own (loopback) origin — same origin as the
 // served assets, so no CORS (ADR-0017). Mirrors the server's RouteCatalogEntry.
 
-// The service (instance) the panel currently controls (ADR-0017's service axis).
-// Empty until the switcher seeds it; control/catalog calls then carry it as a
-// `?service=` selector so the in-process aggregator routes them to that instance.
-// The logs view is aggregated across services, so log calls never carry it.
-let activeService = ''
-
-/** Point control/catalog calls at a service (the aggregator's switcher; #72). */
-export function setActiveService(name: string): void {
-  activeService = name
-}
-
 /** Append the active `?service=` selector to a control/catalog URL (omitted when unset). */
-function scoped(url: string): string {
-  if (!activeService) {
+function scoped(url: string, service: string | null): string {
+  if (!service) {
     return url
   }
   const sep = url.includes('?') ? '&' : '?'
-  return `${url}${sep}service=${encodeURIComponent(activeService)}`
+  return `${url}${sep}service=${encodeURIComponent(service)}`
 }
 
 /** One service in the switcher — the body of `GET /__decoy__/services`. */
@@ -44,8 +33,8 @@ export interface RouteCatalogEntry {
 }
 
 /** Fetch the routes catalog from `GET /__decoy__/routes`. Throws on a non-2xx response. */
-export async function fetchRoutes(): Promise<RouteCatalogEntry[]> {
-  const response = await fetch(scoped('/__decoy__/routes'))
+export async function fetchRoutes(service: string | null): Promise<RouteCatalogEntry[]> {
+  const response = await fetch(scoped('/__decoy__/routes', service))
   if (!response.ok) {
     throw new Error(`GET /__decoy__/routes failed: ${response.status}`)
   }
@@ -78,8 +67,8 @@ export interface RouteDetail {
 }
 
 /** Fetch one route's presets and variants from `GET /__decoy__/routes/{id}`. */
-export async function fetchRouteDetail(id: string): Promise<RouteDetail> {
-  const response = await fetch(scoped(`/__decoy__/routes/${encodeURIComponent(id)}`))
+export async function fetchRouteDetail(id: string, service: string | null): Promise<RouteDetail> {
+  const response = await fetch(scoped(`/__decoy__/routes/${encodeURIComponent(id)}`, service))
   if (!response.ok) {
     throw new Error(`GET /__decoy__/routes/${id} failed: ${response.status}`)
   }
@@ -104,8 +93,8 @@ export interface TryResult {
 }
 
 /** Run a dry-run match against the current selection via `POST /__decoy__/try` (zero side effects). */
-export async function tryRequest(input: TryRequest): Promise<TryResult> {
-  const response = await fetch(scoped('/__decoy__/try'), {
+export async function tryRequest(input: TryRequest, service: string | null): Promise<TryResult> {
+  const response = await fetch(scoped('/__decoy__/try', service), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -146,8 +135,8 @@ export interface CollectionDetail {
 }
 
 /** Fetch the collections catalog from `GET /__decoy__/collections`. Throws on a non-2xx response. */
-export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
-  const response = await fetch(scoped('/__decoy__/collections'))
+export async function fetchCollections(service: string | null): Promise<CollectionCatalogEntry[]> {
+  const response = await fetch(scoped('/__decoy__/collections', service))
   if (!response.ok) {
     throw new Error(`GET /__decoy__/collections failed: ${response.status}`)
   }
@@ -155,8 +144,13 @@ export async function fetchCollections(): Promise<CollectionCatalogEntry[]> {
 }
 
 /** Fetch one collection's resolved entries from `GET /__decoy__/collections/{name}`. */
-export async function fetchCollectionDetail(name: string): Promise<CollectionDetail> {
-  const response = await fetch(scoped(`/__decoy__/collections/${encodeURIComponent(name)}`))
+export async function fetchCollectionDetail(
+  name: string,
+  service: string | null,
+): Promise<CollectionDetail> {
+  const response = await fetch(
+    scoped(`/__decoy__/collections/${encodeURIComponent(name)}`, service),
+  )
   if (!response.ok) {
     throw new Error(`GET /__decoy__/collections/${name} failed: ${response.status}`)
   }
@@ -164,8 +158,8 @@ export async function fetchCollectionDetail(name: string): Promise<CollectionDet
 }
 
 /** Fetch the current selection from `GET /__decoy__/selection`. */
-export async function fetchSelection(): Promise<Selection> {
-  const response = await fetch(scoped('/__decoy__/selection'))
+export async function fetchSelection(service: string | null): Promise<Selection> {
+  const response = await fetch(scoped('/__decoy__/selection', service))
   if (!response.ok) {
     throw new Error(`GET /__decoy__/selection failed: ${response.status}`)
   }
@@ -173,8 +167,12 @@ export async function fetchSelection(): Promise<Selection> {
 }
 
 /** POST a JSON control call to `/__decoy__/{path}`, returning the resulting selection. */
-async function postControl(path: string, body?: unknown): Promise<Selection> {
-  const response = await fetch(scoped(`/__decoy__/${path}`), {
+async function postControl(
+  path: string,
+  body: unknown,
+  service: string | null,
+): Promise<Selection> {
+  const response = await fetch(scoped(`/__decoy__/${path}`, service), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -186,18 +184,23 @@ async function postControl(path: string, body?: unknown): Promise<Selection> {
 }
 
 /** Switch the active collection via `POST /__decoy__/collection`. */
-export function useCollection(name: string): Promise<Selection> {
-  return postControl('collection', { name })
+export function useCollection(name: string, service: string | null): Promise<Selection> {
+  return postControl('collection', { name }, service)
 }
 
 /** Pin a route's `preset` slot to a variant via `POST /__decoy__/route`. */
-export function pinRoute(route: string, preset: string, variant: string): Promise<Selection> {
-  return postControl('route', { route, preset, variant })
+export function pinRoute(
+  route: string,
+  preset: string,
+  variant: string,
+  service: string | null,
+): Promise<Selection> {
+  return postControl('route', { route, preset, variant }, service)
 }
 
 /** Drop all per-route overrides via `POST /__decoy__/reset`. */
-export function resetOverrides(): Promise<Selection> {
-  return postControl('reset')
+export function resetOverrides(service: string | null): Promise<Selection> {
+  return postControl('reset', undefined, service)
 }
 
 /** The outcome of matching one request — mirrors the server's `RequestOutcome`. */
@@ -217,7 +220,7 @@ export interface RequestLogRecord {
   latencyMs: number
   session: string
   /** The instance (service) that served the request — present on stored records. */
-  service?: string
+  service: string | null
 }
 
 /** One live session — mirrors the server's `SessionInfo` (body of `GET /__decoy__/sessions`). */
@@ -230,8 +233,8 @@ export interface SessionInfo {
 }
 
 /** Fetch the live sessions (global + created) from `GET /__decoy__/sessions`. */
-export async function fetchSessions(): Promise<SessionInfo[]> {
-  const response = await fetch(scoped('/__decoy__/sessions'))
+export async function fetchSessions(service: string | null): Promise<SessionInfo[]> {
+  const response = await fetch(scoped('/__decoy__/sessions', service))
   if (!response.ok) {
     throw new Error(`GET /__decoy__/sessions failed: ${response.status}`)
   }
