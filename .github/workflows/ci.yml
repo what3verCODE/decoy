@@ -99,6 +99,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Examples are real consumers: they boot Decoy through a config loaded at
+      # runtime, which resolves `@decoy/*` to built `./dist` (the `default` export
+      # condition). So e2e runs against built packages — internal package tests are
+      # the build-free tier (they activate the `source` condition; see CONTRIBUTING).
+      - name: Build @decoy packages
+        run: pnpm build
+
       - name: e2e
         run: pnpm --filter "./examples/${{ matrix.example }}" run test:e2e
 
@@ -124,6 +131,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Examples run against built packages (same as the non-browser e2e job): they
+      # boot Decoy through a runtime-loaded config that resolves `@decoy/*` to `./dist`.
+      - name: Build @decoy packages
+        run: pnpm build
 
       - name: Install Chromium (+ system deps)
         run: pnpm --filter "./examples/${{ matrix.example }}" exec playwright install --with-deps chromium

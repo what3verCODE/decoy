@@ -6,8 +6,9 @@
   "license": "MIT",
   "exports": {
     ".": {
+      "source": "./node/index.ts",
       "types": "./node/index.ts",
-      "default": "./node/index.ts"
+      "default": "./dist/index.js"
     }
   },
   "publishConfig": {
