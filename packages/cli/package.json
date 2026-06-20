@@ -9,8 +9,9 @@
   },
   "exports": {
     ".": {
+      "source": "./src/index.ts",
       "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     }
   },
   "publishConfig": {
