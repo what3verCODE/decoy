@@ -1,11 +1,12 @@
+import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
-import { routeCount } from '../model/routes'
-import { activeService, services, switchService } from '../model/services'
-import { loadSessions } from '../model/sessions'
-import { showCatalog, showSessions, type View, view } from '../model/view'
+import { $view, routesModel, servicesModel, showCatalog, showSessions } from '../model'
+
+type View = 'catalog' | 'sessions'
 
 function NavButton({ target, label }: { target: View; label: string }): JSX.Element {
-  const active = view.value === target
+  const view = useUnit($view)
+  const active = view === target
   return (
     <button
       type="button"
@@ -14,7 +15,6 @@ function NavButton({ target, label }: { target: View; label: string }): JSX.Elem
       onClick={() => {
         if (target === 'sessions') {
           showSessions()
-          void loadSessions()
         } else {
           showCatalog()
         }
@@ -37,7 +37,11 @@ function NavButton({ target, label }: { target: View; label: string }): JSX.Elem
  * stays aggregated across services and is unaffected by the selection.
  */
 function ServiceSwitcher(): JSX.Element | null {
-  const list = services.value
+  const [list, active, handleSwitchTo] = useUnit([
+    servicesModel.$services,
+    servicesModel.$active,
+    servicesModel.switchTo,
+  ])
   if (list.length === 0) {
     return null
   }
@@ -46,8 +50,8 @@ function ServiceSwitcher(): JSX.Element | null {
       <span class="uppercase tracking-wider">service</span>
       <select
         data-testid="service-switcher"
-        value={activeService.value}
-        onChange={(event) => void switchService((event.currentTarget as HTMLSelectElement).value)}
+        value={active ?? ''}
+        onChange={(event) => handleSwitchTo((event.currentTarget as HTMLSelectElement).value)}
         class="h-[22px] px-1.5 rounded border border-border bg-muted/60 text-foreground text-[11px]"
       >
         {list.map((service) => (
@@ -61,6 +65,7 @@ function ServiceSwitcher(): JSX.Element | null {
 }
 
 export function TopBar(): JSX.Element {
+  const routes = useUnit(routesModel.$routes)
   return (
     <header class="flex items-center gap-3 h-12 px-4 border-b border-border bg-card shrink-0">
       <span class="font-semibold tracking-tight text-foreground select-none">decoy</span>
@@ -74,7 +79,7 @@ export function TopBar(): JSX.Element {
       </nav>
       <div class="flex-1" />
       <span class="text-muted-foreground">
-        <span class="text-foreground tabular-nums">{routeCount.value}</span> routes
+        <span class="text-foreground tabular-nums">{routes.length}</span> routes
       </span>
     </header>
   )

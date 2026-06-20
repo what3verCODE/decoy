@@ -374,6 +374,9 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@decoy/cli':
+        specifier: workspace:*
+        version: link:../cli
       '@decoy/config':
         specifier: workspace:*
         version: link:../config
@@ -386,9 +389,6 @@ importers:
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0
-      '@preact/signals':
-        specifier: ^2.9.1
-        version: 2.9.1(preact@10.29.2)
       '@rsbuild/core':
         specifier: ^2.0.0
         version: 2.0.14
@@ -404,6 +404,15 @@ importers:
       '@unocss/postcss':
         specifier: ^66.7.2
         version: 66.7.2(postcss@8.5.15)
+      effector:
+        specifier: ^23.4.4
+        version: 23.4.4
+      effector-react:
+        specifier: ^23.3.0
+        version: 23.3.0(effector@23.4.4)(react@19.2.7)
+      patronum:
+        specifier: ^2.3.0
+        version: 2.3.0(effector@23.4.4)
       postcss:
         specifier: ^8.5.15
         version: 8.5.15
@@ -987,14 +996,6 @@ packages:
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
-
-  '@preact/signals-core@1.14.2':
-    resolution: {integrity: sha512-RZHdBj9ZF4n40Rp4jS052EHHjBWf96P9oNdXPfhQTovCuWY9iQn3Gq+gOTJSgBO9A/JBuPfMOWsSX/lIU9Pc/A==}
-
-  '@preact/signals@2.9.1':
-    resolution: {integrity: sha512-xVqN8mJjbSN5IB/8Ubmd9NN+Ew6zJswoRxrjZbH3YsgkMshFeO6d8zxEFpHRTq9GJZx7cnPs2CnCpFqtGXGNsw==}
-    peerDependencies:
-      preact: '>= 10.25.0 || >=11.0.0-0'
 
   '@prefresh/core@1.5.10':
     resolution: {integrity: sha512-7yPTFbG56sutaFu8krp3B4a200KOFUvrtlllKWRuLjsYXo9UUucHOZRcer+gtgMkFTpv6ob8TGcTwA32bSwa1w==}
@@ -1718,6 +1719,17 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
+  effector-react@23.3.0:
+    resolution: {integrity: sha512-QR0+x1EnbiWhO80Yc0GVF+I9xCYoxBm3t+QLB5Wg+1uY1Q1BrSWDmKvJaJJZ/+9BU4RAr25yS5J2EkdWnicu8g==}
+    engines: {node: '>=11.0.0'}
+    peerDependencies:
+      effector: ^23.0.0
+      react: '>=16.8.0 <20.0.0'
+
+  effector@23.4.4:
+    resolution: {integrity: sha512-QkZboRN28K/iwxigDhlJcI3ux3aNbt8kYGGH/GkqWG0OlGeyuBhb7PdM89Iu+ogV8Lmz16xIlwnXR2UNWI6psg==}
+    engines: {node: '>=11.0.0'}
+
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
 
@@ -2427,6 +2439,11 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
+  patronum@2.3.0:
+    resolution: {integrity: sha512-BfKIOpoymVz6XnkOn8Fi5QZ1a3r/3lXdd8BcdHmYDbIXPTIRnD1EPFBFev/DheWnOge6/ZswEqgNF2ANLGOxLw==}
+    peerDependencies:
+      effector: ^23
+
   perfect-debounce@2.1.0:
     resolution: {integrity: sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g==}
 
@@ -2521,6 +2538,10 @@ packages:
   raw-body@3.0.2:
     resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
     engines: {node: '>= 0.10'}
+
+  react@19.2.7:
+    resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}
+    engines: {node: '>=0.10.0'}
 
   read-yaml-file@1.1.0:
     resolution: {integrity: sha512-VIMnQi/Z4HT2Fxuwg5KrY174U1VdUIASQVWXXyqtNRtxSr9IYkn1rsI6Tb6HsrHCmB7gVpNwX6JxPTHcH6IoTA==}
@@ -2852,6 +2873,11 @@ packages:
   unplugin@2.3.11:
     resolution: {integrity: sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww==}
     engines: {node: '>=18.12.0'}
+
+  use-sync-external-store@1.6.0:
+    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
@@ -3550,13 +3576,6 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@preact/signals-core@1.14.2': {}
-
-  '@preact/signals@2.9.1(preact@10.29.2)':
-    dependencies:
-      '@preact/signals-core': 1.14.2
-      preact: 10.29.2
-
   '@prefresh/core@1.5.10(preact@10.29.2)':
     dependencies:
       preact: 10.29.2
@@ -4249,6 +4268,14 @@ snapshots:
   duplexer@0.1.2: {}
 
   ee-first@1.1.1: {}
+
+  effector-react@23.3.0(effector@23.4.4)(react@19.2.7):
+    dependencies:
+      effector: 23.4.4
+      react: 19.2.7
+      use-sync-external-store: 1.6.0(react@19.2.7)
+
+  effector@23.4.4: {}
 
   emoji-regex@10.6.0: {}
 
@@ -4969,6 +4996,10 @@ snapshots:
 
   pathe@2.0.3: {}
 
+  patronum@2.3.0(effector@23.4.4):
+    dependencies:
+      effector: 23.4.4
+
   perfect-debounce@2.1.0: {}
 
   picocolors@1.1.1: {}
@@ -5063,6 +5094,8 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.7.2
       unpipe: 1.0.0
+
+  react@19.2.7: {}
 
   read-yaml-file@1.1.0:
     dependencies:
@@ -5440,6 +5473,10 @@ snapshots:
       acorn: 8.17.0
       picomatch: 4.0.4
       webpack-virtual-modules: 0.6.2
+
+  use-sync-external-store@1.6.0(react@19.2.7):
+    dependencies:
+      react: 19.2.7
 
   util-deprecate@1.0.2: {}
 
