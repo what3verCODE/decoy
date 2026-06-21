@@ -171,6 +171,14 @@ export function createLayoutModel({
 }: LayoutModelDeps = {}) {
   const $layout = createStore<DashboardLayout>(readLayout(transport))
 
+  // Edit-mode gate (#92): drives the grid's drag/resize and surfaces the mutational
+  // layout controls. Deliberately *not* part of `$layout` — it lives outside the
+  // persisted object so the dashboard always boots locked (off), never accidentally in
+  // edit mode after a reload. The top-bar toggle flips it; reloads reset it.
+  const $editing = createStore(false)
+  const toggleEditing = createEvent()
+  $editing.on(toggleEditing, (editing) => !editing)
+
   // The grid's onLayoutChange (a move or resize).
   const moved = createEvent<readonly LayoutItem[]>()
   // The reset-layout control.
@@ -205,8 +213,10 @@ export function createLayoutModel({
   return {
     $layout,
     $items,
+    $editing,
 
     moved,
     reset,
+    toggleEditing,
   }
 }

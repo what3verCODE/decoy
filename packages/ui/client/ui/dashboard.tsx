@@ -16,7 +16,8 @@ import { SessionsPanel } from './sessions-panel'
 // Re-type the Responsive grid against the prop subset we use with Preact's own children
 // type, so our call site stays type-checked without fighting React's JSX.
 // `DragConfig` isn't re-exported from the package entry, so we declare the subset we set.
-type DragConfig = { handle?: string; cancel?: string }
+type DragConfig = { handle?: string; cancel?: string; enabled?: boolean }
+type ResizeConfig = { enabled?: boolean }
 type ResponsiveGridProps = {
   className?: string
   width: number
@@ -27,6 +28,7 @@ type ResponsiveGridProps = {
   margin?: [number, number]
   containerPadding?: [number, number]
   dragConfig?: DragConfig
+  resizeConfig?: ResizeConfig
   onLayoutChange?: (layout: readonly LayoutItem[]) => void
   children?: ComponentChildren
 }
@@ -36,9 +38,12 @@ const ResponsiveGridLayout = Responsive as unknown as (props: ResponsiveGridProp
 // detail, Logs, Sessions — each driven by its existing effector model so it reflects
 // live control-plane state wherever it sits. Slice 3 (#91): the arrangement (and its
 // default) now lives in `layoutModel`, which persists every move/resize to localStorage
-// and reloads with migration; the reset-layout control lives in the top bar. Drag/resize
-// are always on (the edit-mode gate is #92). Tiles drag by their header only
-// (`.tile-drag-handle`) and carry minW/minH so nothing collapses to an unreadable sliver.
+// and reloads with migration; the reset-layout control lives in the top bar. Slice 4
+// (#92): an edit-mode gate (`layoutModel.$editing`) drives the grid's drag/resize. The
+// dashboard boots locked — off — so tiles can't be moved or resized and inner controls
+// stay fully clickable; turning edit on activates header drag and the corner resize handle
+// and surfaces the mutational controls (reset, and later close/re-add). Tiles drag by
+// their header only (`.tile-drag-handle`) and carry minW/minH so nothing collapses.
 
 // The header doubles as the drag handle; the header buttons (back, pause, clear, reset…)
 // must stay clickable, so they cancel a drag.
@@ -86,10 +91,18 @@ export function Dashboard(): JSX.Element {
   // the grid lays out at the real width instead of the hook's default fallback.
   const { width, containerRef, mounted } = useContainerWidth()
   const rowHeight = useRowHeight(containerRef)
-  const [items, handleLayoutChange] = useUnit([layoutModel.$items, layoutModel.moved])
+  const [items, editing, handleLayoutChange] = useUnit([
+    layoutModel.$items,
+    layoutModel.$editing,
+    layoutModel.moved,
+  ])
 
   return (
-    <div ref={containerRef} class="flex-1 min-h-0 overflow-hidden" data-testid="dashboard">
+    <div
+      ref={containerRef}
+      class={`flex-1 min-h-0 overflow-hidden${editing ? ' dashboard-editing' : ''}`}
+      data-testid="dashboard"
+    >
       {mounted && (
         <ResponsiveGridLayout
           className="layout"
@@ -100,7 +113,8 @@ export function Dashboard(): JSX.Element {
           rowHeight={rowHeight}
           margin={[MARGIN, MARGIN]}
           containerPadding={[MARGIN, MARGIN]}
-          dragConfig={DRAG_CONFIG}
+          dragConfig={{ ...DRAG_CONFIG, enabled: editing }}
+          resizeConfig={{ enabled: editing }}
           onLayoutChange={handleLayoutChange}
         >
           <div key="collections" class={TILE} data-testid="tile-collections">

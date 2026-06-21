@@ -22,10 +22,14 @@
   cursor: grabbing;
 }
 
-/* The header doubles as the drag handle; hint it. */
+/* The header doubles as the drag handle, but only in edit mode (#92) — outside it the
+ * tile is locked, so a grab cursor would be a lie. `.dashboard-editing` is set on the
+ * grid container while the edit-layout toggle is on. */
 .tile-drag-handle {
-  cursor: grab;
   user-select: none;
+}
+.dashboard-editing .tile-drag-handle {
+  cursor: grab;
 }
 
 /* Make the bottom-right resize corner visible on dark cards (RGL's default SVG
