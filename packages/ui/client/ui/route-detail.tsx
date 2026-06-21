@@ -138,8 +138,8 @@ export function RouteDetail(): JSX.Element {
     routeModel.close,
   ])
   return (
-    <section class="flex-1 min-w-0 flex flex-col overflow-hidden" data-testid="route-detail">
-      <div class="flex items-center gap-2 h-9 px-4 border-b border-border shrink-0">
+    <section class="h-full flex flex-col overflow-hidden" data-testid="route-detail">
+      <div class="tile-drag-handle flex items-center gap-2 h-9 px-4 border-b border-border shrink-0">
         <button
           type="button"
           data-testid="route-detail-back"

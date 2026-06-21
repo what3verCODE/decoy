@@ -13,11 +13,8 @@ export function LiveStream(): JSX.Element {
   ])
 
   return (
-    <section
-      class="w-1/2 min-w-0 flex flex-col overflow-hidden border-l border-border"
-      data-testid="live-stream"
-    >
-      <div class="flex items-center gap-2 h-9 px-4 border-b border-border shrink-0">
+    <section class="h-full flex flex-col overflow-hidden" data-testid="live-stream">
+      <div class="tile-drag-handle flex items-center gap-2 h-9 px-4 border-b border-border shrink-0">
         <h2 class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           Live Requests
         </h2>
