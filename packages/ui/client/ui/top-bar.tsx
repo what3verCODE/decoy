@@ -1,6 +1,7 @@
 import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
 import { layoutModel, routesModel, servicesModel } from '../model'
+import { TILE_LABELS } from '../model/create-layout-model'
 
 /**
  * The service axis switcher (ADR-0017): pick which booted instance the catalog /
@@ -33,6 +34,46 @@ function ServiceSwitcher(): JSX.Element | null {
         ))}
       </select>
     </label>
+  )
+}
+
+/**
+ * The hidden-tiles menu (#94): a disclosure listing every closed tile, each re-addable at
+ * its default slot. Shown only in edit mode, alongside the other mutational controls. The
+ * trigger reads as a count so it's obvious whether anything is hidden; opening it lists the
+ * tiles, or says so when none are.
+ */
+function HiddenTilesMenu(): JSX.Element {
+  const [hidden, handleShow] = useUnit([layoutModel.$hidden, layoutModel.show])
+  return (
+    <details class="relative" data-testid="hidden-tiles-menu">
+      <summary class="list-none text-[11px] px-1.5 h-[22px] flex items-center rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors cursor-pointer select-none">
+        hidden tiles
+        {hidden.length > 0 && (
+          <span class="ml-1 tabular-nums text-foreground">{hidden.length}</span>
+        )}
+      </summary>
+      <div class="absolute right-0 mt-1 z-20 min-w-40 py-1 rounded border border-border bg-card shadow-lg">
+        {hidden.length === 0 ? (
+          <p class="px-3 py-1.5 text-[11px] text-muted-foreground">no hidden tiles</p>
+        ) : (
+          hidden.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleShow(id)}
+              data-testid={`show-tile-${id}`}
+              class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+            >
+              <span aria-hidden="true" class="text-emerald">
+                +
+              </span>
+              {TILE_LABELS[id] ?? id}
+            </button>
+          ))
+        )}
+      </div>
+    </details>
   )
 }
 
@@ -71,14 +112,17 @@ export function TopBar(): JSX.Element {
         {editing ? 'done' : 'edit layout'}
       </button>
       {editing && (
-        <button
-          type="button"
-          onClick={handleResetLayout}
-          data-testid="reset-layout"
-          class="text-[11px] px-1.5 h-[22px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
-        >
-          reset layout
-        </button>
+        <>
+          <HiddenTilesMenu />
+          <button
+            type="button"
+            onClick={handleResetLayout}
+            data-testid="reset-layout"
+            class="text-[11px] px-1.5 h-[22px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
+          >
+            reset layout
+          </button>
+        </>
       )}
     </header>
   )

@@ -6,8 +6,14 @@ import type { LayoutItem } from 'react-grid-layout'
 // (same `create-*-model` shape as the rest). It persists to localStorage on every
 // move/resize and reloads with graceful migration. The schema is transport-agnostic: the
 // model only ever hands a JSON string to a {@link LayoutTransport}, so a future opt-in
-// sync to `.decoy/settings.json` is a transport swap, not a redesign. `hidden` is part of
-// the shape now (the SSOT is stable) though show/hide behaviour lands in #94.
+// sync to `.decoy/settings.json` is a transport swap, not a redesign.
+//
+// Slice 5 (#94): `hidden` now drives behaviour. A tile's close control adds its id to the
+// set (`hide`); the hidden-tiles menu re-adds one (`show`) at its default slot/size. The
+// grid only ever sees the *visible* tiles (`$items` filters `hidden` out), and the
+// dashboard renders only those children — RGL auto-places any child it can't match to a
+// layout item, so a hidden tile must be absent from both. Hidden state lives in the
+// persisted object, so a closed tile stays closed across reloads.
 
 /** Bump when the default arrangement changes shape; an older saved version migrates. */
 export const LAYOUT_VERSION = 1
@@ -26,6 +32,17 @@ export const DEFAULT_LAYOUT: LayoutItem[] = [
   { i: 'logs', x: 8, y: 0, w: 4, h: 6, minW: 2, minH: 3 },
   { i: 'sessions', x: 8, y: 6, w: 4, h: 6, minW: 2, minH: 3 },
 ]
+
+// Human-readable tile names, used by the close control's label and the hidden-tiles menu.
+// Keyed by the same ids as DEFAULT_LAYOUT — the canonical tile registry.
+export const TILE_LABELS: Record<string, string> = {
+  collections: 'Collections',
+  'current-routes': 'Current routes',
+  routes: 'Routes',
+  'route-detail': 'Route detail',
+  logs: 'Logs',
+  sessions: 'Sessions',
+}
 
 /** The whole dashboard layout as a single serializable object — the source of truth. */
 export type DashboardLayout = {
@@ -145,20 +162,35 @@ function readLayout(transport: LayoutTransport): DashboardLayout {
 // Did the grid actually re-arrange? react-grid-layout fires onLayoutChange on mount with
 // the layout we just gave it — gating on a real position change avoids a needless write
 // (and the prop->event->prop feedback loop that would otherwise re-render every frame).
-function sameSlots(a: readonly LayoutItem[], b: readonly LayoutItem[]): boolean {
-  if (a.length !== b.length) {
-    return false
-  }
-  const index = new Map(a.map((item) => [item.i, item]))
-  return b.every((item) => {
+// The grid only ever reports the *visible* tiles, so we compare each incoming item against
+// its stored slot rather than comparing array lengths (a hidden tile is legitimately absent).
+function movedAny(current: readonly LayoutItem[], incoming: readonly LayoutItem[]): boolean {
+  const index = new Map(current.map((item) => [item.i, item]))
+  return incoming.some((item) => {
     const prev = index.get(item.i)
     return (
-      prev != null &&
-      prev.x === item.x &&
-      prev.y === item.y &&
-      prev.w === item.w &&
-      prev.h === item.h
+      prev == null ||
+      prev.x !== item.x ||
+      prev.y !== item.y ||
+      prev.w !== item.w ||
+      prev.h !== item.h
     )
+  })
+}
+
+// Fold the grid's reported (visible) positions back into the full layout, leaving any tile
+// the grid didn't report — i.e. a currently-hidden one — at its stored slot. Constraints
+// (minW/minH) come from the stored base via {@link mergeItem}, never from the grid event.
+function applyMoves(current: readonly LayoutItem[], incoming: readonly LayoutItem[]): LayoutItem[] {
+  const updates = new Map<string, Partial<LayoutItem>>()
+  for (const item of incoming) {
+    if (item?.i != null) {
+      updates.set(item.i, item)
+    }
+  }
+  return current.map((item) => {
+    const update = updates.get(item.i)
+    return update ? mergeItem(item, update) : item
   })
 }
 
@@ -183,16 +215,25 @@ export function createLayoutModel({
   const moved = createEvent<readonly LayoutItem[]>()
   // The reset-layout control.
   const reset = createEvent()
+  // Show/hide a tile (#94): the close control hides; the hidden-tiles menu re-adds.
+  const hide = createEvent<string>()
+  const show = createEvent<string>()
 
-  const $items = $layout.map((layout) => layout.layouts.lg)
+  // What the grid renders: every known tile *except* the hidden ones. The dashboard renders
+  // exactly these children, so the grid never has to auto-place a tile it can't match.
+  const $items = $layout.map((layout) =>
+    layout.layouts.lg.filter((item) => !layout.hidden.includes(item.i)),
+  )
+  // The currently-hidden tile ids, for the hidden-tiles menu.
+  const $hidden = $layout.map((layout) => layout.hidden)
 
   sample({
     clock: moved,
     source: $layout,
-    filter: (layout, items) => !sameSlots(layout.layouts.lg, items),
+    filter: (layout, items) => movedAny(layout.layouts.lg, items),
     fn: (layout, items) => ({
       ...layout,
-      layouts: { ...layout.layouts, lg: reconcileItems(items) },
+      layouts: { ...layout.layouts, lg: applyMoves(layout.layouts.lg, items) },
     }),
     target: $layout,
   })
@@ -200,6 +241,36 @@ export function createLayoutModel({
   sample({
     clock: reset,
     fn: defaultLayout,
+    target: $layout,
+  })
+
+  // Hide: add a known, not-already-hidden tile to the set. Its slot stays in `layouts.lg`
+  // untouched so the rest of the arrangement is undisturbed.
+  sample({
+    clock: hide,
+    source: $layout,
+    filter: (layout, id) => KNOWN.has(id) && !layout.hidden.includes(id),
+    fn: (layout, id) => ({ ...layout, hidden: [...layout.hidden, id] }),
+    target: $layout,
+  })
+
+  // Show: drop a tile from the hidden set and re-seat it at its default slot/size, so it
+  // re-appears somewhere sensible regardless of where it sat before being hidden.
+  sample({
+    clock: show,
+    source: $layout,
+    filter: (layout, id) => layout.hidden.includes(id),
+    fn: (layout, id) => {
+      const base = KNOWN.get(id)
+      return {
+        ...layout,
+        hidden: layout.hidden.filter((hiddenId) => hiddenId !== id),
+        layouts: {
+          ...layout.layouts,
+          lg: layout.layouts.lg.map((item) => (item.i === id && base ? { ...base } : item)),
+        },
+      }
+    },
     target: $layout,
   })
 
@@ -213,10 +284,13 @@ export function createLayoutModel({
   return {
     $layout,
     $items,
+    $hidden,
     $editing,
 
     moved,
     reset,
+    hide,
+    show,
     toggleEditing,
   }
 }
