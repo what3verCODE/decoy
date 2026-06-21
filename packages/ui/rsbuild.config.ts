@@ -5,7 +5,17 @@ import { pluginPreact } from '@rsbuild/plugin-preact'
 // The @decoy/ui asset resolver (node/index.ts) points `decoy start --ui` here.
 export default defineConfig({
   plugins: [pluginPreact()],
-  source: { entry: { index: './client/main.tsx' }, tsconfigPath: './tsconfig.client.json' },
+  source: {
+    entry: { index: './client/main.tsx' },
+    tsconfigPath: './tsconfig.client.json',
+    define: {
+      // react-draggable (via react-grid-layout) reads `process.env.DRAGGABLE_DEBUG`
+      // unguarded (build/cjs/Draggable.js); the browser bundle has no `process`, so the
+      // reference throws `process is not defined` the moment a drag starts. Define it
+      // away so the dead `if (false)` debug log is dropped and drag/resize work.
+      'process.env.DRAGGABLE_DEBUG': 'false',
+    },
+  },
   html: { template: './client/index.html' },
   output: {
     distPath: { root: 'dist/client' },

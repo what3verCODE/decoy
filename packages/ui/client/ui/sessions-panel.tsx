@@ -100,8 +100,8 @@ export function SessionsPanel(): JSX.Element {
     sessionsModel.open,
   ])
   return (
-    <section class="flex-1 min-w-0 flex flex-col overflow-hidden" data-testid="sessions-panel">
-      <div class="flex items-center h-9 px-4 border-b border-border shrink-0">
+    <section class="h-full flex flex-col overflow-hidden" data-testid="sessions-panel">
+      <div class="tile-drag-handle flex items-center h-9 px-4 border-b border-border shrink-0">
         <h2 class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           Sessions
         </h2>

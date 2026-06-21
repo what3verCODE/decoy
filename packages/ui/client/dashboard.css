@@ -1,0 +1,47 @@
+/*
+ * Dark-theme overrides for react-grid-layout (#89). The library ships light-theme
+ * defaults (a red drag placeholder, a near-invisible corner handle on dark cards),
+ * so we retint them to the panel's shadcn-zinc tokens. Loaded after the RGL base
+ * stylesheets in main.tsx.
+ */
+
+/* The drop target shown while dragging/resizing — RGL defaults this to solid red. */
+.react-grid-item.react-grid-placeholder {
+  background: hsl(var(--emerald));
+  opacity: 0.18;
+  border-radius: 6px;
+}
+
+/* Smooth the snap, but never animate the tile actively being dragged. */
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  cursor: grabbing;
+}
+
+/* The header doubles as the drag handle; hint it. */
+.tile-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+/* Make the bottom-right resize corner visible on dark cards (RGL's default SVG
+ * arrow is dark-on-dark). Drawn as two muted border strokes forming a corner. */
+.react-resizable-handle {
+  background: none;
+  padding: 0;
+}
+.react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid hsl(var(--muted-foreground));
+  border-bottom: 2px solid hsl(var(--muted-foreground));
+  opacity: 0.5;
+}

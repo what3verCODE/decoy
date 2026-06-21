@@ -47,6 +47,7 @@
     "patronum": "^2.3.0",
     "postcss": "^8.5.15",
     "preact": "^10.29.2",
+    "react-grid-layout": "^2.2.3",
     "unocss": "^66.7.2"
   }
 }
