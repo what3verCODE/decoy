@@ -10,6 +10,15 @@ async function boxOf(
   return box as { x: number; y: number; width: number; height: number }
 }
 
+/**
+ * Unlock the grid (#92): the dashboard boots locked, so drag/resize and the mutational
+ * layout controls (reset) are gated behind the top-bar Edit layout toggle. Tests that
+ * exercise a move/resize or the reset control flip it on first.
+ */
+async function enableEditMode(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByTestId('edit-layout').click()
+}
+
 // Dogfood smoke (ADR-0017): the prebuilt SPA renders the control panel as a
 // react-grid-layout tile dashboard (#89/#90) instead of the old fixed flex columns. The
 // control API is faked by the auto router fixture (decoy.config.ts + mocks/) — @decoy/ui
@@ -80,6 +89,7 @@ test('dragging a tile header moves it (react-grid-layout works under preact/comp
   page,
 }) => {
   await page.goto('/')
+  await enableEditMode(page) // drag is gated behind edit mode (#92)
 
   const collections = page.getByTestId('tile-collections')
   const routes = page.getByTestId('tile-routes')
@@ -158,6 +168,7 @@ test('a saved layout is restored and survives a reload', async ({ page }) => {
 
 test('a move persists across a reload', async ({ page }) => {
   await page.goto('/')
+  await enableEditMode(page) // drag is gated behind edit mode (#92)
 
   const collections = page.getByTestId('tile-collections')
   const routes = page.getByTestId('tile-routes')
@@ -227,6 +238,7 @@ test('corrupt saved data falls back silently to the default layout', async ({ pa
 test('the reset-layout control restores the default arrangement', async ({ page }) => {
   await seedLayout(page, { version: 1, layouts: { lg: SWAPPED_LG }, hidden: [] })
   await page.goto('/')
+  await enableEditMode(page) // reset is a mutational control, shown only in edit mode (#92)
 
   const collections = page.getByTestId('tile-collections')
   const routes = page.getByTestId('tile-routes')
@@ -242,4 +254,72 @@ test('the reset-layout control restores the default arrangement', async ({ page 
   await expect(async () => {
     expect((await boxOf(collections)).x).toBeLessThan((await boxOf(routes)).x)
   }).toPass()
+})
+
+// Slice 4 (#92): the edit-mode gate. The dashboard boots locked — tiles can't be moved or
+// resized and every inner control stays interactive for normal use. A top-bar Edit layout
+// toggle unlocks drag/resize and surfaces the mutational controls (reset). Edit mode is
+// ephemeral: it always boots off, never persisted. We assert user-visible affordances —
+// the corner resize handle, which RGL keeps in the DOM but hides (`display:none` via its
+// `react-resizable-hide` class) when an item isn't resizable, and the reset control's
+// presence — not RGL internals.
+
+test('the dashboard boots locked: no resize handles, reset hidden, inner controls clickable', async ({
+  page,
+}) => {
+  await page.goto('/')
+
+  // The Edit layout toggle exists and reads as off.
+  const editToggle = page.getByTestId('edit-layout')
+  await expect(editToggle).toBeVisible()
+  await expect(editToggle).toHaveText('edit layout')
+  await expect(editToggle).toHaveAttribute('aria-pressed', 'false')
+
+  // Locked: the corner resize handles are hidden, and the mutational reset control is gone.
+  await expect(page.locator('.react-resizable-handle').first()).toBeHidden()
+  await expect(page.getByTestId('reset-layout')).toHaveCount(0)
+
+  // Inner controls are fully clickable for normal use — pausing flips the button label.
+  const pause = page.getByTestId('logs-pause')
+  await expect(pause).toHaveText('pause')
+  await pause.click()
+  await expect(pause).toHaveText('resume')
+})
+
+test('toggling edit on reveals drag/resize affordances and the reset control; off hides them', async ({
+  page,
+}) => {
+  await page.goto('/')
+
+  // Off → on: resize corners become active and reset surfaces.
+  await enableEditMode(page)
+  await expect(page.getByTestId('edit-layout')).toHaveText('done')
+  await expect(page.getByTestId('edit-layout')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.react-resizable-handle').first()).toBeVisible()
+  await expect(page.getByTestId('reset-layout')).toBeVisible()
+
+  // On → off: the affordances and the reset control disappear again (plain panel restored).
+  await page.getByTestId('edit-layout').click()
+  await expect(page.getByTestId('edit-layout')).toHaveText('edit layout')
+  await expect(page.locator('.react-resizable-handle').first()).toBeHidden()
+  await expect(page.getByTestId('reset-layout')).toHaveCount(0)
+
+  // Normal use is unaffected once locked again.
+  const pause = page.getByTestId('logs-pause')
+  await pause.click()
+  await expect(pause).toHaveText('resume')
+})
+
+test('edit mode is ephemeral: a reload always boots locked', async ({ page }) => {
+  await page.goto('/')
+
+  await enableEditMode(page)
+  await expect(page.getByTestId('reset-layout')).toBeVisible()
+
+  // A reload starts fresh in locked mode regardless of the prior edit state.
+  await page.reload()
+  await expect(page.getByTestId('edit-layout')).toHaveText('edit layout')
+  await expect(page.getByTestId('edit-layout')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.locator('.react-resizable-handle').first()).toBeHidden()
+  await expect(page.getByTestId('reset-layout')).toHaveCount(0)
 })
