@@ -1,15 +1,6 @@
 import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
-import type { VariantAddress } from '../api'
-import { collectionModel, collectionsModel, selectionModel } from '../model'
-
-/** Whether `address` is currently pinned as an override (same route:preset:variant). */
-function isPinned(pinned: VariantAddress[], address: VariantAddress): boolean {
-  return pinned.some(
-    (o) =>
-      o.route === address.route && o.preset === address.preset && o.variant === address.variant,
-  )
-}
+import { collectionsModel, selectionModel } from '../model'
 
 export function CollectionsPanel(): JSX.Element {
   return (
@@ -18,41 +9,11 @@ export function CollectionsPanel(): JSX.Element {
         <h2 class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           Collections
         </h2>
-        <Overrides />
       </div>
       <div class="overflow-y-auto flex-1">
         <Collections />
-        <ActiveEntries />
       </div>
     </section>
-  )
-}
-
-function Overrides() {
-  const [overrides, handleReset] = useUnit([selectionModel.$overrides, collectionsModel.reset])
-
-  const overridesLength = overrides?.length ?? 0
-
-  if (overridesLength === 0) {
-    return null
-  }
-
-  return (
-    <>
-      <span
-        data-testid="override-count"
-        class="text-[11px] text-amber tabular-nums"
-      >{`${overridesLength} pinned`}</span>
-      <div class="flex-1" />
-      <button
-        type="button"
-        onClick={handleReset}
-        data-testid="overrides-reset"
-        class="text-[11px] px-1.5 h-[18px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
-      >
-        reset
-      </button>
-    </>
   )
 }
 
@@ -110,60 +71,5 @@ function Collections() {
         )
       })}
     </ul>
-  )
-}
-
-function ActiveEntries() {
-  const [collections, activeEntries, overrides, handlePinEntry] = useUnit([
-    collectionsModel.$collections,
-    collectionModel.$entries,
-    selectionModel.$overrides,
-    collectionsModel.pinEntry,
-  ])
-
-  const hasCollections = collections.length > 0
-  const hasEntires = activeEntries.length > 0
-
-  if (!hasCollections || !hasEntires) {
-    return null
-  }
-
-  return (
-    <div data-testid="active-entries" class="border-t border-border mt-1">
-      <div class="flex items-center h-7 px-4">
-        <h3 class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Active Entries
-        </h3>
-      </div>
-      <ul>
-        {activeEntries.map((entry) => {
-          const pinnedHere = isPinned(overrides, entry)
-          return (
-            <li
-              key={`${entry.route}:${entry.preset}:${entry.variant}`}
-              data-testid="entry-row"
-              class="flex items-center gap-2 px-4 py-1 hover:bg-muted/40 transition-colors"
-            >
-              <span class="font-mono text-[11px] text-foreground truncate flex-1">
-                {`${entry.route}:${entry.preset}:${entry.variant}`}
-              </span>
-              <button
-                type="button"
-                data-testid="entry-pin"
-                data-pinned={pinnedHere ? 'true' : 'false'}
-                onClick={() => handlePinEntry(entry)}
-                class={`text-[10px] px-1.5 h-[18px] rounded border transition-colors ${
-                  pinnedHere
-                    ? 'border-amber/30 bg-amber/10 text-amber'
-                    : 'border-border text-muted-foreground hover:bg-muted/60'
-                }`}
-              >
-                {pinnedHere ? 'pinned' : 'pin'}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
   )
 }

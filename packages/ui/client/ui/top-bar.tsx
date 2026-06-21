@@ -1,34 +1,6 @@
 import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
-import { $view, routesModel, servicesModel, showCatalog, showSessions } from '../model'
-
-type View = 'catalog' | 'sessions'
-
-function NavButton({ target, label }: { target: View; label: string }): JSX.Element {
-  const view = useUnit($view)
-  const active = view === target
-  return (
-    <button
-      type="button"
-      data-testid={`nav-${target}`}
-      data-active={active ? 'true' : 'false'}
-      onClick={() => {
-        if (target === 'sessions') {
-          showSessions()
-        } else {
-          showCatalog()
-        }
-      }}
-      class={`text-[11px] px-2 h-[22px] rounded border transition-colors ${
-        active
-          ? 'border-emerald bg-muted/60 text-foreground'
-          : 'border-border text-muted-foreground hover:bg-muted/60'
-      }`}
-    >
-      {label}
-    </button>
-  )
-}
+import { routesModel, servicesModel } from '../model'
 
 /**
  * The service axis switcher (ADR-0017): pick which booted instance the catalog /
@@ -73,10 +45,6 @@ export function TopBar(): JSX.Element {
         control panel
       </span>
       <ServiceSwitcher />
-      <nav class="flex items-center gap-1.5 ml-2">
-        <NavButton target="catalog" label="catalog" />
-        <NavButton target="sessions" label="sessions" />
-      </nav>
       <div class="flex-1" />
       <span class="text-muted-foreground">
         <span class="text-foreground tabular-nums">{routes.length}</span> routes

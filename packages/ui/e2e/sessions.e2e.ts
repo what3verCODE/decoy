@@ -4,11 +4,11 @@ import { expect, test } from './fixtures'
 // API, faked by the auto router fixture (decoy.config.ts + mocks/). @decoy/ui ships
 // static assets only, so the e2e never boots a server — it proves the panel lists
 // sessions (global + created) and that drilling into one shows its (cross-service)
-// request timeline. The store/lifecycle semantics (survives destroy, one ordered
+// request timeline. Since #90 Sessions is an always-mounted tile (no catalog/sessions
+// nav), so it lists on boot. The store/lifecycle semantics (survives destroy, one ordered
 // cross-service timeline) are covered by the server's HTTP-seam control tests.
-test('the sessions view lists the global session plus created sessions', async ({ page }) => {
+test('the sessions tile lists the global session plus created sessions', async ({ page }) => {
   await page.goto('/')
-  await page.getByTestId('nav-sessions').click()
 
   await expect(page.getByTestId('session-row')).toHaveCount(2)
   const panel = page.getByTestId('sessions-panel')
@@ -21,7 +21,6 @@ test('the sessions view lists the global session plus created sessions', async (
 
 test('a created session appears and its request timeline is viewable', async ({ page }) => {
   await page.goto('/')
-  await page.getByTestId('nav-sessions').click()
 
   // No timeline until a session is selected.
   await expect(page.getByTestId('session-timeline')).toHaveCount(0)
@@ -41,7 +40,6 @@ test('a created session appears and its request timeline is viewable', async ({ 
 test('shows a global-only list when no sessions have been created', async ({ page, router }) => {
   await router.useRoute('admin-sessions', 'default', 'solo')
   await page.goto('/')
-  await page.getByTestId('nav-sessions').click()
 
   await expect(page.getByTestId('session-row')).toHaveCount(1)
   await expect(page.getByTestId('sessions-panel')).toContainText('global')
