@@ -1,10 +1,9 @@
-import { useUnit } from 'effector-react'
 import type { ComponentChildren, JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import type { LayoutItem } from 'react-grid-layout'
 import { Responsive, useContainerWidth } from 'react-grid-layout'
-import { $view, routeModel } from '../model'
 import { CollectionsPanel } from './collections-panel'
+import { CurrentRoutesPanel } from './current-routes-panel'
 import { LiveStream } from './live-stream'
 import { RouteDetail } from './route-detail'
 import { RoutesCatalog } from './routes-catalog'
@@ -31,15 +30,20 @@ type ResponsiveGridProps = {
 }
 const ResponsiveGridLayout = Responsive as unknown as (props: ResponsiveGridProps) => JSX.Element
 
-// Slice 1 (#89): a hardcoded 12-col grid whose default arrangement mirrors today's
-// spatial layout — Collections left, the catalog/detail/sessions Center in the middle,
-// Logs right. No persistence yet (#91); drag/resize are always on (the edit-mode gate
-// is #92). Tiles drag by their header only (`.tile-drag-handle`) and carry minW/minH
-// so nothing collapses to an unreadable sliver. Vertical compaction is the grid default.
+// Slice 2 (#90): the six reactive tiles — Collections, Current routes, Routes, Route
+// detail, Logs, Sessions — each driven by its existing effector model so it reflects
+// live control-plane state wherever it sits. The default arrangement mirrors today's
+// spatial logic: Collections over Current routes on the left, Routes over Route detail
+// in the center, Logs over Sessions on the right. No persistence yet (#91); drag/resize
+// are always on (the edit-mode gate is #92). Tiles drag by their header only
+// (`.tile-drag-handle`) and carry minW/minH so nothing collapses to an unreadable sliver.
 const LAYOUT: LayoutItem[] = [
-  { i: 'collections', x: 0, y: 0, w: 3, h: 12, minW: 2, minH: 4 },
-  { i: 'center', x: 3, y: 0, w: 5, h: 12, minW: 3, minH: 4 },
-  { i: 'logs', x: 8, y: 0, w: 4, h: 12, minW: 2, minH: 4 },
+  { i: 'collections', x: 0, y: 0, w: 3, h: 6, minW: 2, minH: 3 },
+  { i: 'current-routes', x: 0, y: 6, w: 3, h: 6, minW: 2, minH: 3 },
+  { i: 'routes', x: 3, y: 0, w: 5, h: 6, minW: 3, minH: 3 },
+  { i: 'route-detail', x: 3, y: 6, w: 5, h: 6, minW: 3, minH: 3 },
+  { i: 'logs', x: 8, y: 0, w: 4, h: 6, minW: 2, minH: 3 },
+  { i: 'sessions', x: 8, y: 6, w: 4, h: 6, minW: 2, minH: 3 },
 ]
 
 // The header doubles as the drag handle; the header buttons (back, pause, clear, reset…)
@@ -55,15 +59,6 @@ const MARGIN = 8
 
 /** Outer chrome every tile shares: fills its grid cell, clips overflow, rounded border. */
 const TILE = 'h-full overflow-hidden rounded-md border border-border bg-card'
-
-/** The center tile content: the sessions inspector, or the catalog / drilled route detail. */
-function Center(): JSX.Element {
-  const [view, route] = useUnit([$view, routeModel.$route])
-  if (view === 'sessions') {
-    return <SessionsPanel />
-  }
-  return route ? <RouteDetail /> : <RoutesCatalog />
-}
 
 /**
  * Derive a rowHeight that makes the {@link ROWS}-row grid fill the available height,
@@ -115,11 +110,20 @@ export function Dashboard(): JSX.Element {
           <div key="collections" class={TILE} data-testid="tile-collections">
             <CollectionsPanel />
           </div>
-          <div key="center" class={TILE} data-testid="tile-center">
-            <Center />
+          <div key="current-routes" class={TILE} data-testid="tile-current-routes">
+            <CurrentRoutesPanel />
+          </div>
+          <div key="routes" class={TILE} data-testid="tile-routes">
+            <RoutesCatalog />
+          </div>
+          <div key="route-detail" class={TILE} data-testid="tile-route-detail">
+            <RouteDetail />
           </div>
           <div key="logs" class={TILE} data-testid="tile-logs">
             <LiveStream />
+          </div>
+          <div key="sessions" class={TILE} data-testid="tile-sessions">
+            <SessionsPanel />
           </div>
         </ResponsiveGridLayout>
       )}

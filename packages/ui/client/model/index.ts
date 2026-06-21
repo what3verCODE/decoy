@@ -1,4 +1,4 @@
-import { createEvent, createStore, sample } from 'effector'
+import { sample } from 'effector'
 import { createGate } from 'effector-react'
 import { createCollectionModel } from './create-collection-model'
 import { createCollectionsModel } from './create-collections-model'
@@ -11,13 +11,6 @@ import { createServicesModel } from './create-services-model'
 import { createSessionsModel } from './create-sessions-model'
 
 export const PageGate = createGate()
-
-type View = 'catalog' | 'sessions'
-
-export const $view = createStore<View>('catalog')
-
-export const showCatalog = createEvent()
-export const showSessions = createEvent()
 
 export const logsModel = createLogsModel()
 
@@ -58,22 +51,4 @@ sample({
   clock: selectionModel.$collection,
   filter: Boolean,
   target: collectionModel.load,
-})
-
-// Re-fetch the sessions list each time the user opens the sessions view.
-sample({
-  clock: showSessions,
-  target: sessionsModel.load,
-})
-
-sample({
-  clock: showCatalog,
-  fn: () => 'catalog' as const,
-  target: $view,
-})
-
-sample({
-  clock: showSessions,
-  fn: () => 'sessions' as const,
-  target: $view,
 })

@@ -130,6 +130,11 @@ function Playground({ method, path }: { method: string; path: string }): JSX.Ele
   )
 }
 
+/**
+ * Always-mounted tile that reacts to the currently selected route (`routeModel.$route`),
+ * driven by opening a row in the Routes tile. With nothing selected it shows a placeholder
+ * — there is no longer a catalog/detail switch; both are persistent tiles side by side.
+ */
 export function RouteDetail(): JSX.Element {
   const [route, pending, error, close] = useUnit([
     routeModel.$route,
@@ -140,19 +145,23 @@ export function RouteDetail(): JSX.Element {
   return (
     <section class="h-full flex flex-col overflow-hidden" data-testid="route-detail">
       <div class="tile-drag-handle flex items-center gap-2 h-9 px-4 border-b border-border shrink-0">
-        <button
-          type="button"
-          data-testid="route-detail-back"
-          onClick={() => close()}
-          class="text-[11px] px-1.5 h-[18px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
-        >
-          ← routes
-        </button>
+        <h2 class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Route Detail
+        </h2>
         {route && (
           <>
             <MethodBadge method={route.method} />
             <span class="font-mono text-[12px] text-foreground">{route.path}</span>
             <span class="font-mono text-[12px] text-muted-foreground">{route.id}</span>
+            <div class="flex-1" />
+            <button
+              type="button"
+              data-testid="route-detail-back"
+              onClick={() => close()}
+              class="text-[11px] px-1.5 h-[18px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
+            >
+              clear
+            </button>
           </>
         )}
       </div>
@@ -161,6 +170,11 @@ export function RouteDetail(): JSX.Element {
         {error !== null && (
           <p class="px-4 py-6 text-rose text-[12px]" data-testid="route-detail-error">
             {error}
+          </p>
+        )}
+        {!route && !pending && error === null && (
+          <p class="px-4 py-6 text-muted-foreground text-[12px]" data-testid="route-detail-empty">
+            select a route to inspect it
           </p>
         )}
         {route && (

@@ -11,39 +11,52 @@ async function boxOf(
 }
 
 // Dogfood smoke (ADR-0017): the prebuilt SPA renders the control panel as a
-// react-grid-layout tile dashboard (#89) instead of the old fixed flex columns. The
+// react-grid-layout tile dashboard (#89/#90) instead of the old fixed flex columns. The
 // control API is faked by the auto router fixture (decoy.config.ts + mocks/) — @decoy/ui
-// is static assets only, so the e2e never boots a server. This slice keeps today's
-// three regions — Collections, the catalog/detail/sessions Center, and Logs — each
-// wrapped in a draggable/resizable tile; it doubles as the preact/compat viability
-// spike, so the drag smoke below asserts react-grid-layout's physics work under Preact.
+// is static assets only, so the e2e never boots a server. Slice 2 (#90) decomposes the
+// panel into six reactive tiles — Collections, Current routes, Routes, Route detail,
+// Logs, Sessions — each a draggable/resizable tile driven by its effector model; the
+// drag smoke below asserts react-grid-layout's physics work under preact/compat.
 
-test('the dashboard renders Collections, Center, and Logs as grid tiles', async ({ page }) => {
+test('the dashboard renders all six reactive tiles', async ({ page }) => {
   await page.goto('/')
 
-  // The grid container and all three tiles mount.
+  // The grid container and all six tiles mount concurrently.
   await expect(page.getByTestId('dashboard')).toBeVisible()
   await expect(page.getByTestId('tile-collections')).toBeVisible()
-  await expect(page.getByTestId('tile-center')).toBeVisible()
+  await expect(page.getByTestId('tile-current-routes')).toBeVisible()
+  await expect(page.getByTestId('tile-routes')).toBeVisible()
+  await expect(page.getByTestId('tile-route-detail')).toBeVisible()
   await expect(page.getByTestId('tile-logs')).toBeVisible()
+  await expect(page.getByTestId('tile-sessions')).toBeVisible()
 
-  // Each tile still renders its panel content, driven by the unchanged effector models.
+  // The catalog/sessions top-bar nav is gone — both are persistent tiles now.
+  await expect(page.getByTestId('nav-catalog')).toHaveCount(0)
+  await expect(page.getByTestId('nav-sessions')).toHaveCount(0)
+
+  // Each tile renders its panel content, driven by the unchanged effector models.
   await expect(page.getByTestId('collections-panel')).toContainText('happy-path')
   await expect(page.getByTestId('routes-catalog')).toContainText('users-by-id')
   await expect(page.getByTestId('live-stream')).toContainText('/users/42')
+  await expect(page.getByTestId('sessions-panel')).toContainText('global')
 })
 
-test('the default arrangement mirrors the old layout: Collections left, Center, Logs right', async ({
+test('the default arrangement mirrors the old layout: collections left, routes center, logs right', async ({
   page,
 }) => {
   await page.goto('/')
 
   const left = await boxOf(page.getByTestId('tile-collections'))
-  const center = await boxOf(page.getByTestId('tile-center'))
+  const center = await boxOf(page.getByTestId('tile-routes'))
   const right = await boxOf(page.getByTestId('tile-logs'))
-  // Collections sits left of Center, which sits left of Logs — today's spatial order.
+  // Collections sits left of Routes, which sits left of Logs — today's spatial order.
   expect(left.x).toBeLessThan(center.x)
   expect(center.x).toBeLessThan(right.x)
+
+  // Current routes stacks under Collections; Route detail under Routes; Sessions under Logs.
+  const collections = await boxOf(page.getByTestId('tile-collections'))
+  const currentRoutes = await boxOf(page.getByTestId('tile-current-routes'))
+  expect(currentRoutes.y).toBeGreaterThan(collections.y)
 })
 
 test('tile headers act as drag handles, and inner controls stay clickable', async ({ page }) => {
@@ -69,15 +82,15 @@ test('dragging a tile header moves it (react-grid-layout works under preact/comp
   await page.goto('/')
 
   const collections = page.getByTestId('tile-collections')
-  const center = page.getByTestId('tile-center')
+  const routes = page.getByTestId('tile-routes')
 
-  // Collections starts as the leftmost tile (left of Center).
+  // Collections starts as the leftmost column tile (left of the center Routes tile).
   const collectionsStart = await boxOf(collections)
-  const centerStart = await boxOf(center)
-  expect(collectionsStart.x).toBeLessThan(centerStart.x)
+  const routesStart = await boxOf(routes)
+  expect(collectionsStart.x).toBeLessThan(routesStart.x)
 
   // Drag the Collections header across the whole grid to the far right, so it lands in a
-  // right-hand column past Center — a real, persisted layout change that only happens if
+  // right-hand column past Routes — a real, persisted layout change that only happens if
   // react-grid-layout's drag actually fires under preact/compat.
   const box = await boxOf(collections.locator('.tile-drag-handle'))
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
@@ -86,10 +99,10 @@ test('dragging a tile header moves it (react-grid-layout works under preact/comp
   await page.mouse.move(viewport.width - 40, box.y + box.height / 2, { steps: 20 })
   await page.mouse.up()
 
-  // Order flipped: Collections is now to the right of Center.
+  // Order flipped: Collections is now to the right of the Routes tile.
   await expect(async () => {
     const collectionsEnd = await boxOf(collections)
-    const centerEnd = await boxOf(center)
-    expect(collectionsEnd.x).toBeGreaterThan(centerEnd.x)
+    const routesEnd = await boxOf(routes)
+    expect(collectionsEnd.x).toBeGreaterThan(routesEnd.x)
   }).toPass()
 })
