@@ -1,6 +1,6 @@
 import { useUnit } from 'effector-react'
 import type { JSX } from 'preact'
-import { routesModel, servicesModel } from '../model'
+import { layoutModel, routesModel, servicesModel } from '../model'
 
 /**
  * The service axis switcher (ADR-0017): pick which booted instance the catalog /
@@ -37,7 +37,7 @@ function ServiceSwitcher(): JSX.Element | null {
 }
 
 export function TopBar(): JSX.Element {
-  const routes = useUnit(routesModel.$routes)
+  const [routes, handleResetLayout] = useUnit([routesModel.$routes, layoutModel.reset])
   return (
     <header class="flex items-center gap-3 h-12 px-4 border-b border-border bg-card shrink-0">
       <span class="font-semibold tracking-tight text-foreground select-none">decoy</span>
@@ -49,6 +49,14 @@ export function TopBar(): JSX.Element {
       <span class="text-muted-foreground">
         <span class="text-foreground tabular-nums">{routes.length}</span> routes
       </span>
+      <button
+        type="button"
+        onClick={handleResetLayout}
+        data-testid="reset-layout"
+        class="text-[11px] px-1.5 h-[22px] rounded border border-border text-muted-foreground hover:bg-muted/60 transition-colors"
+      >
+        reset layout
+      </button>
     </header>
   )
 }
