@@ -2,6 +2,7 @@ import { sample } from 'effector'
 import { createGate } from 'effector-react'
 import { createCollectionModel } from './create-collection-model'
 import { createCollectionsModel } from './create-collections-model'
+import { createLayoutModel } from './create-layout-model'
 import { createLogsModel } from './create-logs-model'
 import { createPlaygroundModel } from './create-playground-model'
 import { createRouteModel } from './create-route-model'
@@ -13,6 +14,10 @@ import { createSessionsModel } from './create-sessions-model'
 export const PageGate = createGate()
 
 export const logsModel = createLogsModel()
+
+// The dashboard layout is local-first (#91) and unscoped to any service: one model owns
+// the persisted `{ version, layouts, hidden }` object that drives the grid.
+export const layoutModel = createLayoutModel()
 
 export const servicesModel = createServicesModel()
 

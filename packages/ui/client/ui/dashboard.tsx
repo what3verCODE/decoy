@@ -1,7 +1,9 @@
+import { useUnit } from 'effector-react'
 import type { ComponentChildren, JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import type { LayoutItem } from 'react-grid-layout'
 import { Responsive, useContainerWidth } from 'react-grid-layout'
+import { layoutModel } from '../model'
 import { CollectionsPanel } from './collections-panel'
 import { CurrentRoutesPanel } from './current-routes-panel'
 import { LiveStream } from './live-stream'
@@ -32,19 +34,11 @@ const ResponsiveGridLayout = Responsive as unknown as (props: ResponsiveGridProp
 
 // Slice 2 (#90): the six reactive tiles — Collections, Current routes, Routes, Route
 // detail, Logs, Sessions — each driven by its existing effector model so it reflects
-// live control-plane state wherever it sits. The default arrangement mirrors today's
-// spatial logic: Collections over Current routes on the left, Routes over Route detail
-// in the center, Logs over Sessions on the right. No persistence yet (#91); drag/resize
+// live control-plane state wherever it sits. Slice 3 (#91): the arrangement (and its
+// default) now lives in `layoutModel`, which persists every move/resize to localStorage
+// and reloads with migration; the reset-layout control lives in the top bar. Drag/resize
 // are always on (the edit-mode gate is #92). Tiles drag by their header only
 // (`.tile-drag-handle`) and carry minW/minH so nothing collapses to an unreadable sliver.
-const LAYOUT: LayoutItem[] = [
-  { i: 'collections', x: 0, y: 0, w: 3, h: 6, minW: 2, minH: 3 },
-  { i: 'current-routes', x: 0, y: 6, w: 3, h: 6, minW: 2, minH: 3 },
-  { i: 'routes', x: 3, y: 0, w: 5, h: 6, minW: 3, minH: 3 },
-  { i: 'route-detail', x: 3, y: 6, w: 5, h: 6, minW: 3, minH: 3 },
-  { i: 'logs', x: 8, y: 0, w: 4, h: 6, minW: 2, minH: 3 },
-  { i: 'sessions', x: 8, y: 6, w: 4, h: 6, minW: 2, minH: 3 },
-]
 
 // The header doubles as the drag handle; the header buttons (back, pause, clear, reset…)
 // must stay clickable, so they cancel a drag.
@@ -92,6 +86,7 @@ export function Dashboard(): JSX.Element {
   // the grid lays out at the real width instead of the hook's default fallback.
   const { width, containerRef, mounted } = useContainerWidth()
   const rowHeight = useRowHeight(containerRef)
+  const [items, handleLayoutChange] = useUnit([layoutModel.$items, layoutModel.moved])
 
   return (
     <div ref={containerRef} class="flex-1 min-h-0 overflow-hidden" data-testid="dashboard">
@@ -99,13 +94,14 @@ export function Dashboard(): JSX.Element {
         <ResponsiveGridLayout
           className="layout"
           width={width}
-          layouts={{ lg: LAYOUT }}
+          layouts={{ lg: items }}
           breakpoints={{ lg: 0 }}
           cols={{ lg: COLS }}
           rowHeight={rowHeight}
           margin={[MARGIN, MARGIN]}
           containerPadding={[MARGIN, MARGIN]}
           dragConfig={DRAG_CONFIG}
+          onLayoutChange={handleLayoutChange}
         >
           <div key="collections" class={TILE} data-testid="tile-collections">
             <CollectionsPanel />
