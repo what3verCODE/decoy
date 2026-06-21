@@ -323,3 +323,80 @@ test('edit mode is ephemeral: a reload always boots locked', async ({ page }) =>
   await expect(page.locator('.react-resizable-handle').first()).toBeHidden()
   await expect(page.getByTestId('reset-layout')).toHaveCount(0)
 })
+
+// Slice 5 (#94): show/hide tiles. In edit mode each tile carries a close "×" that removes
+// it from the grid; a hidden-tiles menu re-adds a closed tile at its default slot. Tile
+// visibility is part of the persisted `{ version, layouts, hidden }` object, so a closed
+// tile stays closed across reloads (the "logs-only / routes-only workspace" capability).
+// The close controls and the menu are mutational, so they only surface in edit mode.
+
+test('the close control and hidden-tiles menu surface only in edit mode', async ({ page }) => {
+  await page.goto('/')
+
+  // Locked: no close controls on tiles, no hidden-tiles menu.
+  await expect(page.getByTestId('tile-close-logs')).toHaveCount(0)
+  await expect(page.getByTestId('hidden-tiles-menu')).toHaveCount(0)
+
+  // Edit on: every visible tile gets a close control and the menu appears.
+  await enableEditMode(page)
+  await expect(page.getByTestId('tile-close-logs')).toBeVisible()
+  await expect(page.getByTestId('hidden-tiles-menu')).toBeVisible()
+})
+
+test('closing a tile removes it; the hidden-tiles menu re-adds it', async ({ page }) => {
+  await page.goto('/')
+  await enableEditMode(page)
+
+  // All six render to start; the other tiles are unaffected by what follows.
+  await expect(page.getByTestId('tile-logs')).toBeVisible()
+  await expect(page.getByTestId('tile-collections')).toBeVisible()
+  await expect(page.getByTestId('tile-routes')).toBeVisible()
+
+  // Close Logs: it leaves the grid entirely (not just hidden via CSS).
+  await page.getByTestId('tile-close-logs').click()
+  await expect(page.getByTestId('tile-logs')).toHaveCount(0)
+  // The rest of the arrangement survives — collections and routes still render.
+  await expect(page.getByTestId('tile-collections')).toBeVisible()
+  await expect(page.getByTestId('tile-routes')).toBeVisible()
+
+  // The hidden-tiles menu now lists Logs; re-adding brings it back into the grid.
+  await page.getByTestId('hidden-tiles-menu').click()
+  await page.getByTestId('show-tile-logs').click()
+  await expect(page.getByTestId('tile-logs')).toBeVisible()
+  // Re-adding consumes the entry — the menu no longer offers it.
+  await page.getByTestId('hidden-tiles-menu').click()
+  await expect(page.getByTestId('show-tile-logs')).toHaveCount(0)
+})
+
+test('a hidden tile stays hidden across a reload', async ({ page }) => {
+  await page.goto('/')
+  await enableEditMode(page)
+
+  await page.getByTestId('tile-close-sessions').click()
+  await expect(page.getByTestId('tile-sessions')).toHaveCount(0)
+
+  // The hidden set is persisted, so a fresh load boots with Sessions still closed.
+  await page.reload()
+  await expect(page.getByTestId('dashboard')).toBeVisible()
+  await expect(page.getByTestId('tile-sessions')).toHaveCount(0)
+  // The other tiles are unaffected.
+  await expect(page.getByTestId('tile-collections')).toBeVisible()
+})
+
+test('a seeded hidden set is honored on boot', async ({ page }) => {
+  // A returning user whose saved layout has Logs closed: the grid boots without it.
+  await seedLayout(page, { version: 1, layouts: { lg: SWAPPED_LG }, hidden: ['logs'] })
+  await page.goto('/')
+
+  await expect(page.getByTestId('dashboard')).toBeVisible()
+  await expect(page.getByTestId('tile-logs')).toHaveCount(0)
+  // Every other tile renders.
+  await expect(page.getByTestId('tile-collections')).toBeVisible()
+  await expect(page.getByTestId('tile-sessions')).toBeVisible()
+
+  // Edit mode surfaces it in the menu, and re-adding restores it.
+  await enableEditMode(page)
+  await page.getByTestId('hidden-tiles-menu').click()
+  await page.getByTestId('show-tile-logs').click()
+  await expect(page.getByTestId('tile-logs')).toBeVisible()
+})

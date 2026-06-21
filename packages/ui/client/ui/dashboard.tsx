@@ -4,6 +4,7 @@ import { useEffect, useState } from 'preact/hooks'
 import type { LayoutItem } from 'react-grid-layout'
 import { Responsive, useContainerWidth } from 'react-grid-layout'
 import { layoutModel } from '../model'
+import { TILE_LABELS } from '../model/create-layout-model'
 import { CollectionsPanel } from './collections-panel'
 import { CurrentRoutesPanel } from './current-routes-panel'
 import { LiveStream } from './live-stream'
@@ -42,22 +43,61 @@ const ResponsiveGridLayout = Responsive as unknown as (props: ResponsiveGridProp
 // (#92): an edit-mode gate (`layoutModel.$editing`) drives the grid's drag/resize. The
 // dashboard boots locked — off — so tiles can't be moved or resized and inner controls
 // stay fully clickable; turning edit on activates header drag and the corner resize handle
-// and surfaces the mutational controls (reset, and later close/re-add). Tiles drag by
-// their header only (`.tile-drag-handle`) and carry minW/minH so nothing collapses.
+// and surfaces the mutational controls. Tiles drag by their header only
+// (`.tile-drag-handle`) and carry minW/minH so nothing collapses. Slice 5 (#94): each tile
+// carries a close control (shown in edit mode) that hides it; only the visible tiles
+// (`layoutModel.$items`) are rendered, so the grid never auto-places a hidden one. The
+// hidden-tiles menu that re-adds a closed tile lives in the top bar.
 
 // The header doubles as the drag handle; the header buttons (back, pause, clear, reset…)
-// must stay clickable, so they cancel a drag.
+// and the close control must stay clickable, so they cancel a drag.
 const DRAG_CONFIG: DragConfig = {
   handle: '.tile-drag-handle',
   cancel: 'button,select,textarea,input,a',
 }
 
+// The six tiles, keyed by their layout id. The grid renders the subset that isn't hidden;
+// each child's key matches its layout item so react-grid-layout can place it.
+const TILES: { id: string; testid: string; render: () => JSX.Element }[] = [
+  { id: 'collections', testid: 'tile-collections', render: () => <CollectionsPanel /> },
+  { id: 'current-routes', testid: 'tile-current-routes', render: () => <CurrentRoutesPanel /> },
+  { id: 'routes', testid: 'tile-routes', render: () => <RoutesCatalog /> },
+  { id: 'route-detail', testid: 'tile-route-detail', render: () => <RouteDetail /> },
+  { id: 'logs', testid: 'tile-logs', render: () => <LiveStream /> },
+  { id: 'sessions', testid: 'tile-sessions', render: () => <SessionsPanel /> },
+]
+
 const COLS = 12
 const ROWS = 12
 const MARGIN = 8
 
-/** Outer chrome every tile shares: fills its grid cell, clips overflow, rounded border. */
-const TILE = 'h-full overflow-hidden rounded-md border border-border bg-card'
+/** Outer chrome every tile shares: fills its grid cell, clips overflow, rounded border.
+ * `relative` anchors the edit-mode close control to the tile's top-right corner. */
+const TILE = 'relative h-full overflow-hidden rounded-md border border-border bg-card'
+
+/**
+ * The edit-mode close control: a small × in the tile's top-right corner that hides the
+ * tile. Rendered only in edit mode and only over its own tile; it's a `<button>`, so the
+ * drag config's `cancel` list keeps a click from starting a drag on the header beneath it.
+ */
+function CloseTile({ id }: { id: string }): JSX.Element {
+  const handleHide = useUnit(layoutModel.hide)
+  const label = TILE_LABELS[id] ?? id
+  return (
+    <button
+      type="button"
+      onClick={() => handleHide(id)}
+      data-testid={`tile-close-${id}`}
+      title={`Hide ${label}`}
+      aria-label={`Hide ${label}`}
+      class="absolute top-1 right-1 z-10 flex items-center justify-center w-5 h-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+    >
+      <span aria-hidden="true" class="text-[13px] leading-none">
+        ×
+      </span>
+    </button>
+  )
+}
 
 /**
  * Derive a rowHeight that makes the {@link ROWS}-row grid fill the available height,
@@ -91,11 +131,16 @@ export function Dashboard(): JSX.Element {
   // the grid lays out at the real width instead of the hook's default fallback.
   const { width, containerRef, mounted } = useContainerWidth()
   const rowHeight = useRowHeight(containerRef)
-  const [items, editing, handleLayoutChange] = useUnit([
+  const [items, hidden, editing, handleLayoutChange] = useUnit([
     layoutModel.$items,
+    layoutModel.$hidden,
     layoutModel.$editing,
     layoutModel.moved,
   ])
+
+  // Render exactly the visible tiles — matching the grid's `items` (`$items` filters the
+  // same `hidden` set), so react-grid-layout never sees a child it can't place.
+  const visibleTiles = TILES.filter((tile) => !hidden.includes(tile.id))
 
   return (
     <div
@@ -117,24 +162,12 @@ export function Dashboard(): JSX.Element {
           resizeConfig={{ enabled: editing }}
           onLayoutChange={handleLayoutChange}
         >
-          <div key="collections" class={TILE} data-testid="tile-collections">
-            <CollectionsPanel />
-          </div>
-          <div key="current-routes" class={TILE} data-testid="tile-current-routes">
-            <CurrentRoutesPanel />
-          </div>
-          <div key="routes" class={TILE} data-testid="tile-routes">
-            <RoutesCatalog />
-          </div>
-          <div key="route-detail" class={TILE} data-testid="tile-route-detail">
-            <RouteDetail />
-          </div>
-          <div key="logs" class={TILE} data-testid="tile-logs">
-            <LiveStream />
-          </div>
-          <div key="sessions" class={TILE} data-testid="tile-sessions">
-            <SessionsPanel />
-          </div>
+          {visibleTiles.map((tile) => (
+            <div key={tile.id} class={TILE} data-testid={tile.testid}>
+              {editing && <CloseTile id={tile.id} />}
+              {tile.render()}
+            </div>
+          ))}
         </ResponsiveGridLayout>
       )}
     </div>
