@@ -1,13 +1,13 @@
 import type { Selection } from '@decoy/core'
 
-/** The `x-mock-session` header that scopes a session's selection (ADR-0011). */
+/** The `x-mock-session` header that scopes a session's selection. */
 export const SESSION_HEADER = 'x-mock-session'
 
 /**
- * The transport-agnostic control interface (ADR-0011). One set of methods,
+ * The transport-agnostic control interface. One set of methods,
  * many transports — a session handle proxies them over `/__decoy__`, a future
  * `PlaywrightRouter` drives the in-process engine — so test code never touches
- * transport details. Mirrors the canonical JS control API (ADR-0010): a Router's
+ * transport details. Mirrors the canonical JS control API: a Router's
  * `useCollection`/`useRoute`/`reset` are the async, switchable view of
  * `useCollection`/`useRoute`/`reset`. Each call resolves with the resulting
  * selection, so a switch is confirmable.
@@ -31,7 +31,7 @@ export interface HeaderSink {
 }
 
 /**
- * A first-class **session handle** (ADR-0011): a {@link Router} backed by a server
+ * A first-class **session handle**: a {@link Router} backed by a server
  * session, plus its identity, header, and lifecycle. It owns an isolated selection
  * on a shared server keyed by `x-mock-session`, so parallel e2e workers never stomp
  * each other. Control calls are proxied to the control prefix carrying the session

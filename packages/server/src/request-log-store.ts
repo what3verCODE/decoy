@@ -6,7 +6,7 @@ import { createSqliteRequestLogStore } from './sqlite-request-log-store'
  * The input to {@link RequestLogStore.append}: the structured {@link RequestLog}
  * plus the `service` (instance name) that handled it — the store's `service`
  * column, so a single shared store can hold records from every instance of a
- * multi-instance config (ADR-0006) and a query can scope to one.
+ * multi-instance config and a query can scope to one.
  */
 export interface RequestLogInput extends RequestLog {
   /** The instance (service) name that served the request. */
@@ -36,10 +36,10 @@ export interface RequestLogQuery {
 }
 
 /**
- * Write-only observability sink for completed requests (ADR-0017): it ingests the
+ * Write-only observability sink for completed requests: it ingests the
  * same {@link RequestLog} `Logger.request()` emits, retains recent history, and
  * lets a consumer (the `GET /__decoy__/logs` SSE stream) replay that history then tail
- * new records. Records are *not* engine state — `core` stays pure (ADR-0012); the
+ * new records. Records are *not* engine state — `core` stays pure; the
  * store lives in `@decoy/server` where IO is allowed. Two impls share this contract:
  * the process-bound in-memory ring and the durable `node:sqlite` store (#70).
  */
@@ -59,7 +59,7 @@ export interface RequestLogStore {
   /**
    * Signal a session was destroyed. Under sqlite `cleanup: 'on-session-end'` this
    * drops that session's records (disabling post-session retrieval); otherwise it
-   * is a no-op — logs survive session destruction (ADR-0017).
+   * is a no-op — logs survive session destruction.
    */
   endSession(session: string): void
   /** Release resources; under sqlite `cleanup: 'on-exit'` the durable file is removed. */
@@ -68,7 +68,7 @@ export interface RequestLogStore {
 
 /**
  * A {@link RequestLogStore} that can be shared across N holders with close-once
- * ownership (ADR-0017, #80). The multi-instance aggregator (#72) shares one store
+ * ownership (#80). The multi-instance aggregator (#72) shares one store
  * across every instance; each instance {@link acquire}s a holder handle and closes
  * it independently on shutdown. The underlying store's `close()` — and so its
  * cleanup policy (sqlite `on-exit` file removal) — runs **exactly once**, after the

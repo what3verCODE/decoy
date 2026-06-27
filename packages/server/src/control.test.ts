@@ -517,7 +517,7 @@ describe('HTTP control API', () => {
   })
 
   test('GET /__decoy__/sessions/{id}/logs returns one ordered timeline across services', async () => {
-    // Inject a shared store (the same store the CLI shares across instances, ADR-0017)
+    // Inject a shared store (the same store the CLI shares across instances)
     // so the test can add another service's record directly — the `requestLog` accessor
     // is gone. The server records service "users" through its acquired handle; an
     // "orders" record appended to the shared store proves a session spanning services

@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures'
 
-// Dogfood smoke (ADR-0017): the prebuilt SPA renders the live request stream it reads
+// Dogfood smoke: the prebuilt SPA renders the live request stream it reads
 // from the GET /__decoy__/logs SSE endpoint. The control API is faked by the auto router
 // fixture (decoy.config.ts + mocks/) — @decoy/ui is static assets only, so the e2e
 // never boots a server; it proves the panel renders whatever the stream emits. The

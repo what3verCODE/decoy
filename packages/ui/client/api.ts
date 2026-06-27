@@ -1,5 +1,5 @@
 // The data API the SPA fetches from its own (loopback) origin — same origin as the
-// served assets, so no CORS (ADR-0017). Mirrors the server's RouteCatalogEntry.
+// served assets, so no CORS. Mirrors the server's RouteCatalogEntry.
 
 /** Append the active `?service=` selector to a control/catalog URL (omitted when unset). */
 function scoped(url: string, service: string | null): string {

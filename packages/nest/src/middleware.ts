@@ -26,7 +26,7 @@ export interface DecoyMiddlewareOptions {
  * selection atomically, so the next request reflects the change.
  */
 export interface DecoyMiddleware extends DecoyMiddlewareFn {
-  /** The canonical JS control API (ADR-0010) driving this middleware in-process. */
+  /** The canonical JS control API driving this middleware in-process. */
   readonly control: Controller
   /** A read-only snapshot of the current selection. */
   readonly selection: Selection

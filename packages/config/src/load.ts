@@ -43,7 +43,7 @@ const CONFIG_SEARCH_PLACES = [
 const DEFAULT_ROUTES_DIR = 'mocks/routes'
 const DEFAULT_COLLECTIONS_FILE = 'mocks/collections.yaml'
 const DEFAULT_PORT = 4000
-/** Collision-safe default control mount prefix (ADR-0010); won't shadow a real upstream route. */
+/** Collision-safe default control mount prefix; won't shadow a real upstream route. */
 const DEFAULT_CONTROL_PREFIX = '/__decoy__'
 const DEFAULT_MISS_STATUS = 501
 /** 30 minutes — long enough to outlive a slow e2e test, short enough to reclaim abandoned sessions. */
@@ -60,7 +60,7 @@ export interface ResolvedControl {
   port?: number
 }
 
-/** Resolved global passthrough target (ADR-0005): a normalized upstream base URL. */
+/** Resolved global passthrough target: a normalized upstream base URL. */
 export interface ResolvedPassthrough {
   /** Upstream base URL with any trailing slash trimmed, ready to prefix `{path}{query}`. */
   url: string
@@ -83,17 +83,17 @@ export interface LoadedService {
   name: string
   port: number
   defaultCollection: string
-  /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
+  /** HTTP status returned for a fail-closed miss; defaults to 501. */
   missStatus: number
   /**
-   * Global passthrough target (ADR-0005): when set, unmatched requests are
+   * Global passthrough target: when set, unmatched requests are
    * forwarded verbatim here instead of failing closed. Absent = off (the default).
    */
   passthrough?: ResolvedPassthrough
-  /** Idle TTL (ms) after which an abandoned session is reaped (ADR-0011); defaults to 30 min. */
+  /** Idle TTL (ms) after which an abandoned session is reaped; defaults to 30 min. */
   sessionIdleTtlMs: number
   definitions: Definitions
-  /** Resolved control API mount (ADR-0010). */
+  /** Resolved control API mount. */
   control: ResolvedControl
   /**
    * Resolved durable request-log store (#70). Always set by the loader; optional
@@ -269,7 +269,7 @@ function describeService(service: ServiceConfig, serviceBase: ValuePath): string
 
 /**
  * Resolve the active source into **one layout per service**: a `decoy.config.*`
- * file (single object → one layout; array → one layout per entry, ADR-0006) or
+ * file (single object → one layout; array → one layout per entry) or
  * the default-path source (`mocks/routes` + `mocks/collections.yaml`, always a
  * single service). Discovery + reading of the config file is owned by cosmiconfig
  * (see {@link createConfigExplorer}). Panics (throws) when neither can be resolved
@@ -398,7 +398,7 @@ function assembleDefinitions(sources: CollectedSources): Definitions {
 
 /**
  * Cross-service checks that no single service's sources can see: in a
- * multi-instance config (ADR-0006) two services must not share a listen port, or
+ * multi-instance config two services must not share a listen port, or
  * the second instance's `listen()` fails with an opaque `EADDRINUSE`. The message
  * names both offending services so it surfaces in `decoy check` and blocks boot
  * (located by the config file, no line). Port `0` (ephemeral — the OS assigns a
@@ -457,7 +457,7 @@ export async function validateConfig(opts?: {
  * booting from one), the `routesDir`, and the `collectionsFile`. Only paths that
  * currently exist are returned — a watcher can't subscribe to a missing one, and a
  * later-created file lands under a watched dir. Panics (throws) when no source
- * resolves, like {@link loadConfig}. For a multi-instance config (ADR-0006), use
+ * resolves, like {@link loadConfig}. For a multi-instance config, use
  * {@link resolveAllWatchPaths} to watch every instance.
  */
 export async function resolveWatchPaths(opts?: {
@@ -474,7 +474,7 @@ export async function resolveWatchPaths(opts?: {
 /**
  * Resolve the watch paths for **every** service the active source defines (#51):
  * one path set per instance, aligned one-to-one with {@link loadConfigs} order. A
- * single-object config yields a one-element array; an array config (ADR-0006)
+ * single-object config yields a one-element array; an array config
  * yields one set per entry, each watching that instance's own `routesDir` and
  * `collectionsFile` plus the shared config file — so editing one service's mocks
  * re-loads only that instance, while a config-file edit re-loads them all. Panics
@@ -539,7 +539,7 @@ function buildLoadedService(sources: CollectedSources): LoadedService {
 }
 
 /**
- * Resolve and load **every** service the active source defines (ADR-0006): a
+ * Resolve and load **every** service the active source defines: a
  * single-object config yields one service; an array config yields one per entry,
  * each fully independent (own routes/collections/port/passthrough). With no
  * config file, the default-path source (`mocks/routes` + `mocks/collections.yaml`)

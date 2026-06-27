@@ -42,7 +42,7 @@ export interface LogPathContext {
 /**
  * The unknown tokens (`%Q`, `{bogus}`, …) in a filename template — empty when the
  * template uses only supported `%`-strftime / `{}`-named tokens. Pure; used both to
- * fail `decoy check` (ADR-0015) and as the resolver's safety net.
+ * fail `decoy check` and as the resolver's safety net.
  */
 export function unknownTemplateTokens(template: string): string[] {
   const unknown: string[] = []
@@ -88,8 +88,8 @@ export function resolveLogPath(template: string, ctx: LogPathContext): string {
 }
 
 /**
- * Semantic validation of a service's `requestLog` block beyond its valibot shape
- * (ADR-0015), reported service-scoped like the rest of the config: an **error** for
+ * Semantic validation of a service's `requestLog` block beyond its valibot shape,
+ * reported service-scoped like the rest of the config: an **error** for
  * an unknown `path` filename token (fails `decoy check`), and a **warning** when a
  * `cleanup` mode is set for the in-memory store (a no-op there — cleanup is
  * sqlite-only) or when `on-session-end` is chosen (it deletes a session's logs on

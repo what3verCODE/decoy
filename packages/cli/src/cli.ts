@@ -56,7 +56,7 @@ Usage:
 
 Commands:
   start   Boot Decoy from a decoy.config.* (or the default mocks/ source). An
-          array config (ADR-0006) boots one instance per entry, each on its
+          array config boots one instance per entry, each on its
           own port — point each upstream's base URL at its instance.
   check   Validate the config + mocks and exit non-zero on any error (CI gate).
   help    Show this help.
@@ -79,7 +79,7 @@ Options:
 /**
  * Run the CLI. `start` resolves with the running server(s) so tests can drive and
  * close them — a single `DecoyServer` for a single-service config (unchanged), or
- * a `DecoyServer[]` for a multi-instance (array) config (ADR-0006). Other commands
+ * a `DecoyServer[]` for a multi-instance (array) config. Other commands
  * resolve with `undefined`.
  */
 export async function run(
@@ -128,7 +128,7 @@ export async function run(
     throw new Error(`unknown command: ${command}`)
   }
 
-  // An array config boots N instances (ADR-0006); a single-object config boots one.
+  // An array config boots N instances; a single-object config boots one.
   const services = await loadConfigs({ configPath: values.config })
   const multi = services.length > 1
 
@@ -145,9 +145,9 @@ export async function run(
     ;(services[0] as (typeof services)[number]).port = port
   }
 
-  // Interactive TUI (#48, DESIGN §12): drive the single in-process engine through
+  // Interactive TUI (#48): drive the single in-process engine through
   // slash commands with live request logs. The TUI owns the display, so it serves
-  // exactly one engine — a multi-instance config (ADR-0006) is rejected (boot the
+  // exactly one engine — a multi-instance config is rejected (boot the
   // group with plain `start`) — and --json (non-interactive CI output) conflicts.
   if (values.tui) {
     if (multi) {
@@ -184,7 +184,7 @@ export async function run(
   // Dev-only hot reload (#44, #51): watch each instance's resolved source and
   // re-load just that instance on change (aggregate-validated). Off unless
   // --watch — frozen in CI/e2e. A single-instance config re-loads via loadConfig;
-  // a multi-instance config (ADR-0006) watches each instance's own source and
+  // a multi-instance config watches each instance's own source and
   // re-loads it by index via loadConfigs — so editing one service's mocks re-loads
   // only that instance, while a shared-config edit re-validates the whole config
   // and re-loads every instance (invalid edit → each keeps current, warns).
@@ -214,7 +214,7 @@ export async function run(
     }
   }
 
-  // Multi-instance shares **one** request-log store (ADR-0017): every instance
+  // Multi-instance shares **one** request-log store: every instance
   // records into it tagged by `service`, so the `--ui` aggregator's logs view (and a
   // per-instance `/__decoy__/sessions/{id}/logs`) yields one cross-service timeline. The
   // store is wrapped as a {@link SharedRequestLogStore} so each instance acquires a
@@ -230,7 +230,7 @@ export async function run(
   )
   await Promise.all(servers.map((server) => server.listen()))
 
-  // Web control panel (#66, ADR-0017): lazily resolve the optional `@decoy/ui`
+  // Web control panel (#66): lazily resolve the optional `@decoy/ui`
   // package and serve its prebuilt SPA — plus the same-origin data API backed by
   // in-process references to the running instances — on its own loopback port. If
   // the package is not installed, fail closed with a friendly install hint and

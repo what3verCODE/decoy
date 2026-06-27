@@ -16,13 +16,13 @@ export interface ReloadResult {
 }
 
 /**
- * The canonical JS control API (ADR-0010). A controller owns the **selection** —
+ * The canonical JS control API. A controller owns the **selection** —
  * the only mutable state — and drives the pure engine. `useCollection`,
  * `useRoute`, and `reset` mutate the selection; switching is atomic, so the next
  * `match` sees the new state. Every control call validates against the
  * definitions and fails loud on an unknown collection/route/preset/variant.
  *
- * The engine stays stateless (ADR-0012); this is the stateful holder around it.
+ * The engine stays stateless; this is the stateful holder around it.
  * Cross-process control (`/__decoy__`) and sessions wrap this same surface (#28/#39).
  */
 export interface Controller {

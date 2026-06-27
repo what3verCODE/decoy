@@ -1,7 +1,7 @@
 /**
  * The request envelope — the single object all matchers and templates evaluate
  * against. It is part of the cross-language contract: any future client must
- * produce this exact shape. See CONTEXT.md and docs/adr/0009.
+ * produce this exact shape.
  */
 export interface RequestEnvelope {
   method: string
@@ -16,7 +16,7 @@ export interface RequestEnvelope {
 
 /**
  * One response for a route. v1 ships inline `body` only. Every field is rendered
- * through `${ }` templating against the request envelope (ADR-0009): `status` and
+ * through `${ }` templating against the request envelope: `status` and
  * `delay` widen to `number | string` so they too can be templated (a whole-string
  * `"${ expr }"` yields a typed number; an interpolated value is coerced).
  */
@@ -35,7 +35,7 @@ export interface Variant {
  * Additional request-match conditions layered on a route, evaluated against the
  * request envelope and **ANDed** together. `{}` is the catch-all (no conditions →
  * always matches). Each field is either an **object pattern** or a **string
- * predicate** (ADR-0008):
+ * predicate**:
  * - **object** → a literal pattern: `query`/`headers` match as a subset (request
  *   must *contain* the pairs; extras ignored), `body` matches deep-partial (nested
  *   subset). Its string leaves are `${ }`-rendered first, so expected values can be

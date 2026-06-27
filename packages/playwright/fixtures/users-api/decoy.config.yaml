@@ -1,5 +1,5 @@
 # Fixture config for the router unit tests: the same yaml/json authoring path a real
-# project uses (ADR-0007). No server boots — the router loads these definitions and
+# project uses. No server boots — the router loads these definitions and
 # drives them over a fake `page.route`. `port` is irrelevant here (0 = ephemeral).
 name: users-api
 port: 0

@@ -19,7 +19,7 @@ export type RouterFixture = (args: RouterFixtureArgs, use: Use<PlaywrightRouter>
 /**
  * Build a Playwright fixture that installs a {@link PlaywrightRouter} on each
  * test's `context` and tears it down afterwards. The mocks come from the project's
- * `decoy.config.*` (ADR-0007); with no options it is discovered from
+ * `decoy.config.*`; with no options it is discovered from
  * `process.cwd()`. Because every Playwright context gets its own router (its own
  * selection), parallel tests are isolated for free — no standalone server. Plug it
  * into `test.extend`:

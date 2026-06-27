@@ -184,7 +184,7 @@ describe('createServer (HTTP)', () => {
 
 describe('createServer (shared request-log store, #72, #80)', () => {
   test('records into a shared store tagged by service, closing it once after the last instance', async () => {
-    // One store shared across two instances (ADR-0017): the aggregator's logs view.
+    // One store shared across two instances: the aggregator's logs view.
     // Count the underlying close to prove the ref-counted close-once seam (#80).
     const inner = createMemoryRequestLogStore()
     let closeCount = 0

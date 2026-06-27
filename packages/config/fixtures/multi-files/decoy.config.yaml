@@ -1,4 +1,4 @@
-# Multi-instance config (array, ADR-0006) backed by per-service file sources, so
+# Multi-instance config (array) backed by per-service file sources, so
 # each instance resolves its OWN routesDir + collectionsFile — used to prove hot
 # reload watches each instance's source independently (#51).
 - name: users

@@ -279,7 +279,7 @@ describe('@decoy/ui server — multi-instance aggregator (#72)', () => {
   })
 
   test('the logs view aggregates records from every service, each labelled by service', async () => {
-    // Both instances record to the one shared store (ADR-0017), each tagging its
+    // Both instances record to the one shared store, each tagging its
     // own `service`. The UI server never listens these in-process instances, so we
     // append directly to the store they share — exactly what their `record()` does.
     store.append({

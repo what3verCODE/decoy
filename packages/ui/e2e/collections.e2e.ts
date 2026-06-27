@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures'
 
-// Dogfood (ADR-0017): the collections panel drives the same-origin /__decoy__ control
+// Dogfood: the collections panel drives the same-origin /__decoy__ control
 // API, faked by the auto router fixture (decoy.config.ts + mocks/). @decoy/ui ships
 // static assets only, so the e2e never boots a server — it proves the panel lists
 // scenarios, marks the active one, and that switching / pinning / resetting send the

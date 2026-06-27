@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 /**
  * Absolute path to the prebuilt SPA assets (the directory containing `index.html`).
- * `@decoy/ui` ships **static assets only** (ADR-0017) — this resolver is its sole
+ * `@decoy/ui` ships **static assets only** — this resolver is its sole
  * runtime export, letting `@decoy/server` lazily resolve and serve the panel with
  * `decoy start --ui`. `node/` (dev) and `dist/` (published) both sit one level
  * above `dist/client/`.
@@ -20,7 +20,7 @@ export function uiAssetDir(): string {
 /**
  * This package's version, read from its own `package.json`. `decoy start --ui`
  * compares it against the running `@decoy/server` to warn on a drift between the
- * separately-published panel and server (ADR-0017 version-compat).
+ * separately-published panel and server (version-compat).
  */
 export const version: string = JSON.parse(
   readFileSync(join(here, '../package.json'), 'utf8'),

@@ -19,7 +19,7 @@ async function enableEditMode(page: import('@playwright/test').Page): Promise<vo
   await page.getByTestId('edit-layout').click()
 }
 
-// Dogfood smoke (ADR-0017): the prebuilt SPA renders the control panel as a
+// Dogfood smoke: the prebuilt SPA renders the control panel as a
 // react-grid-layout tile dashboard (#89/#90) instead of the old fixed flex columns. The
 // control API is faked by the auto router fixture (decoy.config.ts + mocks/) — @decoy/ui
 // is static assets only, so the e2e never boots a server. Slice 2 (#90) decomposes the

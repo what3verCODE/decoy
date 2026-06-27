@@ -3,7 +3,7 @@ import { describe, expect, test } from '@rstest/core'
 import { createRouterFixture } from './fixture'
 import type { PlaywrightRoutable, RouteHandler } from './playwright-types'
 
-// The fixture loads its mocks from a real decoy.config.* (ADR-0007); point it at
+// The fixture loads its mocks from a real decoy.config.*; point it at
 // the shared fixtures/users-api config (happy-path baseline).
 const FIXTURE_CONFIG = resolve(process.cwd(), 'fixtures/users-api/decoy.config.yaml')
 

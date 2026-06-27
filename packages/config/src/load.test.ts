@@ -173,7 +173,7 @@ describe('loadConfig', () => {
   })
 })
 
-describe('loadConfigs (multi-instance topology, ADR-0006)', () => {
+describe('loadConfigs (multi-instance topology)', () => {
   test('loads one service per array entry, each with independent definitions', async () => {
     const services = await loadConfigs({ configPath: `${fixtures}multi/decoy.config.ts` })
 

@@ -174,7 +174,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
     })
   })
 
-  describe('multi-instance topology (array config, ADR-0006)', () => {
+  describe('multi-instance topology (array config)', () => {
     let servers: DecoyServer[] = []
 
     afterEach(async () => {
@@ -232,7 +232,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
     })
 
     test('a shared sqlite store with cleanup:on-exit is released once on shutdown (#78, #80)', async () => {
-      // A multi-instance config shares **one** request-log store (ADR-0017); each
+      // A multi-instance config shares **one** request-log store; each
       // instance holds a ref-counted handle on it (#80), so the store closes after
       // the last instance closes, exactly once (a per-instance close would double-
       // close the db and throw). With sqlite + cleanup:on-exit that final close
@@ -302,7 +302,7 @@ describe('decoy start (end-to-end through the CLI)', () => {
         expect(servers).toHaveLength(2)
         const uiPort = (ui?.raw.address() as { port: number }).port
 
-        // The switcher lists every booted instance (the service axis, ADR-0017).
+        // The switcher lists every booted instance (the service axis).
         const services = (await (
           await fetch(`http://localhost:${uiPort}/__decoy__/services`)
         ).json()) as Array<{

@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures'
 
-// Dogfood smoke (ADR-0017): the prebuilt SPA loads in a real browser and renders the
+// Dogfood smoke: the prebuilt SPA loads in a real browser and renders the
 // routes catalog it fetched from GET /__decoy__/routes. The control API is faked by the
 // auto router fixture (decoy.config.ts + mocks/) — @decoy/ui is static assets only,
 // so the e2e never boots a server; it proves the panel renders whatever the API

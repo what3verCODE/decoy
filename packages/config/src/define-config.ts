@@ -1,7 +1,7 @@
 import type { Collection, Route } from '@decoy/core'
 
 /**
- * HTTP control API exposure (ADR-0010). `true` (the default) mounts it on the
+ * HTTP control API exposure. `true` (the default) mounts it on the
  * same port under the `/__decoy__` prefix; `false` disables it. The object form
  * configures the `prefix` and/or moves it to a separate `port` — the escape hatch
  * for when a real `/__decoy__/*` upstream would otherwise be shadowed.
@@ -9,7 +9,7 @@ import type { Collection, Route } from '@decoy/core'
 export type ControlConfig = boolean | { port?: number; prefix?: string }
 
 /**
- * Global passthrough (ADR-0005): when set, **unmatched** requests are forwarded
+ * Global passthrough: when set, **unmatched** requests are forwarded
  * verbatim to this single upstream (`{url}{path}{query}`, method/headers/body
  * forwarded, response returned as-is) instead of failing closed. Off by default —
  * a test can never silently reach the real API. Global per instance; no
@@ -19,7 +19,7 @@ export type PassthroughConfig = { url: string }
 
 /**
  * Durable request-log store (#70). `store` selects the backing of the request-log
- * ring (the `GET /__decoy__/logs` stream, ADR-0017): the process-bound in-memory store
+ * ring (the `GET /__decoy__/logs` stream): the process-bound in-memory store
  * (default) or a `node:sqlite` file shared across this config's instances. `path`
  * is a filename template resolved **once at boot** — `%Y %m %d %H %M %S %s`
  * (UTC strftime) and `{name} {pid} {port}` (named) tokens; an unknown token fails
@@ -59,15 +59,15 @@ export interface ServiceConfig {
   port?: number
   /** HTTP control API exposure; defaults to on (same port, `/__decoy__` prefix). */
   control?: ControlConfig
-  /** HTTP status returned for a fail-closed miss (ADR-0005); defaults to 501. */
+  /** HTTP status returned for a fail-closed miss; defaults to 501. */
   missStatus?: number
   /**
-   * Global passthrough target (ADR-0005). When set, unmatched requests are
+   * Global passthrough target. When set, unmatched requests are
    * forwarded verbatim to this upstream instead of failing closed. Off by default.
    */
   passthrough?: PassthroughConfig
   /**
-   * Idle TTL in ms after which an abandoned **session** is reaped (ADR-0011);
+   * Idle TTL in ms after which an abandoned **session** is reaped;
    * defaults to 30 minutes. Sessions are a tests-only concern.
    */
   sessionIdleTtl?: number
@@ -87,7 +87,7 @@ export interface ServiceConfig {
 
 /**
  * Config is a single service (object) or many services (array). An array boots
- * **one instance per entry** (ADR-0006), each on its own port with independent
+ * **one instance per entry**, each on its own port with independent
  * routes/collections/passthrough — `decoy start` runs them all.
  */
 export type DecoyConfig = ServiceConfig | ServiceConfig[]
@@ -95,7 +95,7 @@ export type DecoyConfig = ServiceConfig | ServiceConfig[]
 /**
  * Identity helper that pins the config type for editor support and lets `.ts`/`.js`
  * configs carry typed values. The config *entry* is the one place JS is allowed;
- * mock files stay declarative (ADR-0007).
+ * mock files stay declarative.
  */
 export function defineConfig(config: DecoyConfig): DecoyConfig {
   return config

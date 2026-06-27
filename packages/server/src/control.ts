@@ -16,7 +16,7 @@ import type { SessionRegistry } from './sessions'
 const SSE_HEARTBEAT_MS = 15_000
 
 /**
- * Collision-safe default control mount prefix (ADR-0010), shared by both mounts:
+ * Collision-safe default control mount prefix, shared by both mounts:
  * the cross-process mount on the mock port and the same-origin `--ui` panel mount.
  * They differ only by *where* they're mounted, not by the prefix token.
  */
@@ -100,7 +100,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /**
- * Stream the request log as Server-Sent Events (ADR-0017): replay the retained
+ * Stream the request log as Server-Sent Events: replay the retained
  * history on connect, then tail every newly appended record one-way (control
  * stays REST — no WebSocket dep). Each frame carries the stored `seq` as the SSE
  * `id:`, so a client can dedupe re-delivered history after a reconnect. Snapshot
@@ -138,7 +138,7 @@ function serveLogStream(req: IncomingMessage, res: ServerResponse, store: Reques
  * The request-resolution context the `POST {prefix}/try` dry-run needs to report a
  * miss/passthrough honestly and reproduce the live response byte-for-byte: the
  * fail-closed status and the global passthrough target (if configured). Mirrors
- * the live request handler's fail-closed/passthrough decision (DESIGN §6).
+ * the live request handler's fail-closed/passthrough decision.
  */
 export interface RequestResolution {
   /** The fail-closed status returned on a miss (mirrors the live server's `missStatus`). */
@@ -246,7 +246,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /**
- * Handle a request to the HTTP control API (ADR-0010) — the cross-process mirror
+ * Handle a request to the HTTP control API — the cross-process mirror
  * of the canonical JS control API. Endpoints, relative to `prefix`:
  *
  * - `GET  {prefix}` / `GET {prefix}/selection` → the current selection.
@@ -264,7 +264,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `POST {prefix}/sessions`                            → create a session (`201` `{ id }`).
  * - `DELETE {prefix}/sessions/{id}`                     → destroy a session.
  *
- * Control endpoints are **session-scoped** by the `x-mock-session` header (ADR-0011):
+ * Control endpoints are **session-scoped** by the `x-mock-session` header:
  * with no header they target the global (dev) session; with one they target (and
  * lazily create) that session, isolating parallel tests on a shared server.
  *
@@ -375,7 +375,7 @@ export async function handleControl(
     if (method === 'GET' && sub.startsWith('/sessions/') && sub.endsWith('/logs')) {
       // The session's request timeline, ordered across all services (one timeline).
       // Read from the store — *not* the session registry — so it survives the
-      // session's destruction (logs are decoupled from session lifecycle, ADR-0017),
+      // session's destruction (logs are decoupled from session lifecycle),
       // except under sqlite `cleanup: 'on-session-end'` which already dropped them.
       const id = decodeURIComponent(sub.slice('/sessions/'.length, -'/logs'.length))
       sendJson(res, 200, store.query({ session: id }))
@@ -388,7 +388,7 @@ export async function handleControl(
       if (sub === '/try') {
         // A pure dry-run: run the real engine against the caller's selection and
         // report the resolution + response. No `record()` call → zero side effects,
-        // excluded from the request-log store / live stream (ADR-0017).
+        // excluded from the request-log store / live stream.
         const result = control.match(tryEnvelope(body ?? {}))
         sendJson(res, 200, tryOutcome(result, resolution))
         return

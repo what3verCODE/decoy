@@ -22,7 +22,7 @@ export interface PlaywrightRouter extends Router {
  * Options for {@link createPlaywrightRouter}. All optional: with none, the router
  * discovers and loads the project's `decoy.config.*` from {@link process.cwd}. The
  * mocks (routes + collections) the router serves always come from that config — the
- * same yaml/json sources the standalone server reads (ADR-0007), never hand-built
+ * same yaml/json sources the standalone server reads, never hand-built
  * in-code definitions.
  */
 export interface PlaywrightRouterOptions {
@@ -41,7 +41,7 @@ export interface PlaywrightRouterOptions {
    * matcher, defaulting to `'**\/*'` (everything). A transport concern, not a mock
    * one: scope it (e.g. `/\/api\//`) so the app's own HTML/JS load untouched, or to
    * mount several routers on one page each owning a different path. The fail-closed
-   * miss status comes from the config (`missStatus`, ADR-0005).
+   * miss status comes from the config (`missStatus`).
    */
   url?: string | RegExp
 }
@@ -96,7 +96,7 @@ function toFulfill(result: MatchResult, missStatus: number): FulfillOptions {
  * Create a {@link PlaywrightRouter}: load the project's `decoy.config.*`, install
  * request interception on a Playwright `BrowserContext` / `Page`, and drive the
  * **in-process** engine over it. The mocks come from the config's yaml/json sources
- * (ADR-0007) — the only required argument is the `target` to intercept; with no
+ * — the only required argument is the `target` to intercept; with no
  * options the config is discovered from `process.cwd()`. Each router owns its own
  * {@link Controller} (selection), so installing one per Playwright context gives
  * parallel tests isolation for free — no standalone server, no `x-mock-session`.

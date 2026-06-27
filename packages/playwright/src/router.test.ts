@@ -10,7 +10,7 @@ import type {
 import { createPlaywrightRouter } from './router'
 
 // The router loads its mocks from a real decoy.config.* (the yaml/json authoring
-// path, ADR-0007) — never hand-built in-code definitions. These point at the
+// path) — never hand-built in-code definitions. These point at the
 // fixture under fixtures/users-api (users-by-id route; happy-path/error-state
 // collections), exercised either by explicit configPath or cwd discovery.
 const FIXTURE_DIR = resolve(process.cwd(), 'fixtures/users-api')

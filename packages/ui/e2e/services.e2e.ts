@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures'
 
-// Dogfood (ADR-0017, #72): with an array config one `--ui` server aggregates every
+// Dogfood (#72): with an array config one `--ui` server aggregates every
 // instance behind a service switcher. The control API is faked by the auto router
 // fixture (decoy.config.ts + mocks/) — @decoy/ui ships static assets only, so the
 // e2e never boots a server. The catalog mock is per-instance (a `?service=orders`

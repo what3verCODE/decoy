@@ -4,7 +4,7 @@ import { layoutModel, routesModel, servicesModel } from '../model'
 import { TILE_LABELS } from '../model/create-layout-model'
 
 /**
- * The service axis switcher (ADR-0017): pick which booted instance the catalog /
+ * The service axis switcher: pick which booted instance the catalog /
  * collection / override controls target. Rendered whenever the aggregator reports
  * any service — a single-instance config shows one (selected) entry. The logs view
  * stays aggregated across services and is unaffected by the selection.

@@ -19,7 +19,7 @@ import { createSessionRegistry, GLOBAL_SESSION } from './sessions'
 import { type Scheduler, type Watcher, type WatchFn, watchSources } from './watch'
 
 /**
- * Dev-only hot reload wiring (#44, DESIGN §11). When present, the server watches
+ * Dev-only hot reload wiring (#44). When present, the server watches
  * `paths` and re-loads the service via `reload` on change, swapping the live
  * definitions atomically (an invalid config is rejected and the old definitions
  * kept). Omitted in CI/e2e so definitions stay frozen.
@@ -43,7 +43,7 @@ export interface CreateServerOptions {
   watch?: WatchSetup
   /**
    * A shared request-log store to record into instead of one created from this
-   * service's `requestLog` config. The multi-instance aggregator (#72, ADR-0017)
+   * service's `requestLog` config. The multi-instance aggregator (#72)
    * injects **one shared store** across every instance so the `--ui` server's logs
    * view aggregates across services (each record tagged by `service`). The server
    * {@link SharedRequestLogStore.acquire}s a holder handle and closes it on shutdown
@@ -56,7 +56,7 @@ export interface CreateServerOptions {
 
 export interface DecoyServer {
   /**
-   * The service (instance) name this server impersonates (ADR-0006). Exposed so the
+   * The service (instance) name this server impersonates. Exposed so the
    * in-process `--ui` aggregator (#72) can list services and route a `?service=`
    * control request to the right instance.
    */
@@ -74,9 +74,9 @@ export interface DecoyServer {
   /** The immutable definitions this server matches against (routes + collections). */
   readonly definitions: Definitions
   /**
-   * Serve a control-API request against **this** instance (ADR-0010): the same
+   * Serve a control-API request against **this** instance: the same
    * handler the cross-process mount uses, exposed in-process so the `--ui`
-   * aggregator (ADR-0017) can route a `?service=`-selected request here with no
+   * aggregator can route a `?service=`-selected request here with no
    * HTTP proxy or CORS. Closes over this instance's own sessions, definitions,
    * request-log store, and fail-closed/passthrough resolution, and turns an
    * unexpected handler failure into a `500` — so neither mount repeats that.
@@ -178,12 +178,12 @@ export function createServer(
   const passthrough = service.passthrough
   const controlMount = service.control
   const samePortControl = controlMount.enabled && controlMount.port === undefined
-  // The fail-closed/passthrough context the `{prefix}/try` dry-run replays (DESIGN §6).
+  // The fail-closed/passthrough context the `{prefix}/try` dry-run replays.
   const resolution: RequestResolution = { missStatus, passthrough }
 
-  // Serve a control-API request against this instance (ADR-0010), closing over this
+  // Serve a control-API request against this instance, closing over this
   // instance's own sessions/definitions/store/resolution. The same handler backs the
-  // cross-process mount and the in-process `--ui` aggregator (ADR-0017); it absorbs
+  // cross-process mount and the in-process `--ui` aggregator; it absorbs
   // an unexpected handler failure into a 500 so neither mount repeats that try/catch.
   const serveControl = (req: IncomingMessage, res: ServerResponse): void => {
     void handleControl(

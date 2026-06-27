@@ -18,7 +18,7 @@ export interface DecoyPluginOptions {
   /**
    * HTTP status for a fail-closed miss — when nothing (neither a mock nor a real
    * Fastify route) answers, the not-found handler replies with this status plus
-   * `x-mock-miss: true` (ADR-0005). Defaults to `501`.
+   * `x-mock-miss: true`. Defaults to `501`.
    */
   missStatus?: number
 }
@@ -34,7 +34,7 @@ export interface DecoyPluginOptions {
  * request reflects the change.
  */
 export interface DecoyPlugin extends FastifyPluginCallback {
-  /** The canonical JS control API (ADR-0010) driving this plugin in-process. */
+  /** The canonical JS control API driving this plugin in-process. */
   readonly control: Controller
   /** A read-only snapshot of the current selection. */
   readonly selection: Selection
