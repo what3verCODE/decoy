@@ -1,0 +1,16 @@
+{
+  "name": "@decoy/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Decoy user documentation site.",
+  "scripts": {
+    "dev": "rspress dev",
+    "build": "rspress build",
+    "preview": "rspress preview"
+  },
+  "devDependencies": {
+    "@rspress/core": "^2.0.15",
+    "@rspress/plugin-llms": "^2.0.15"
+  }
+}

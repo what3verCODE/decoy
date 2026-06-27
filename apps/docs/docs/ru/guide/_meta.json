@@ -1,0 +1,5 @@
+[
+  { "type": "dir-section-header", "name": "start", "label": "Начало" },
+  { "type": "dir-section-header", "name": "basic", "label": "Основы" },
+  { "type": "dir-section-header", "name": "advanced", "label": "Продвинутое" }
+]
