@@ -135,7 +135,7 @@ npx decoy check
 
 You have a running mock and have seen a request resolve to a variant. From here:
 
-- [Core Concepts](/guide/basic/) — the Route → Preset → Variant → Collection model in depth.
+- [Core Concepts](/guide/basic/core-concepts) — the Route → Preset → Variant → Collection model in depth.
 - [Configuration](/guide/basic/) — every `defineConfig` option, fail-closed and passthrough.
 - [Integrations](/integrations/) — mount Decoy in Express, Nest, Fastify, Playwright, or Testplane.
 - [AI](/guide/start/ai) — point your AI tooling at Decoy's docs.
