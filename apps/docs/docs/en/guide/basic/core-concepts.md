@@ -111,8 +111,8 @@ Two switch operations fall out of the split:
 - **Override one route** — pin a single `route:preset:variant` on top of the active collection,
   then `reset` back to the collection's baseline.
 
-Both are driven at runtime through the [control plane](/guide/advanced/), per
-[session](/guide/advanced/).
+Both are driven at runtime through the [control plane](/guide/advanced/control-plane), per
+[session](/guide/advanced/sessions-and-scenarios).
 
 ## Invariants worth knowing
 
@@ -129,4 +129,4 @@ Both are driven at runtime through the [control plane](/guide/advanced/), per
 
 - [Configuration](/guide/basic/configuration) — wire routes, collections, and the fail-closed default into a project.
 - [Matching & Templating](/guide/basic/matching-and-templating) — the full preset predicate and `${ }` templating syntax.
-- [Sessions & Scenarios](/guide/advanced/) — isolate parallel tests and drive scenario switching.
+- [Sessions & Scenarios](/guide/advanced/sessions-and-scenarios) — isolate parallel tests and drive scenario switching.

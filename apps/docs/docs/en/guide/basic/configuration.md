@@ -36,7 +36,7 @@ export default defineConfig({
 | `defaultCollection` | first collection | The collection a fresh server boots into. |
 | `missStatus` | `501` | HTTP status returned for a fail-closed miss. |
 | `passthrough` | off | Opt-in upstream for unmatched requests (see below). |
-| `control` | on, `/__decoy__` | The HTTP [control plane](/guide/advanced/) exposure. |
+| `control` | on, `/__decoy__` | The HTTP [control plane](/guide/advanced/control-plane) exposure. |
 
 `routesDir`/`collectionsFile` resolve relative to the config file. You can also supply `routes` and
 `collections` inline on the config object instead of (or merged with) the file paths. The full
@@ -106,5 +106,5 @@ npx decoy check
 ## Next steps
 
 - [Matching & Templating](/guide/basic/matching-and-templating) — how requests match and responses are built.
-- [Sessions & Scenarios](/guide/advanced/) — isolate parallel tests and switch scenarios at runtime.
+- [Sessions & Scenarios](/guide/advanced/sessions-and-scenarios) — isolate parallel tests and switch scenarios at runtime.
 - [Reference](/reference/) — the complete configuration schema.
