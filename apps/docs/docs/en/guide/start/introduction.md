@@ -46,6 +46,7 @@ the property a test suite needs most.
 
 ## Next steps
 
-This page is the front door. The rest of the Guide walks from a first running mock through
-configuration, matching, sessions, and the control plane. Integrations cover each adapter, and
-the Reference documents config and the control API in full.
+This page is the front door. [Getting Started](/guide/start/getting-started) walks you from
+install to a first running mock; from there the Guide covers configuration, matching, sessions,
+and the control plane. Integrations cover each adapter, and the Reference documents config and
+the control API in full.
