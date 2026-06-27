@@ -1,7 +1,6 @@
 # --- local planning docs (kept out of the repo by request) ---
 /.claude
 /docs
-/CONTEXT.md
 /DESIGN.md
 /REFERENCES.md
 
