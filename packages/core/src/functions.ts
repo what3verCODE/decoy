@@ -4,10 +4,10 @@ import { type InputSignature, isRegistered, registerFunction } from '@jmespath-c
 type FunctionImpl = Parameters<typeof registerFunction>[1]
 
 /**
- * One entry of the **standard JMESPath function library** (ADR-0009): a name it is
+ * One entry of the **standard JMESPath function library**: a name it is
  * invoked by, its argument {@link InputSignature} (the runtime validates arity and
  * types against it), and the pure implementation. The set is part of the
- * **cross-language contract** (ADR-0002) — a future per-language client reproduces
+ * **cross-language contract** — a future per-language client reproduces
  * each function by name and semantics, not by sharing this code.
  *
  * The library covers what JMESPath, a *query* language, cannot: **fabricating** data

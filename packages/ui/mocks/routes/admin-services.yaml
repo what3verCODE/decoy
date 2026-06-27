@@ -1,5 +1,5 @@
-# GET /__decoy__/services — the booted instances the switcher lists (the service axis,
-# ADR-0017). `list` is the multi-instance baseline (users + orders); `solo` drives
+# GET /__decoy__/services — the booted instances the switcher lists (the service axis).
+# `list` is the multi-instance baseline (users + orders); `solo` drives
 # the single-instance case (switch with router.useRoute('admin-services','default','solo')).
 id: admin-services
 method: GET

@@ -1,5 +1,5 @@
 /**
- * Global passthrough (ADR-0005, DESIGN §6): forward an **unmatched** request
+ * Global passthrough: forward an **unmatched** request
  * verbatim to one configured upstream and write its response back as-is. Off by
  * default — wired in only when the loaded service declares a passthrough target.
  */

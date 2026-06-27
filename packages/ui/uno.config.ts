@@ -1,6 +1,6 @@
 import { defineConfig, presetWind3 } from 'unocss'
 
-// shadcn dark (zinc) HSL component triples (ADR-0017 / prototype SPEC).
+// shadcn dark (zinc) HSL component triples (prototype SPEC).
 const tokens: Record<string, string> = {
   background: '240 10% 3.9%',
   foreground: '0 0% 98%',

@@ -155,7 +155,7 @@ function stringifyRecord(value: unknown): Record<string, string> {
 }
 
 /**
- * Compile a preset into its field matchers (ADR-0008): a **string** field is a
+ * Compile a preset into its field matchers: a **string** field is a
  * `${ }` predicate (gated on truthiness); an **object** field is a literal pattern
  * (`query`/`headers` subset, `body` deep-partial) whose string leaves are rendered
  * before matching. A catch-all (`{}`) compiles to no fields. Throws on a malformed
@@ -217,7 +217,7 @@ function presetMatches(fields: FieldMatcher[], request: RequestEnvelope, env: JS
  * Build the human diagnostic for a "route matched but no active preset matched"
  * miss. It names the matched route(s) and lists, in array order, the presets the
  * engine tried — the second miss type distinguishing a misfiring matcher from a
- * route that simply isn't activated (ADR-0005, DESIGN §6).
+ * route that simply isn't activated.
  */
 function describeNoPresetMiss(
   method: string,
@@ -239,7 +239,7 @@ function describeNoPresetMiss(
  * Create the pure matching engine over an immutable set of definitions. The
  * returned `match(request, selection)` performs zero IO and is deterministic:
  * it walks the active collection's entries in array order and serves the first
- * whose route (method + path) and preset match — first match wins (ADR-0004),
+ * whose route (method + path) and preset match — first match wins,
  * with no specificity scoring. A miss is one of three kinds: the collection is
  * undefined, no entry's route matched by method+path (`no-route`), or a route
  * matched but none of its active presets passed (`no-preset`, listing the
@@ -248,7 +248,7 @@ function describeNoPresetMiss(
 export function createEngine(definitions: Definitions): Engine {
   const compiled = new Map<string, CompiledPath>()
   // Pre-compile every preset's field matchers and every variant's `${ }` renderer
-  // once, keyed by identity (ADR-0009: no per-request compile). A malformed
+  // once, keyed by identity (no per-request compile). A malformed
   // expression throws here (fail-fast at creation, like a cyclic extends) — config
   // validation catches it earlier at load with file:line; this is the engine's own
   // backstop for programmatic definitions. A variant with no templates is stored as
@@ -310,7 +310,7 @@ export function createEngine(definitions: Definitions): Engine {
         }
         // The route matched by method+path: from here, any failure to serve is a
         // no-preset miss, not a no-route miss. Templating roots at the request
-        // envelope with the now-known pathParams folded in (ADR-0009).
+        // envelope with the now-known pathParams folded in.
         const env = { ...request, pathParams } as unknown as JSONValue
         const preset = route.presets[address.preset]
         const fields = preset && presets.get(preset)

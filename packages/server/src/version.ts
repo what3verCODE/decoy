@@ -10,7 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 /**
  * The running `@decoy/server` version, read from its own `package.json`.
  * `decoy start --ui` compares it against the separately published `@decoy/ui` to
- * warn on a version drift (ADR-0017 version-compat).
+ * warn on a version drift (version-compat).
  */
 export const version: string = JSON.parse(
   readFileSync(join(here, '../package.json'), 'utf8'),

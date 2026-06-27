@@ -52,7 +52,7 @@ export interface SessionRegistryOptions {
 }
 
 /**
- * The set of live **sessions** on one server (ADR-0011). Each session owns its own
+ * The set of live **sessions** on one server. Each session owns its own
  * {@link Controller} (selection), so parallel e2e tests sharing a server never stomp
  * each other. The **global** session is the default — what dev's no-header requests
  * and `/__decoy__` mutate. Created sessions are keyed by the `x-mock-session` header; an

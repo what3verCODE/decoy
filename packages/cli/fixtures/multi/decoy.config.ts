@@ -1,4 +1,4 @@
-// Multi-instance config (array form, ADR-0006): two independent services booted
+// Multi-instance config (array form): two independent services booted
 // from one config, each on its own (ephemeral) port with its own inline routes.
 export default [
   {

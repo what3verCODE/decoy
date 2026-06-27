@@ -38,7 +38,7 @@ function headerString(value: unknown): string {
  * Turn a variant into a transport-agnostic response: default status 200, headers
  * coerced to strings and copied through, and `Content-Type` inferred for
  * object/array (JSON) and string (text) bodies unless the variant already sets
- * one. Status and header values may already be `${ }`-rendered (ADR-0009), so a
+ * one. Status and header values may already be `${ }`-rendered, so a
  * templated number status or non-string header value is coerced here.
  */
 export function buildResponse(variant: Variant): MockResponse {

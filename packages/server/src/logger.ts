@@ -11,7 +11,7 @@ export type RequestOutcome =
   | { type: 'passthrough'; target: string }
 
 /**
- * One structured per-request log record (ADR-0015, DESIGN §11): exactly one is
+ * One structured per-request log record: exactly one is
  * emitted per request, covering matched / miss / passthrough, and carrying status,
  * latency and the resolved session.
  */

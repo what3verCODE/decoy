@@ -43,7 +43,7 @@ function parseBody(postData: string | null, contentType: string | undefined): un
 }
 
 /**
- * Build the documented request envelope (CONTEXT.md, ADR-0009) from a Playwright
+ * Build the documented request envelope from a Playwright
  * `Request`. Semantics mirror the server's `toEnvelope` so a request matches the
  * same way whether it reaches the engine over HTTP or through `page.route`:
  * path/query split from the URL (repeated keys become arrays), cookies parsed

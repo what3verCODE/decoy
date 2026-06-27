@@ -1,4 +1,4 @@
-// Multi-instance config (array form, ADR-0006): two independent services, each on
+// Multi-instance config (array form): two independent services, each on
 // its own port with its own inline routes/collections. Loaded via jiti at test
 // time, so it stays a plain default export (no `@decoy/config` self-import).
 export default [

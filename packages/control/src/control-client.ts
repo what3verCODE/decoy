@@ -12,11 +12,11 @@ export interface ControlClientOptions {
 }
 
 /**
- * A typed client for the HTTP control API (ADR-0010) — the cross-process mirror
+ * A typed client for the HTTP control API — the cross-process mirror
  * of the canonical JS control API. Its own `useCollection`/`useRoute`/`reset`
  * drive the **global** (dev) session; {@link ControlClient.createSession} /
  * {@link ControlClient.session} mint first-class **session handles** that scope
- * control to an isolated selection (ADR-0011). Control methods resolve with the
+ * control to an isolated selection. Control methods resolve with the
  * resulting selection so a switch is confirmable; an unknown collection/route/
  * preset/variant or bad input fails loud with the server's error message,
  * mirroring the in-process API.

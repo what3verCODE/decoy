@@ -160,8 +160,8 @@ function jmespathError(expression: string): string | undefined {
  * **all** issues together (never bailing on the first): schema, cross-reference
  * of every `route:preset:variant` address, `extends` resolution and cycles,
  * duplicate route ids (error) and overlapping `method`+`path` (warning), and
- * JMESPath parse of every `${ }` expression in every preset field and variant
- * (ADR-0009). Pure: it does no IO, operating only on the already-read, line-aware
+ * JMESPath parse of every `${ }` expression in every preset field and variant.
+ * Pure: it does no IO, operating only on the already-read, line-aware
  * sources.
  */
 export function validateSources(input: ValidationInput): ValidationIssue[] {
@@ -335,7 +335,7 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
   }
 
   // 6. JMESPath parse — every `${ }` expression in every preset field (string
-  // predicate or pattern leaf) and every variant string (ADR-0009).
+  // predicate or pattern leaf) and every variant string.
   for (const route of input.routes) {
     const view = asRouteView(route.data)
     if (!view) {

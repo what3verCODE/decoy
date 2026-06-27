@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures'
 
-// Dogfood (ADR-0017): the sessions inspector drives the same-origin /__decoy__ sessions
+// Dogfood: the sessions inspector drives the same-origin /__decoy__ sessions
 // API, faked by the auto router fixture (decoy.config.ts + mocks/). @decoy/ui ships
 // static assets only, so the e2e never boots a server — it proves the panel lists
 // sessions (global + created) and that drilling into one shows its (cross-service)

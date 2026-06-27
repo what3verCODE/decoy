@@ -32,7 +32,7 @@ export interface DecoyModuleOptions extends DecoyMiddlewareOptions {
 function buildModule(middleware: DecoyMiddleware, routes: RouteTarget[]): DynamicModule {
   // A per-call subclass closes over this middleware + routes, so its `configure` hook
   // registers exactly this instance — multiple `forRoot`/`forService` modules stay
-  // independent (one instance per impersonated upstream, ADR-0006) with no shared
+  // independent (one instance per impersonated upstream) with no shared
   // mutable state. Nest merges the dynamic providers/exports below onto the class.
   class DecoyModuleInstance extends DecoyModule {
     override configure(consumer: MiddlewareConsumer): void {

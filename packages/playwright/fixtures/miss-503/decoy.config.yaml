@@ -1,4 +1,4 @@
-# Same mocks as users-api, but with a custom fail-closed miss status (ADR-0005) — the
+# Same mocks as users-api, but with a custom fail-closed miss status — the
 # router reads it from here, there is no in-code override. Reuses the sibling fixture's
 # routes/collections so the mock data stays single-sourced.
 name: users-api

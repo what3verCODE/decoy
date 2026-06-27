@@ -42,7 +42,7 @@ function queryToObject(params: URLSearchParams): Record<string, string | string[
 }
 
 /**
- * Build the documented request envelope (CONTEXT.md, ADR-0009) from an Express
+ * Build the documented request envelope from an Express
  * `Request`. Semantics mirror the server's `envelopeFrom` so a request matches the
  * same way whether it reaches the engine over HTTP or in-process: path/query split
  * from the URL (repeated keys become arrays), headers normalized (array values

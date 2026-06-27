@@ -26,7 +26,7 @@ export interface CreateUiServerOptions {
   assetDir: string
   /**
    * Interface to bind and the extra hostname accepted in the `Host` header beyond
-   * loopback (ADR-0017). Defaults to `127.0.0.1` (loopback only). Set it to
+   * loopback. Defaults to `127.0.0.1` (loopback only). Set it to
    * deliberately expose the panel past localhost; a non-loopback value prints a
    * one-time exposure warning.
    */
@@ -117,7 +117,7 @@ async function serveStatic(res: ServerResponse, file: string): Promise<boolean> 
 }
 
 /**
- * Create the `--ui` web control panel server (ADR-0017). It serves the prebuilt
+ * Create the `--ui` web control panel server. It serves the prebuilt
  * `@decoy/ui` SPA from `assetDir` and — under the same origin, with no CORS — the
  * read/control data API backed by **direct in-process references** to the running
  * mock instances. Bound to loopback by the caller; unmatched non-API paths fall
@@ -153,7 +153,7 @@ export function createUiServer(
   })
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Anti-DNS-rebinding (ADR-0017): only loopback (plus an explicit override) may
+    // Anti-DNS-rebinding: only loopback (plus an explicit override) may
     // reach the panel, so a malicious site cannot rebind a name to this port.
     if (!allowedHosts.has(hostnameOf(req.headers.host))) {
       res.statusCode = 403
@@ -164,7 +164,7 @@ export function createUiServer(
 
     // Same-origin data API (no CORS): drive the in-process instances directly.
     if (isUnderPrefix(req.url, CONTROL_PREFIX)) {
-      // The service axis (ADR-0017): list every instance for the SPA's switcher.
+      // The service axis: list every instance for the SPA's switcher.
       // Inherently cross-instance, so the aggregator serves it (not `serveControl`).
       if (req.method === 'GET' && pathOf(req.url) === `${CONTROL_PREFIX}/services`) {
         res.statusCode = 200
@@ -173,8 +173,8 @@ export function createUiServer(
         return
       }
       // Every per-instance endpoint goes through the `?service=`-selected instance's
-      // `serveControl` (ADR-0010), which closes over that instance's own store. The
-      // CLI shares **one** store across instances (ADR-0017), so the logs endpoints
+      // `serveControl`, which closes over that instance's own store. The
+      // CLI shares **one** store across instances, so the logs endpoints
       // aggregate across services regardless of the selected service; control/catalog
       // endpoints are per-instance.
       const target = selectInstance(instances, serviceOf(req.url))

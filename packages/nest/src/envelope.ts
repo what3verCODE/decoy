@@ -42,7 +42,7 @@ function queryToObject(params: URLSearchParams): Record<string, string | string[
 }
 
 /**
- * Build the documented request envelope (CONTEXT.md, ADR-0009) from a Nest request.
+ * Build the documented request envelope from a Nest request.
  * Semantics mirror the server's `envelopeFrom` (and the Express adapter's
  * `toEnvelope`) so a request matches the same way whether it reaches the engine over
  * HTTP or in-process through a Nest module: path/query split from the URL (repeated
