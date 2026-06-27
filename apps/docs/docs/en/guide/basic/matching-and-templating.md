@@ -120,4 +120,4 @@ cross-language contract, so a per-language client reproduces each function by na
 
 - [Configuration](/guide/basic/configuration) — wire routes, collections, and passthrough into a project.
 - [Core Concepts](/guide/basic/core-concepts) — the Route → Preset → Variant → Collection model.
-- [Sessions & Scenarios](/guide/advanced/) — switch scenarios and isolate parallel tests at runtime.
+- [Sessions & Scenarios](/guide/advanced/sessions-and-scenarios) — switch scenarios and isolate parallel tests at runtime.
