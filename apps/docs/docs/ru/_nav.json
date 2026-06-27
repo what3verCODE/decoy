@@ -1,0 +1,5 @@
+[
+  { "text": "Руководство", "link": "/ru/guide/start/introduction", "activeMatch": "/ru/guide/" },
+  { "text": "Интеграции", "link": "/ru/integrations/", "activeMatch": "/ru/integrations/" },
+  { "text": "Справочник", "link": "/ru/reference/", "activeMatch": "/ru/reference/" }
+]

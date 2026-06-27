@@ -1,0 +1,5 @@
+[
+  { "text": "Guide", "link": "/guide/start/introduction", "activeMatch": "/guide/" },
+  { "text": "Integrations", "link": "/integrations/", "activeMatch": "/integrations/" },
+  { "text": "Reference", "link": "/reference/", "activeMatch": "/reference/" }
+]
