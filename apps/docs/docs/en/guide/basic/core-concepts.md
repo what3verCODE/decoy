@@ -44,7 +44,7 @@ presets:
 ```
 
 Presets are matchers, so they're reusable: the same `default` case can select different
-responses in different scenarios. (See [Matching & Templating](/guide/basic/) for the full
+responses in different scenarios. (See [Matching & Templating](/guide/basic/matching-and-templating) for the full
 predicate and templating syntax.)
 
 ### Variant
@@ -127,6 +127,6 @@ Both are driven at runtime through the [control plane](/guide/advanced/), per
 
 ## Next steps
 
-- [Configuration](/guide/basic/) — wire routes, collections, and the fail-closed default into a project.
-- [Matching & Templating](/guide/basic/) — the full preset predicate and `${ }` templating syntax.
+- [Configuration](/guide/basic/configuration) — wire routes, collections, and the fail-closed default into a project.
+- [Matching & Templating](/guide/basic/matching-and-templating) — the full preset predicate and `${ }` templating syntax.
 - [Sessions & Scenarios](/guide/advanced/) — isolate parallel tests and drive scenario switching.
