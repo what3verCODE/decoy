@@ -9,6 +9,7 @@ export {
 } from './functions'
 export { type CompiledPath, compilePath, matchPath } from './path'
 export { buildResponse } from './response'
+export { planMatched, planMiss, planResponse, type ResponsePlan } from './serialize'
 export {
   compileTemplate,
   hasTemplates,
