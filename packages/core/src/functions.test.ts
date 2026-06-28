@@ -1,5 +1,11 @@
+import { TYPE_NUMBER } from '@jmespath-community/jmespath'
 import { describe, expect, test } from '@rstest/core'
-import { registerStandardFunctions, standardFunctions } from './functions'
+import {
+  type CustomFunction,
+  registerCustomFunctions,
+  registerStandardFunctions,
+  standardFunctions,
+} from './functions'
 import { compileTemplate } from './template'
 
 const env = (overrides: Record<string, unknown> = {}) => ({
@@ -53,6 +59,43 @@ describe('registerStandardFunctions is idempotent', () => {
       registerStandardFunctions()
       registerStandardFunctions()
     }).not.toThrow()
+    expect(compileTemplate('${ uuid() }')(env())).toMatch(UUID_V4)
+  })
+})
+
+describe('registerCustomFunctions', () => {
+  test('registers a custom function callable from a ${ } template', () => {
+    const double: CustomFunction = {
+      name: 'cf_double',
+      signature: [{ types: [TYPE_NUMBER] }],
+      func: ([n]) => (n as number) * 2,
+    }
+    registerCustomFunctions([double])
+
+    expect(compileTemplate('${ cf_double(`21`) }')(env())).toBe(42)
+  })
+
+  test('composes with the standard library in one expression', () => {
+    registerCustomFunctions([
+      { name: 'cf_inc', signature: [{ types: [TYPE_NUMBER] }], func: ([n]) => (n as number) + 1 },
+    ])
+    // length() is a built-in; cf_inc is custom — both resolve in the same expression.
+    expect(compileTemplate('${ cf_inc(length(@)) }')(env({ a: 1 }) as object)).toBeTypeOf('number')
+  })
+
+  test('is idempotent — re-registering the same name does not throw', () => {
+    const fn: CustomFunction = { name: 'cf_idem', signature: [], func: () => 'x' }
+    expect(() => {
+      registerCustomFunctions([fn])
+      registerCustomFunctions([fn])
+    }).not.toThrow()
+    expect(compileTemplate('${ cf_idem() }')(env())).toBe('x')
+  })
+
+  test('never clobbers a standard function registered under the same name', () => {
+    // 'uuid' is already standard-registered; a custom impl under that name is skipped,
+    // so uuid keeps fabricating real v4 ids (collision *reporting* is the config layer's job).
+    registerCustomFunctions([{ name: 'uuid', signature: [], func: () => 'not-a-uuid' }])
     expect(compileTemplate('${ uuid() }')(env())).toMatch(UUID_V4)
   })
 })

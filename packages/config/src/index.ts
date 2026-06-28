@@ -1,11 +1,14 @@
+export type { CustomFunction, InputSignature } from '@decoy/core'
 export {
   type ControlConfig,
   type DecoyConfig,
   defineConfig,
+  type JmespathConfig,
   type PassthroughConfig,
   type RequestLogConfig,
   type ServiceConfig,
 } from './define-config'
+export { validateJmespath } from './jmespath'
 export {
   type LoadedService,
   loadConfig,

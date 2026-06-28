@@ -3,6 +3,9 @@ export { type Controller, createController, type ReloadResult } from './control'
 export { createEngine } from './engine'
 export { buildEnvelope, type EnvelopeInput, normalizeHeaders, parseBody } from './envelope'
 export {
+  type CustomFunction,
+  type InputSignature,
+  registerCustomFunctions,
   registerStandardFunctions,
   type StandardFunction,
   standardFunctions,

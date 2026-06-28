@@ -95,6 +95,26 @@ const RequestLogSchema = v.object({
   ),
 })
 
+/**
+ * Custom JMESPath functions. Shape only — `func` must be a function, so a
+ * `.yaml`/`.json` config (which cannot carry one) is rejected here; name collisions
+ * with the standard library are reported by {@link validateJmespath}.
+ */
+const JmespathSchema = v.object({
+  functions: v.optional(
+    v.array(
+      v.object({
+        name: v.pipe(v.string(), v.nonEmpty('jmespath function name must not be empty')),
+        signature: v.optional(v.array(v.unknown())),
+        func: v.custom<(...args: never[]) => unknown>(
+          (value) => typeof value === 'function',
+          'jmespath function "func" must be a function',
+        ),
+      }),
+    ),
+  ),
+})
+
 /** One service entry of a Decoy config. */
 export const ServiceConfigSchema = v.object({
   name: v.optional(v.string()),
@@ -120,6 +140,7 @@ export const ServiceConfigSchema = v.object({
   collectionsFile: v.optional(v.string()),
   defaultCollection: v.optional(v.string()),
   requestLog: v.optional(RequestLogSchema),
+  jmespath: v.optional(JmespathSchema),
   routes: v.optional(v.array(RouteSchema)),
   collections: v.optional(v.array(CollectionSchema)),
 })
