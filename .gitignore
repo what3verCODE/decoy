@@ -1,4 +1,5 @@
 # --- local planning docs (kept out of the repo by request) ---
+/.agents
 /.claude
 /docs
 /DESIGN.md
@@ -12,6 +13,9 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+
+# --- generated TypeDoc API (rebuilt from source JSDoc on every docs build) ---
+apps/docs/docs/en/reference/api/
 
 # --- test / coverage ---
 coverage/
