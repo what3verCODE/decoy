@@ -1,5 +1,12 @@
 import { createEngine } from './engine'
-import type { Definitions, MatchResult, RequestEnvelope, RouteOverride, Selection } from './types'
+import type {
+  Definitions,
+  ExplainResult,
+  MatchResult,
+  RequestEnvelope,
+  RouteOverride,
+  Selection,
+} from './types'
 
 /**
  * The outcome of {@link Controller.reload}: what the controller did to keep the
@@ -28,6 +35,8 @@ export interface ReloadResult {
 export interface Controller {
   /** Match a request against the current selection. */
   match(request: RequestEnvelope): MatchResult
+  /** Match a request against the current selection, also returning the engine's step-by-step trace. */
+  explain(request: RequestEnvelope): ExplainResult
   /** Switch the active collection. Throws if `name` is not defined. */
   useCollection(name: string): void
   /** Pin a single route's `preset` slot to `variant` within the active collection. */
@@ -89,6 +98,9 @@ export function createController(definitions: Definitions, defaultCollection: st
     },
     match(request) {
       return engine.match(request, { collection, overrides })
+    },
+    explain(request) {
+      return engine.explain(request, { collection, overrides })
     },
     useCollection(name) {
       if (!defs.collections.has(name)) {

@@ -1,0 +1,23 @@
+{
+  "name": "@decoy/playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone in-browser playground: author a Decoy mock + request and watch the real @decoy/core engine resolve it, step by step.",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@decoy/core": "workspace:*",
+    "preact": "^10.29.2",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^2.0.0",
+    "@rsbuild/plugin-preact": "^2.0.0",
+    "@types/node": "^24.0.0"
+  }
+}

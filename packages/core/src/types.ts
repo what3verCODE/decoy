@@ -124,7 +124,45 @@ export type MatchResult =
     }
   | { type: 'miss'; reason: MissReason; message: string }
 
-/** The pure engine. `match` is referentially transparent given the definitions. */
+/**
+ * One ordered step the engine took while resolving a request — the faithful record
+ * an {@link Engine.explain} produces (same code path as `match`, so it never drifts
+ * from real behavior). `ok` marks whether the step advanced toward a match.
+ */
+export type TraceStep =
+  /** The request as the engine sees it (method, path, parsed query/body). */
+  | { kind: 'request'; ok: true; method: string; path: string; detail: string }
+  /** The active collection lookup and its resolved (post-`extends`, post-override) entries. */
+  | { kind: 'collection'; ok: boolean; collection: string; entries: string[]; detail: string }
+  /** An entry whose route was rejected before preset evaluation (unknown id, method, or path). */
+  | { kind: 'route-skip'; ok: false; entry: string; detail: string }
+  /** An entry whose route matched by method + path; `pathParams` are now known. */
+  | {
+      kind: 'route-match'
+      ok: true
+      route: string
+      pathParams: Record<string, string>
+      detail: string
+    }
+  /** A preset evaluated against the request; `ok` is whether all its fields passed. */
+  | { kind: 'preset'; ok: boolean; route: string; preset: string; detail: string }
+  /** The variant for a passed preset: `ok` is whether it exists (a missing variant is a miss). */
+  | { kind: 'variant'; ok: boolean; route: string; preset: string; variant: string; detail: string }
+  /** The terminal outcome: the served `route:preset:variant`, or the miss kind + message. */
+  | { kind: 'outcome'; ok: boolean; resolution: string; detail: string }
+
+/** The result of {@link Engine.explain}: the ordered trace plus the real {@link MatchResult}. */
+export interface ExplainResult {
+  steps: TraceStep[]
+  result: MatchResult
+}
+
+/**
+ * The pure engine. `match` is referentially transparent given the definitions;
+ * `explain` runs the **same** resolution and additionally returns the ordered
+ * {@link TraceStep}s the engine took to reach the result.
+ */
 export interface Engine {
   match(request: RequestEnvelope, selection: Selection): MatchResult
+  explain(request: RequestEnvelope, selection: Selection): ExplainResult
 }

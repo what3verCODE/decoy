@@ -714,3 +714,95 @@ describe('createEngine().match — ${ } response templating', () => {
     expect((result.response.body as { count: unknown }).count).toBe(0)
   })
 })
+
+describe('createEngine().explain', () => {
+  const kinds = (steps: { kind: string }[]) => steps.map((s) => s.kind)
+
+  test('returns the same result as match() (same code path)', () => {
+    const engine = createEngine(definitions([usersList], [happyPath]))
+    const req = envelope({ method: 'GET', path: '/users/42' })
+    expect(engine.explain(req, selection).result).toEqual(engine.match(req, selection))
+  })
+
+  test('traces a match: request → collection → route-match → preset → variant → outcome', () => {
+    const engine = createEngine(definitions([usersList], [happyPath]))
+    const { steps, result } = engine.explain(
+      envelope({ method: 'GET', path: '/users/42' }),
+      selection,
+    )
+
+    expect(result.type).toBe('matched')
+    expect(kinds(steps)).toEqual([
+      'request',
+      'collection',
+      'route-match',
+      'preset',
+      'variant',
+      'outcome',
+    ])
+    const outcome = steps.at(-1)
+    expect(outcome).toMatchObject({
+      kind: 'outcome',
+      ok: true,
+      resolution: 'users-list-api:default:success',
+    })
+    expect(steps.every((s) => s.ok)).toBe(true)
+  })
+
+  test('traces a no-route miss with the missing collection lookup ok', () => {
+    const engine = createEngine(definitions([usersList], [happyPath]))
+    const { steps, result } = engine.explain(
+      envelope({ method: 'POST', path: '/users/42' }),
+      selection,
+    )
+
+    expect(result.type).toBe('miss')
+    // The entry's route is skipped on the method mismatch, then the run ends no-route.
+    expect(kinds(steps)).toEqual(['request', 'collection', 'route-skip', 'outcome'])
+    expect(steps.at(-1)).toMatchObject({ kind: 'outcome', ok: false, resolution: 'MISS(no-route)' })
+  })
+
+  test('traces a no-collection miss', () => {
+    const engine = createEngine(definitions([usersList], [happyPath]))
+    const { steps } = engine.explain(envelope({ method: 'GET', path: '/users/42' }), {
+      collection: 'nope',
+    })
+    expect(kinds(steps)).toEqual(['request', 'collection', 'outcome'])
+    expect(steps[1]).toMatchObject({ kind: 'collection', ok: false, collection: 'nope' })
+    expect(steps.at(-1)).toMatchObject({
+      kind: 'outcome',
+      ok: false,
+      resolution: 'MISS(no-collection)',
+    })
+  })
+
+  test('traces a no-preset miss: route matched but the preset failed', () => {
+    const guarded: Route = {
+      id: 'guarded',
+      method: 'GET',
+      path: '/x',
+      presets: { admins: { headers: { 'x-role': 'admin' } } },
+      variants: { ok: { status: 200 } },
+    }
+    const engine = createEngine(
+      definitions([guarded], [{ id: 'c', routes: ['guarded:admins:ok'] }]),
+    )
+    const { steps, result } = engine.explain(envelope({ method: 'GET', path: '/x' }), {
+      collection: 'c',
+    })
+
+    expect(result.type).toBe('miss')
+    expect(kinds(steps)).toEqual(['request', 'collection', 'route-match', 'preset', 'outcome'])
+    expect(steps[3]).toMatchObject({
+      kind: 'preset',
+      ok: false,
+      route: 'guarded',
+      preset: 'admins',
+    })
+    expect(steps.at(-1)).toMatchObject({
+      kind: 'outcome',
+      ok: false,
+      resolution: 'MISS(no-preset)',
+    })
+  })
+})
