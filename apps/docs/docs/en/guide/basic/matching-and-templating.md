@@ -18,7 +18,7 @@ hatch is reserved for later.)
 
 ### Subset matching
 
-A [preset](/guide/basic/core-concepts) layers extra conditions via `pathParams`, `query`, `headers`,
+A [preset](/guide/basic/core-concepts) layers extra conditions via `params`, `query`, `headers`,
 and `body`. Matching is **subset / partial**: the request must *contain* the pairs you specify, and
 any extras are ignored — so tracking params and incidental headers never break a match. `body` is
 matched **deep-partial** (nested objects need only the keys you name). Values compare by literal
@@ -28,7 +28,7 @@ equality.
 presets:
   default: {}                 # catch-all — matches any request to the route
   ada:
-    pathParams: { id: "42" }  # matches GET /users/42 (the {id} segment)
+    params: { id: "42" }  # matches GET /users/42 (the {id} segment)
   admin:
     query: { role: admin }    # matches ?role=admin&anything=else; ignores the extras
   with-token:
@@ -39,7 +39,7 @@ Specifying only what you care about is the default; `exact: true` is reserved fo
 
 ### JMESPath predicates
 
-When literal patterns aren't enough, a `pathParams`/`query`/`headers`/`body` field can be a **string**
+When literal patterns aren't enough, a `params`/`query`/`headers`/`body` field can be a **string**
 instead of an object — a `${ }` predicate evaluated against the request and gated on truthiness.
 String predicates are **ANDed** with any object patterns:
 
@@ -77,7 +77,7 @@ Every string value of a [variant](/guide/basic/core-concepts) — anywhere in `s
 expression, evaluated against the **request envelope**:
 
 ```
-{ method, url, path, pathParams, query, headers, cookies, body }
+{ method, url, path, params, query, headers, cookies, body }
 ```
 
 ```yaml
@@ -85,7 +85,7 @@ variants:
   echo:
     status: 200
     body:
-      requestedId: "${ pathParams.id }"
+      requestedId: "${ params.id }"
       greeting: "Hello ${ query.name }"
 ```
 

@@ -64,7 +64,7 @@ _Avoid_: "tenant", "context", "user" (it scopes a Selection, nothing else).
 
 **Request envelope**:
 The fixed shape every preset predicate and `${ }` template evaluates against —
-`{ method, url, path, pathParams, query, headers, cookies, body }`. A missing path is `null`.
+`{ method, url, path, params, query, headers, cookies, body }`. A missing path is `null`.
 _Avoid_: "context", "request object" (it is this exact shape, not an arbitrary bag).
 
 **Standard function**:

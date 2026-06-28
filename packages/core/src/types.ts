@@ -7,7 +7,7 @@ export interface RequestEnvelope {
   method: string
   url: string
   path: string
-  pathParams: Record<string, string>
+  params: Record<string, string>
   query: Record<string, string | string[]>
   headers: Record<string, string>
   cookies: Record<string, string>
@@ -36,7 +36,7 @@ export interface Variant {
  * request envelope and **ANDed** together. `{}` is the catch-all (no conditions →
  * always matches). Each field is either an **object pattern** or a **string
  * predicate**:
- * - **object** → a literal pattern: `pathParams`/`query`/`headers` match as a subset
+ * - **object** → a literal pattern: `params`/`query`/`headers` match as a subset
  *   (request must *contain* the pairs; extras ignored), `body` matches deep-partial
  *   (nested subset). Its string leaves are `${ }`-rendered first, so expected values
  *   can be computed from the request.
@@ -45,7 +45,7 @@ export interface Variant {
  *   roots at the whole envelope regardless).
  */
 export interface Preset {
-  pathParams?: string | Record<string, string>
+  params?: string | Record<string, string>
   query?: string | Record<string, string>
   headers?: string | Record<string, string>
   body?: unknown
@@ -120,7 +120,7 @@ export type MatchResult =
   | {
       type: 'matched'
       address: VariantAddress
-      pathParams: Record<string, string>
+      params: Record<string, string>
       response: MockResponse
     }
   | { type: 'miss'; reason: MissReason; message: string }
@@ -131,8 +131,8 @@ export type MatchResult =
  * what it expected vs. what the request carried.
  */
 export interface PresetFieldTrace {
-  /** Which condition: a `${ }` `predicate`, or a `pathParams`/`query`/`headers`/`body` pattern. */
-  field: 'predicate' | 'pathParams' | 'query' | 'headers' | 'body'
+  /** Which condition: a `${ }` `predicate`, or a `params`/`query`/`headers`/`body` pattern. */
+  field: 'predicate' | 'params' | 'query' | 'headers' | 'body'
   /** Whether this condition held against the request. */
   matched: boolean
   /** The rendered condition (the pattern, or `'truthy'` for a predicate). */
@@ -153,12 +153,12 @@ export type TraceStep =
   | { kind: 'collection'; ok: boolean; collection: string; entries: string[]; detail: string }
   /** An entry whose route was rejected before preset evaluation (unknown id, method, or path). */
   | { kind: 'route-skip'; ok: false; entry: string; detail: string }
-  /** An entry whose route matched by method + path; `pathParams` are now known. */
+  /** An entry whose route matched by method + path; `params` are now known. */
   | {
       kind: 'route-match'
       ok: true
       route: string
-      pathParams: Record<string, string>
+      params: Record<string, string>
       detail: string
     }
   /**

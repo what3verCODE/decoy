@@ -25,7 +25,7 @@ import type {
  */
 type FieldMatcher =
   | { mode: 'predicate'; render: Renderer }
-  | { mode: 'pathParams'; render: Renderer }
+  | { mode: 'params'; render: Renderer }
   | { mode: 'query'; render: Renderer }
   | { mode: 'headers'; render: Renderer }
   | { mode: 'body'; render: Renderer }
@@ -89,16 +89,13 @@ function applyOverrides(entries: string[], overrides: RouteOverride[] | undefine
 }
 
 /**
- * Literal `pathParams` match: subset semantics with exact-equality values — the
+ * Literal `params` match: subset semantics with exact-equality values — the
  * request must *contain* every specified `{param}` value (path params are always
  * single strings, so there is no array case).
  */
-function pathParamsMatches(
-  pattern: Record<string, string>,
-  pathParams: Record<string, string>,
-): boolean {
+function paramsMatches(pattern: Record<string, string>, params: Record<string, string>): boolean {
   for (const [key, expected] of Object.entries(pattern)) {
-    if (pathParams[key] !== expected) {
+    if (params[key] !== expected) {
       return false
     }
   }
@@ -108,10 +105,10 @@ function pathParamsMatches(
 /**
  * The path params to match against — read from `env`, not the request: a `{param}`
  * value isn't known until the route's path matches, so the engine folds it into the
- * templating env (`request.pathParams` on the raw envelope is always empty).
+ * templating env (`request.params` on the raw envelope is always empty).
  */
-function envPathParams(env: JSONValue): Record<string, string> {
-  const params = (env as { pathParams?: unknown }).pathParams
+function envParams(env: JSONValue): Record<string, string> {
+  const params = (env as { params?: unknown }).params
   return params !== null && typeof params === 'object' ? (params as Record<string, string>) : {}
 }
 
@@ -195,12 +192,12 @@ function stringifyRecord(value: unknown): Record<string, string> {
  */
 function compilePreset(preset: Preset): FieldMatcher[] {
   const fields: FieldMatcher[] = []
-  if (preset.pathParams !== undefined) {
-    const render = compileTemplate(preset.pathParams)
+  if (preset.params !== undefined) {
+    const render = compileTemplate(preset.params)
     fields.push(
-      typeof preset.pathParams === 'string'
+      typeof preset.params === 'string'
         ? { mode: 'predicate', render }
-        : { mode: 'pathParams', render },
+        : { mode: 'params', render },
     )
   }
   if (preset.query !== undefined) {
@@ -234,8 +231,8 @@ function fieldMatches(field: FieldMatcher, request: RequestEnvelope, env: JSONVa
   switch (field.mode) {
     case 'predicate':
       return isTruthy(field.render(env))
-    case 'pathParams':
-      return pathParamsMatches(stringifyRecord(field.render(env)), envPathParams(env))
+    case 'params':
+      return paramsMatches(stringifyRecord(field.render(env)), envParams(env))
     case 'query':
       return queryMatches(stringifyRecord(field.render(env)), request.query)
     case 'headers':
@@ -247,7 +244,7 @@ function fieldMatches(field: FieldMatcher, request: RequestEnvelope, env: JSONVa
 
 /**
  * A preset matches when *all* of its compiled fields hold against the request
- * envelope (with `pathParams` known) — fields are ANDed. A catch-all (no fields)
+ * envelope (with `params` known) — fields are ANDed. A catch-all (no fields)
  * always matches.
  */
 function presetMatches(fields: FieldMatcher[], request: RequestEnvelope, env: JSONValue): boolean {
@@ -273,12 +270,12 @@ function explainField(
         expected: 'truthy',
         actual: rendered,
       }
-    case 'pathParams': {
+    case 'params': {
       const expected = stringifyRecord(rendered)
-      const actual = envPathParams(env)
+      const actual = envParams(env)
       return {
-        field: 'pathParams',
-        matched: pathParamsMatches(expected, actual),
+        field: 'params',
+        matched: paramsMatches(expected, actual),
         expected,
         actual,
       }
@@ -467,8 +464,8 @@ export function createEngine(definitions: Definitions): Engine {
         record({ kind: 'route-skip', ok: false, entry, detail: 'route has no compiled path' })
         continue
       }
-      const pathParams = matchPath(path, request.path)
-      if (!pathParams) {
+      const params = matchPath(path, request.path)
+      if (!params) {
         record({
           kind: 'route-skip',
           ok: false,
@@ -481,13 +478,13 @@ export function createEngine(definitions: Definitions): Engine {
         kind: 'route-match',
         ok: true,
         route: address.route,
-        pathParams,
+        params,
         detail: `${method} ${route.path} matched`,
       })
       // The route matched by method+path: from here, any failure to serve is a
       // no-preset miss, not a no-route miss. Templating roots at the request
-      // envelope with the now-known pathParams folded in.
-      const env = { ...request, pathParams } as unknown as JSONValue
+      // envelope with the now-known params folded in.
+      const env = { ...request, params } as unknown as JSONValue
       const preset = route.presets[address.preset]
       const fields = preset && presets.get(preset)
       if (!preset || !fields) {
@@ -554,7 +551,7 @@ export function createEngine(definitions: Definitions): Engine {
       const rendered = renderer ? (renderer(env) as Variant) : variant
       const resolution = `${address.route}:${address.preset}:${address.variant}`
       record({ kind: 'outcome', ok: true, resolution, detail: resolution })
-      return { type: 'matched', address, pathParams, response: buildResponse(rendered) }
+      return { type: 'matched', address, params, response: buildResponse(rendered) }
     }
 
     if (tried.length > 0) {

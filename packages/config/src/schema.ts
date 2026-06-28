@@ -27,7 +27,7 @@ export const VariantSchema = v.object({
  * fields are ANDed. `{}` is the catch-all.
  */
 export const PresetSchema = v.object({
-  pathParams: v.optional(PredicateOrPattern),
+  params: v.optional(PredicateOrPattern),
   query: v.optional(PredicateOrPattern),
   headers: v.optional(PredicateOrPattern),
   body: v.optional(v.unknown()),

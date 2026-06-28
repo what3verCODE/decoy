@@ -109,7 +109,7 @@ or a literal **pattern** object; fields are ANDed. `{}` is the catch-all.
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `pathParams` | `string \| Record<string, string>` | Match on `{param}` path values. |
+| `params` | `string \| Record<string, string>` | Match on `{param}` path values. |
 | `query` | `string \| Record<string, string>` | Match on query parameters. |
 | `headers` | `string \| Record<string, string>` | Match on request headers. |
 | `body` | `unknown` | Match on the request body (any value). |

@@ -7,7 +7,7 @@ function envelope(
 ): RequestEnvelope {
   return {
     url: partial.path,
-    pathParams: {},
+    params: {},
     query: {},
     headers: {},
     cookies: {},
@@ -50,7 +50,7 @@ describe('createEngine().match', () => {
       preset: 'default',
       variant: 'success',
     })
-    expect(result.pathParams).toEqual({ id: '42' })
+    expect(result.params).toEqual({ id: '42' })
     expect(result.response).toEqual({
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -671,7 +671,7 @@ describe('createEngine().match — ${ } response templating', () => {
         status: '${ body.code }',
         headers: { 'x-count': '${ length(body.items) }' },
         body: {
-          id: '${ pathParams.id }',
+          id: '${ params.id }',
           count: '${ length(body.items) }',
           greeting: 'Hi ${ body.name }!',
           label: 'static',
@@ -854,13 +854,13 @@ describe('createEngine().explain', () => {
   })
 })
 
-describe('createEngine().match — pathParams preset matching', () => {
+describe('createEngine().match — params preset matching', () => {
   const route: Route = {
     id: 'users-by-id',
     method: 'GET',
     path: '/users/{id}',
     presets: {
-      ada: { pathParams: { id: '42' } },
+      ada: { params: { id: '42' } },
       default: {},
     },
     variants: {
@@ -875,7 +875,7 @@ describe('createEngine().match — pathParams preset matching', () => {
   const engine = createEngine(definitions([route], [collection]))
   const sel: Selection = { collection: 'c' }
 
-  test('a literal pathParams pattern matches the {param} value', () => {
+  test('a literal params pattern matches the {param} value', () => {
     const result = engine.match(envelope({ method: 'GET', path: '/users/42' }), sel)
     expect(result.type).toBe('matched')
     if (result.type !== 'matched') return
@@ -891,20 +891,20 @@ describe('createEngine().match — pathParams preset matching', () => {
     expect(result.response.body).toEqual({ name: 'someone' })
   })
 
-  test('explain reports the pathParams condition with expected vs actual', () => {
+  test('explain reports the params condition with expected vs actual', () => {
     const { steps } = engine.explain(envelope({ method: 'GET', path: '/users/99' }), sel)
     const adaPreset = steps.find((s) => s.kind === 'preset' && s.preset === 'ada')
     if (adaPreset?.kind !== 'preset') return
     expect(adaPreset.ok).toBe(false)
     expect(adaPreset.fields).toEqual([
-      { field: 'pathParams', matched: false, expected: { id: '42' }, actual: { id: '99' } },
+      { field: 'params', matched: false, expected: { id: '42' }, actual: { id: '99' } },
     ])
   })
 
-  test('a ${ } predicate form also reads pathParams', () => {
+  test('a ${ } predicate form also reads params', () => {
     const predicateRoute: Route = {
       ...route,
-      presets: { ada: { pathParams: '${ pathParams.id == `42` }' }, default: {} },
+      presets: { ada: { params: '${ params.id == `42` }' }, default: {} },
     }
     const e = createEngine(definitions([predicateRoute], [collection]))
     expect(e.match(envelope({ method: 'GET', path: '/users/42' }), sel).type).toBe('matched')

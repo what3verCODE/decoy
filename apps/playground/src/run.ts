@@ -146,7 +146,7 @@ routes:
     variants:
       ada:
         status: 200
-        body: { id: 42, name: Ada, greeting: "Hi \${ pathParams.id }" }
+        body: { id: 42, name: Ada, greeting: "Hi \${ params.id }" }
       boom:
         status: 500
         body: { error: upstream exploded }
