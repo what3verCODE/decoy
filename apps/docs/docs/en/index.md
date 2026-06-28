@@ -1,5 +1,6 @@
 ---
 pageType: home
+description: Decoy is a fast, contract-first HTTP mock you point a base URL at — develop and test against deterministic, fail-closed scenarios without waiting for a backend.
 
 hero:
   name: Decoy

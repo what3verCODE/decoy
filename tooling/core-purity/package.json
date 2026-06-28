@@ -1,7 +1,7 @@
 {
   "name": "@decoy/core-purity",
   "version": "0.0.0",
-  "description": "Repo guard: fails if @decoy/core imports a Node built-in / IO module (enforces ADR-0002 / ADR-0014).",
+  "description": "Repo guard: fails if @decoy/core imports a Node built-in / IO module (enforces its zero-IO purity).",
   "type": "module",
   "private": true,
   "scripts": {

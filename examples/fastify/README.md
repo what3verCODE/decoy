@@ -41,7 +41,7 @@ curl -s localhost:3005/health
 ```
 
 **Fail closed when nothing answers** — a route that is neither mocked nor owned by a real route
-lands in the plugin's not-found handler and fails closed with `501 + x-mock-miss` (ADR-0005). No
+lands in the plugin's not-found handler and fails closed with `501 + x-mock-miss`. No
 request ever reaches a real backend, because there isn't one — that is the whole point of the
 mock:
 

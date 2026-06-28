@@ -8,7 +8,7 @@ interface WorkerFixtures {
 }
 
 interface TestFixtures {
-  /** A per-test server session (ADR-0011) the test drives to switch scenarios. */
+  /** A per-test server session the test drives to switch scenarios. */
   router: SessionRouter
 }
 

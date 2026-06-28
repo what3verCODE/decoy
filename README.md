@@ -74,7 +74,7 @@ output). `--watch` still works under the TUI, with reload warnings flowing into 
 
 ### Multi-instance topology
 
-One running instance impersonates **one** upstream (ADR-0006). To mock a group of services with the
+One running instance impersonates **one** upstream. To mock a group of services with the
 one tool, make the config an **array** — `decoy start` boots one instance per entry, each on its own
 port with independent routes/collections/passthrough — and point each upstream's base URL at its
 instance:
@@ -104,7 +104,7 @@ fail), so it can gate a CI merge:
 
 ## Adapters (in-process)
 
-The standalone server is the centerpiece (ADR-0001), but the same pure engine can be **embedded in a
+The standalone server is the centerpiece, but the same pure engine can be **embedded in a
 real app** for partial mocking: matched routes are served from mocks, everything else falls through to
 the host app's own handlers. `@decoy/express` is the in-process alternative to running the server —
 identical matching/templating semantics, **fallthrough instead of fail-closed**.
@@ -123,7 +123,7 @@ app.use(decoy)                               // serve matched routes from mocks
 
 app.get('/users/:id', realHandler)           // reached only when no mock matches (fallthrough)
 
-// Drive scenarios in-process via the canonical JS control API (ADR-0010):
+// Drive scenarios in-process via the canonical JS control API:
 decoy.control.useCollection('checkout-fails')
 decoy.control.useRoute('users-by-id', 'default', 'boom')
 decoy.control.reset()
@@ -173,7 +173,7 @@ await app.register(decoy)                     // serve matched routes; fall thro
 
 app.get('/users/:id', realHandler)            // reached only when no mock matches (fallthrough)
 
-decoy.control.useCollection('checkout-fails') // drive scenarios in-process (ADR-0010)
+decoy.control.useCollection('checkout-fails') // drive scenarios in-process
 ```
 
 ## Toolchain
@@ -192,7 +192,7 @@ pnpm test              # run all package tests
 
 ### Core purity guard
 
-`@decoy/core` is the keystone: a pure, zero-IO engine (ADR-0002 / ADR-0014). A guard
+`@decoy/core` is the keystone: a pure, zero-IO engine. A guard
 (`tooling/core-purity`) enforces this — it scans `packages/core/src` and **fails if any source
 imports a Node built-in** (`node:fs`, `http`, `crypto`, …), the IO surface a pure engine must never
 reach. It runs as part of `pnpm check` (and therefore in CI); run it directly with:
