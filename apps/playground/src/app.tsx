@@ -1,4 +1,4 @@
-import type { TraceStep } from '@decoy/core'
+import type { PresetFieldTrace, TraceStep } from '@decoy/core'
 import type { JSX } from 'preact'
 import { useMemo, useState } from 'preact/hooks'
 import { EXAMPLE, run } from './run'
@@ -8,14 +8,46 @@ function glyph(ok: boolean): string {
   return ok ? '✓' : '✗'
 }
 
+function compact(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+/** The per-condition breakdown shown under a `preset` step, so a failure says what didn't match. */
+function FieldRows({ fields }: { fields: PresetFieldTrace[] }): JSX.Element {
+  return (
+    <ul class="pg-fields">
+      {fields.map((field) => (
+        <li key={field.field} class={`pg-field ${field.matched ? 'pg-field--ok' : 'pg-field--no'}`}>
+          <span class="pg-field__glyph" aria-hidden="true">
+            {glyph(field.matched)}
+          </span>
+          <span class="pg-field__name">{field.field}</span>
+          {field.matched ? (
+            <span class="pg-field__detail">matched</span>
+          ) : (
+            <span class="pg-field__detail">
+              expected <code>{compact(field.expected)}</code> · got{' '}
+              <code>{compact(field.actual)}</code>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function TraceRow({ step }: { step: TraceStep }): JSX.Element {
+  const fields = step.kind === 'preset' ? step.fields : undefined
   return (
     <li class={`pg-step ${step.ok ? 'pg-step--ok' : 'pg-step--no'}`}>
-      <span class="pg-step__glyph" aria-hidden="true">
-        {glyph(step.ok)}
-      </span>
-      <span class="pg-step__kind">{step.kind}</span>
-      <span class="pg-step__detail">{step.detail}</span>
+      <div class="pg-step__row">
+        <span class="pg-step__glyph" aria-hidden="true">
+          {glyph(step.ok)}
+        </span>
+        <span class="pg-step__kind">{step.kind}</span>
+        <span class="pg-step__detail">{step.detail}</span>
+      </div>
+      {fields && fields.length > 0 && <FieldRows fields={fields} />}
     </li>
   )
 }
@@ -60,6 +92,36 @@ function headerLines(headers: Record<string, string>): string {
 
 export function App(): JSX.Element {
   const [text, setText] = useState(EXAMPLE)
+
+  // Make Tab indent (2 spaces) instead of moving focus; Shift+Tab outdents the line.
+  const onKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Tab') {
+      return
+    }
+    event.preventDefault()
+    const ta = event.currentTarget
+    const { selectionStart, selectionEnd, value } = ta
+    if (event.shiftKey) {
+      const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+      const lead = value.slice(lineStart).match(/^ {1,2}/)?.[0] ?? ''
+      if (!lead) {
+        return
+      }
+      const next = value.slice(0, lineStart) + value.slice(lineStart + lead.length)
+      const caret = Math.max(lineStart, selectionStart - lead.length)
+      ta.value = next
+      ta.selectionStart = ta.selectionEnd = caret
+      setText(next)
+    } else {
+      const indent = '  '
+      const next = value.slice(0, selectionStart) + indent + value.slice(selectionEnd)
+      const caret = selectionStart + indent.length
+      ta.value = next
+      ta.selectionStart = ta.selectionEnd = caret
+      setText(next)
+    }
+  }
+
   return (
     <div class="pg">
       <header class="pg-bar">
@@ -74,6 +136,7 @@ export function App(): JSX.Element {
             class="pg-editor"
             spellcheck={false}
             value={text}
+            onKeyDown={onKeyDown}
             onInput={(event) => setText((event.currentTarget as HTMLTextAreaElement).value)}
           />
         </section>

@@ -9,6 +9,7 @@ import type {
   ExplainResult,
   MatchResult,
   Preset,
+  PresetFieldTrace,
   RequestEnvelope,
   RouteOverride,
   Selection,
@@ -216,6 +217,69 @@ function presetMatches(fields: FieldMatcher[], request: RequestEnvelope, env: JS
 }
 
 /**
+ * Per-field diagnostic for the trace: evaluate each compiled field exactly as
+ * {@link fieldMatches} does and record what it expected vs. what the request carried,
+ * so an `explain` can say *which* condition failed (not just that one did).
+ */
+function explainField(
+  field: FieldMatcher,
+  request: RequestEnvelope,
+  env: JSONValue,
+): PresetFieldTrace {
+  const rendered = field.render(env)
+  switch (field.mode) {
+    case 'predicate':
+      return {
+        field: 'predicate',
+        matched: isTruthy(rendered),
+        expected: 'truthy',
+        actual: rendered,
+      }
+    case 'query': {
+      const expected = stringifyRecord(rendered)
+      return {
+        field: 'query',
+        matched: queryMatches(expected, request.query),
+        expected,
+        actual: request.query,
+      }
+    }
+    case 'headers': {
+      const expected = stringifyRecord(rendered)
+      return {
+        field: 'headers',
+        matched: headersMatch(expected, request.headers),
+        expected,
+        actual: request.headers,
+      }
+    }
+    case 'body':
+      return {
+        field: 'body',
+        matched: deepPartialMatch(rendered, request.body),
+        expected: rendered,
+        actual: request.body,
+      }
+  }
+}
+
+function explainFields(
+  fields: FieldMatcher[],
+  request: RequestEnvelope,
+  env: JSONValue,
+): PresetFieldTrace[] {
+  return fields.map((field) => explainField(field, request, env))
+}
+
+/** Summarize which preset conditions failed, for the `preset` trace step's detail line. */
+function describePresetFail(traces: PresetFieldTrace[]): string {
+  const failed = traces.filter((t) => !t.matched).map((t) => t.field)
+  return failed.length === 0
+    ? 'preset did not match'
+    : `${failed.join(' + ')} condition${failed.length === 1 ? '' : 's'} did not match`
+}
+
+/**
  * Build the human diagnostic for a "route matched but no active preset matched"
  * miss. It names the matched route(s) and lists, in array order, the presets the
  * engine tried — the second miss type distinguishing a misfiring matcher from a
@@ -389,13 +453,19 @@ export function createEngine(definitions: Definitions): Engine {
         tried.push({ route: address.route, preset: address.preset })
         continue
       }
-      if (!presetMatches(fields, request, env)) {
+      // Compute the per-field breakdown only when tracing; otherwise the fast bool.
+      const fieldTraces = steps ? explainFields(fields, request, env) : null
+      const matched = fieldTraces
+        ? fieldTraces.every((field) => field.matched)
+        : presetMatches(fields, request, env)
+      if (!matched) {
         record({
           kind: 'preset',
           ok: false,
           route: address.route,
           preset: address.preset,
-          detail: `${fields.length} field condition(s) did not all match`,
+          detail: fieldTraces ? describePresetFail(fieldTraces) : 'preset did not match',
+          ...(fieldTraces ? { fields: fieldTraces } : {}),
         })
         tried.push({ route: address.route, preset: address.preset })
         continue
@@ -408,7 +478,8 @@ export function createEngine(definitions: Definitions): Engine {
         detail:
           fields.length === 0
             ? 'catch-all (no conditions)'
-            : `all ${fields.length} field condition(s) matched`,
+            : `all ${fields.length} condition(s) matched`,
+        ...(fieldTraces && fieldTraces.length > 0 ? { fields: fieldTraces } : {}),
       })
       const variant = route.variants[address.variant]
       if (!variant) {

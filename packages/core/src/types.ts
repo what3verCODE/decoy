@@ -125,6 +125,22 @@ export type MatchResult =
   | { type: 'miss'; reason: MissReason; message: string }
 
 /**
+ * One condition of a preset, evaluated against the request — the per-field detail of
+ * a `preset` {@link TraceStep}, so a failed preset says *which* condition failed and
+ * what it expected vs. what the request carried.
+ */
+export interface PresetFieldTrace {
+  /** Which condition: a `${ }` `predicate`, or a `query`/`headers`/`body` pattern. */
+  field: 'predicate' | 'query' | 'headers' | 'body'
+  /** Whether this condition held against the request. */
+  matched: boolean
+  /** The rendered condition (the pattern, or `'truthy'` for a predicate). */
+  expected: unknown
+  /** The request value this condition was checked against. */
+  actual: unknown
+}
+
+/**
  * One ordered step the engine took while resolving a request — the faithful record
  * an {@link Engine.explain} produces (same code path as `match`, so it never drifts
  * from real behavior). `ok` marks whether the step advanced toward a match.
@@ -144,8 +160,19 @@ export type TraceStep =
       pathParams: Record<string, string>
       detail: string
     }
-  /** A preset evaluated against the request; `ok` is whether all its fields passed. */
-  | { kind: 'preset'; ok: boolean; route: string; preset: string; detail: string }
+  /**
+   * A preset evaluated against the request; `ok` is whether all its fields passed.
+   * `fields` is the per-condition breakdown (absent when the preset itself was not
+   * found, or for a catch-all with no conditions).
+   */
+  | {
+      kind: 'preset'
+      ok: boolean
+      route: string
+      preset: string
+      detail: string
+      fields?: PresetFieldTrace[]
+    }
   /** The variant for a passed preset: `ok` is whether it exists (a missing variant is a miss). */
   | { kind: 'variant'; ok: boolean; route: string; preset: string; variant: string; detail: string }
   /** The terminal outcome: the served `route:preset:variant`, or the miss kind + message. */

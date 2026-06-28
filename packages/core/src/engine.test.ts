@@ -793,16 +793,63 @@ describe('createEngine().explain', () => {
 
     expect(result.type).toBe('miss')
     expect(kinds(steps)).toEqual(['request', 'collection', 'route-match', 'preset', 'outcome'])
-    expect(steps[3]).toMatchObject({
+    const presetStep = steps[3]
+    expect(presetStep).toMatchObject({
       kind: 'preset',
       ok: false,
       route: 'guarded',
       preset: 'admins',
     })
+    // The per-field breakdown names which condition failed, with expected vs actual.
+    if (presetStep?.kind !== 'preset') return
+    expect(presetStep.fields).toEqual([
+      { field: 'headers', matched: false, expected: { 'x-role': 'admin' }, actual: {} },
+    ])
+    expect(presetStep.detail).toContain('headers')
     expect(steps.at(-1)).toMatchObject({
       kind: 'outcome',
       ok: false,
       resolution: 'MISS(no-preset)',
     })
+  })
+
+  test('a passing preset records its matched field conditions', () => {
+    const guarded: Route = {
+      id: 'guarded',
+      method: 'GET',
+      path: '/x',
+      presets: { admins: { headers: { 'x-role': 'admin' } } },
+      variants: { ok: { status: 200 } },
+    }
+    const engine = createEngine(
+      definitions([guarded], [{ id: 'c', routes: ['guarded:admins:ok'] }]),
+    )
+    const { steps, result } = engine.explain(
+      envelope({ method: 'GET', path: '/x', headers: { 'x-role': 'admin' } }),
+      { collection: 'c' },
+    )
+
+    expect(result.type).toBe('matched')
+    const presetStep = steps.find((s) => s.kind === 'preset')
+    if (presetStep?.kind !== 'preset') return
+    expect(presetStep.ok).toBe(true)
+    expect(presetStep.fields?.[0]).toMatchObject({ field: 'headers', matched: true })
+  })
+
+  test('match() result still equals explain() result with field tracing on', () => {
+    const guarded: Route = {
+      id: 'guarded',
+      method: 'GET',
+      path: '/x',
+      presets: { admins: { headers: { 'x-role': 'admin' } } },
+      variants: { ok: { status: 200 } },
+    }
+    const engine = createEngine(
+      definitions([guarded], [{ id: 'c', routes: ['guarded:admins:ok'] }]),
+    )
+    const req = envelope({ method: 'GET', path: '/x', headers: { 'x-role': 'admin' } })
+    expect(engine.match(req, { collection: 'c' })).toEqual(
+      engine.explain(req, { collection: 'c' }).result,
+    )
   })
 })
