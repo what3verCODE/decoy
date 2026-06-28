@@ -75,36 +75,6 @@ export async function fetchRouteDetail(id: string, service: string | null): Prom
   return (await response.json()) as RouteDetail
 }
 
-/** A playground dry-run request posted to `POST /__decoy__/try`. */
-export interface TryRequest {
-  method: string
-  path: string
-  query?: Record<string, string>
-  headers?: Record<string, string>
-  body?: unknown
-}
-
-/** The dry-run outcome from `POST /__decoy__/try` (the server's `TryOutcome`). */
-export interface TryResult {
-  /** `route:preset:variant` · `MISS(reason)` · `PASSTHROUGH(target)`. */
-  resolution: string
-  /** The response the live server would serve, or `null` for a (not-forwarded) passthrough. */
-  response: { status: number; headers: Record<string, string>; body: unknown } | null
-}
-
-/** Run a dry-run match against the current selection via `POST /__decoy__/try` (zero side effects). */
-export async function tryRequest(input: TryRequest, service: string | null): Promise<TryResult> {
-  const response = await fetch(scoped('/__decoy__/try', service), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  })
-  if (!response.ok) {
-    throw new Error(`POST /__decoy__/try failed: ${response.status}`)
-  }
-  return (await response.json()) as TryResult
-}
-
 /** A resolved `route:preset:variant` triple — mirrors the core `VariantAddress`. */
 export interface VariantAddress {
   route: string

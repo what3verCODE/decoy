@@ -4,7 +4,6 @@ import { createCollectionModel } from './create-collection-model'
 import { createCollectionsModel } from './create-collections-model'
 import { createLayoutModel } from './create-layout-model'
 import { createLogsModel } from './create-logs-model'
-import { createPlaygroundModel } from './create-playground-model'
 import { createRouteModel } from './create-route-model'
 import { createRoutesModel } from './create-routes-model'
 import { createSelectionModel } from './create-selection-model'
@@ -29,8 +28,6 @@ export const selectionModel = createSelectionModel({ servicesModel })
 
 export const collectionModel = createCollectionModel({ servicesModel })
 export const routeModel = createRouteModel({ servicesModel })
-
-export const playgroundModel = createPlaygroundModel({ servicesModel, routeModel })
 
 sample({
   clock: PageGate.open,
