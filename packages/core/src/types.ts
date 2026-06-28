@@ -36,15 +36,16 @@ export interface Variant {
  * request envelope and **ANDed** together. `{}` is the catch-all (no conditions →
  * always matches). Each field is either an **object pattern** or a **string
  * predicate**:
- * - **object** → a literal pattern: `query`/`headers` match as a subset (request
- *   must *contain* the pairs; extras ignored), `body` matches deep-partial (nested
- *   subset). Its string leaves are `${ }`-rendered first, so expected values can be
- *   computed from the request.
+ * - **object** → a literal pattern: `pathParams`/`query`/`headers` match as a subset
+ *   (request must *contain* the pairs; extras ignored), `body` matches deep-partial
+ *   (nested subset). Its string leaves are `${ }`-rendered first, so expected values
+ *   can be computed from the request.
  * - **string** → a `${ }` predicate: rendered against the envelope, then gated on
  *   JMESPath truthiness (the field name documents what is checked; the expression
  *   roots at the whole envelope regardless).
  */
 export interface Preset {
+  pathParams?: string | Record<string, string>
   query?: string | Record<string, string>
   headers?: string | Record<string, string>
   body?: unknown
@@ -130,8 +131,8 @@ export type MatchResult =
  * what it expected vs. what the request carried.
  */
 export interface PresetFieldTrace {
-  /** Which condition: a `${ }` `predicate`, or a `query`/`headers`/`body` pattern. */
-  field: 'predicate' | 'query' | 'headers' | 'body'
+  /** Which condition: a `${ }` `predicate`, or a `pathParams`/`query`/`headers`/`body` pattern. */
+  field: 'predicate' | 'pathParams' | 'query' | 'headers' | 'body'
   /** Whether this condition held against the request. */
   matched: boolean
   /** The rendered condition (the pattern, or `'truthy'` for a predicate). */

@@ -853,3 +853,60 @@ describe('createEngine().explain', () => {
     )
   })
 })
+
+describe('createEngine().match — pathParams preset matching', () => {
+  const route: Route = {
+    id: 'users-by-id',
+    method: 'GET',
+    path: '/users/{id}',
+    presets: {
+      ada: { pathParams: { id: '42' } },
+      default: {},
+    },
+    variants: {
+      ada: { status: 200, body: { name: 'Ada' } },
+      other: { status: 200, body: { name: 'someone' } },
+    },
+  }
+  const collection: Collection = {
+    id: 'c',
+    routes: ['users-by-id:ada:ada', 'users-by-id:default:other'],
+  }
+  const engine = createEngine(definitions([route], [collection]))
+  const sel: Selection = { collection: 'c' }
+
+  test('a literal pathParams pattern matches the {param} value', () => {
+    const result = engine.match(envelope({ method: 'GET', path: '/users/42' }), sel)
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.address.preset).toBe('ada')
+    expect(result.response.body).toEqual({ name: 'Ada' })
+  })
+
+  test('a non-matching path param falls through to the next preset', () => {
+    const result = engine.match(envelope({ method: 'GET', path: '/users/99' }), sel)
+    expect(result.type).toBe('matched')
+    if (result.type !== 'matched') return
+    expect(result.address.preset).toBe('default')
+    expect(result.response.body).toEqual({ name: 'someone' })
+  })
+
+  test('explain reports the pathParams condition with expected vs actual', () => {
+    const { steps } = engine.explain(envelope({ method: 'GET', path: '/users/99' }), sel)
+    const adaPreset = steps.find((s) => s.kind === 'preset' && s.preset === 'ada')
+    if (adaPreset?.kind !== 'preset') return
+    expect(adaPreset.ok).toBe(false)
+    expect(adaPreset.fields).toEqual([
+      { field: 'pathParams', matched: false, expected: { id: '42' }, actual: { id: '99' } },
+    ])
+  })
+
+  test('a ${ } predicate form also reads pathParams', () => {
+    const predicateRoute: Route = {
+      ...route,
+      presets: { ada: { pathParams: '${ pathParams.id == `42` }' }, default: {} },
+    }
+    const e = createEngine(definitions([predicateRoute], [collection]))
+    expect(e.match(envelope({ method: 'GET', path: '/users/42' }), sel).type).toBe('matched')
+  })
+})

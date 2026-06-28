@@ -25,6 +25,7 @@ import type {
  */
 type FieldMatcher =
   | { mode: 'predicate'; render: Renderer }
+  | { mode: 'pathParams'; render: Renderer }
   | { mode: 'query'; render: Renderer }
   | { mode: 'headers'; render: Renderer }
   | { mode: 'body'; render: Renderer }
@@ -85,6 +86,33 @@ function applyOverrides(entries: string[], overrides: RouteOverride[] | undefine
     }
   }
   return result
+}
+
+/**
+ * Literal `pathParams` match: subset semantics with exact-equality values — the
+ * request must *contain* every specified `{param}` value (path params are always
+ * single strings, so there is no array case).
+ */
+function pathParamsMatches(
+  pattern: Record<string, string>,
+  pathParams: Record<string, string>,
+): boolean {
+  for (const [key, expected] of Object.entries(pattern)) {
+    if (pathParams[key] !== expected) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The path params to match against — read from `env`, not the request: a `{param}`
+ * value isn't known until the route's path matches, so the engine folds it into the
+ * templating env (`request.pathParams` on the raw envelope is always empty).
+ */
+function envPathParams(env: JSONValue): Record<string, string> {
+  const params = (env as { pathParams?: unknown }).pathParams
+  return params !== null && typeof params === 'object' ? (params as Record<string, string>) : {}
 }
 
 /**
@@ -167,6 +195,14 @@ function stringifyRecord(value: unknown): Record<string, string> {
  */
 function compilePreset(preset: Preset): FieldMatcher[] {
   const fields: FieldMatcher[] = []
+  if (preset.pathParams !== undefined) {
+    const render = compileTemplate(preset.pathParams)
+    fields.push(
+      typeof preset.pathParams === 'string'
+        ? { mode: 'predicate', render }
+        : { mode: 'pathParams', render },
+    )
+  }
   if (preset.query !== undefined) {
     const render = compileTemplate(preset.query)
     fields.push(
@@ -198,6 +234,8 @@ function fieldMatches(field: FieldMatcher, request: RequestEnvelope, env: JSONVa
   switch (field.mode) {
     case 'predicate':
       return isTruthy(field.render(env))
+    case 'pathParams':
+      return pathParamsMatches(stringifyRecord(field.render(env)), envPathParams(env))
     case 'query':
       return queryMatches(stringifyRecord(field.render(env)), request.query)
     case 'headers':
@@ -235,6 +273,16 @@ function explainField(
         expected: 'truthy',
         actual: rendered,
       }
+    case 'pathParams': {
+      const expected = stringifyRecord(rendered)
+      const actual = envPathParams(env)
+      return {
+        field: 'pathParams',
+        matched: pathParamsMatches(expected, actual),
+        expected,
+        actual,
+      }
+    }
     case 'query': {
       const expected = stringifyRecord(rendered)
       return {
