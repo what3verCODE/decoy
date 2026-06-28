@@ -1,5 +1,8 @@
 import { type InputSignature, isRegistered, registerFunction } from '@jmespath-community/jmespath'
 
+/** The JMESPath argument {@link InputSignature} (re-exported so a config can type a custom function's signature without depending on the JMESPath package). */
+export type { InputSignature }
+
 /** The implementation shape the JMESPath runtime expects (resolved args in, JSON out). */
 type FunctionImpl = Parameters<typeof registerFunction>[1]
 
@@ -53,6 +56,44 @@ export function registerStandardFunctions(): void {
   for (const { name, signature, func } of standardFunctions) {
     if (!isRegistered(name)) {
       registerFunction(name, func, signature)
+    }
+  }
+}
+
+/**
+ * A user-registered **custom JMESPath function** — the same `{ name, signature, func }`
+ * shape as a {@link StandardFunction}, supplied through `defineConfig({ jmespath: {
+ * functions } })`. It composes with the standard library: once registered, it is
+ * callable from any `${ }` template and preset predicate. Authored in a `.ts`/`.js`
+ * config only — `func` is code, and mock files stay declarative.
+ */
+export type CustomFunction = StandardFunction
+
+/**
+ * Register a config's {@link CustomFunction}s into the JMESPath runtime, through the
+ * same seam as {@link registerStandardFunctions}.
+ *
+ * **Idempotent and standard-safe:** a name already registered — a standard function,
+ * or a custom one from an earlier load in this process (repeated loads, hot reload) —
+ * is left untouched, so the standard library is never clobbered and a re-register
+ * never throws. Collision *reporting* (a custom name that shadows a standard function,
+ * or a duplicate within the set) is the config layer's job: it surfaces those as
+ * load-time validation errors before this runs. A signature the runtime rejects is
+ * rethrown with the offending function named.
+ */
+export function registerCustomFunctions(functions: CustomFunction[]): void {
+  for (const { name, signature, func } of functions) {
+    if (isRegistered(name)) {
+      continue
+    }
+    try {
+      registerFunction(name, func, signature)
+    } catch (error) {
+      throw new Error(
+        `decoy: failed to register custom JMESPath function "${name}": ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
     }
   }
 }

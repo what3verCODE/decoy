@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { Collection, Definitions, Route } from '@decoy/core'
+import { type Collection, type Definitions, type Route, registerCustomFunctions } from '@decoy/core'
 import { cosmiconfig, defaultLoaders, type Loader, type PublicExplorer } from 'cosmiconfig'
 import { createJiti } from 'jiti'
 import type {
@@ -558,6 +558,13 @@ export async function loadConfigs(opts?: {
   const issues = [...crossServiceIssues(layouts), ...collected.flatMap(validateSources)]
   if (hasErrors(issues)) {
     throw new ValidationError(issues)
+  }
+
+  // Register each service's custom JMESPath functions into the (process-global)
+  // runtime, now that validation has confirmed no name shadows a standard function.
+  // Idempotent, so a hot reload or a multi-instance config re-registering is safe.
+  for (const { service } of collected) {
+    registerCustomFunctions(service.jmespath?.functions ?? [])
   }
 
   return collected.map(buildLoadedService)

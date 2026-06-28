@@ -1,4 +1,18 @@
-import type { Collection, Route } from '@decoy/core'
+import type { Collection, CustomFunction, Route } from '@decoy/core'
+
+/**
+ * Custom JMESPath functions registered for `${ }` templates and preset
+ * predicates, composing with the standard library. Authored in a `.ts`/`.js` config
+ * only — `func` is code — so mock files stay declarative; a `.yaml`/`.json` config
+ * cannot carry one.
+ */
+export interface JmespathConfig {
+  /**
+   * Custom functions to register, each `{ name, signature, func }`. A name that
+   * shadows a standard function (or repeats within the set) is a load-time error.
+   */
+  functions?: CustomFunction[]
+}
 
 /**
  * HTTP control API exposure. `true` (the default) mounts it on the
@@ -79,6 +93,11 @@ export interface ServiceConfig {
   defaultCollection?: string
   /** Durable request-log store (#70); defaults to the in-memory store. */
   requestLog?: RequestLogConfig
+  /**
+   * Custom JMESPath functions for `${ }` templating and preset predicates.
+   * Authored in a `.ts`/`.js` config only (functions are code).
+   */
+  jmespath?: JmespathConfig
   /** Inline route definitions, merged with `routesDir`. */
   routes?: Route[]
   /** Inline collections, merged with `collectionsFile`. */

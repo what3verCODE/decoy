@@ -1,5 +1,6 @@
 import { scanTemplateExpressions } from '@decoy/core'
 import { compile as compileJmespath } from '@jmespath-community/jmespath'
+import { validateJmespath } from './jmespath'
 import { validateRequestLog } from './request-log'
 import { CollectionSchema, RouteSchema, validateServiceConfig, validateWithSchema } from './schema'
 import type { LineAt, ValuePath } from './source'
@@ -179,6 +180,7 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
           input.config.file,
           input.config.service,
         ),
+        ...validateJmespath(input.config.data.jmespath, input.config.file, input.config.service),
       )
     }
   }
