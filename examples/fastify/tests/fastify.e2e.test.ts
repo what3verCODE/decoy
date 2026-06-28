@@ -43,7 +43,7 @@ describe('examples/fastify — in-process plugin: serve mocks, fall through, fai
     const miss = await fetch(`${app.base}/orders`)
 
     // No real route owns `/orders`, so the request lands in the plugin's not-found
-    // handler and fails closed (ADR-0005) — unlike express's pure fall-through, this
+    // handler and fails closed — unlike express's pure fall-through, this
     // is Fastify's natural lifecycle. Nothing reaches a real API, because there is
     // none — that is the whole point of the mock.
     expect(miss.status).toBe(501)

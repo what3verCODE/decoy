@@ -40,7 +40,7 @@ export function run(out: (line: string) => void = console.log): number {
   for (const { file, line, specifier } of impurities) {
     out(
       `error: ${file}:${line} — imports Node built-in "${specifier}"; ` +
-        '@decoy/core must be IO-free (ADR-0002, ADR-0014)',
+        '@decoy/core must be IO-free',
     )
   }
   out(`core purity check failed: ${impurities.length} forbidden import(s) in @decoy/core`)

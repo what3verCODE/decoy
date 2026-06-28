@@ -1,5 +1,6 @@
 ---
 pageType: home
+description: Decoy — быстрый HTTP-мок по принципу «сначала контракт»: укажите базовый URL и тестируйте на детерминированных fail-closed сценариях, не дожидаясь бэкенда.
 
 hero:
   name: Decoy
