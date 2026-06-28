@@ -3,7 +3,8 @@ import {
   type Controller,
   createController,
   type Definitions,
-  type MockResponse,
+  planMatched,
+  type ResponsePlan,
   type Selection,
 } from '@decoy/core'
 import { toEnvelope } from './envelope'
@@ -32,36 +33,13 @@ export interface DecoyMiddleware extends RequestHandler {
   readonly selection: Selection
 }
 
-function hasHeader(headers: Record<string, string>, name: string): boolean {
-  const lower = name.toLowerCase()
-  return Object.keys(headers).some((key) => key.toLowerCase() === lower)
-}
-
-/**
- * Write a matched variant to the Express response, mirroring the server's
- * `writeResponse`: a string body passes through; an object/array body is
- * JSON-stringified with `content-type: application/json` inferred unless the
- * variant set one; a null/undefined body sends no payload.
- */
-function writeMatched(res: ExpressResponse, response: MockResponse): void {
-  res.statusCode = response.status
-  for (const [key, value] of Object.entries(response.headers)) {
+/** Write a transport-neutral {@link ResponsePlan} (already serialized by `@decoy/core`) to the Express response. */
+function writePlan(res: ExpressResponse, plan: ResponsePlan): void {
+  res.statusCode = plan.status
+  for (const [key, value] of Object.entries(plan.headers)) {
     res.setHeader(key, value)
   }
-
-  const body = response.body
-  if (body === undefined || body === null) {
-    res.end()
-    return
-  }
-  if (typeof body === 'string') {
-    res.end(body)
-    return
-  }
-  if (!hasHeader(response.headers, 'content-type')) {
-    res.setHeader('content-type', 'application/json')
-  }
-  res.end(JSON.stringify(body))
+  res.end(plan.body)
 }
 
 /**
@@ -86,7 +64,7 @@ export function createDecoyMiddleware(options: DecoyMiddlewareOptions): DecoyMid
     }
 
     if (result.type === 'matched') {
-      writeMatched(res, result.response)
+      writePlan(res, planMatched(result.response))
       return
     }
     // A miss is not an error here: fall through to the host app's own handlers.

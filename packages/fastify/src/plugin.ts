@@ -3,7 +3,9 @@ import {
   type Controller,
   createController,
   type Definitions,
-  type MockResponse,
+  planMatched,
+  planMiss,
+  type ResponsePlan,
   type Selection,
 } from '@decoy/core'
 import { toEnvelope } from './envelope'
@@ -40,45 +42,18 @@ export interface DecoyPlugin extends FastifyPluginCallback {
   readonly selection: Selection
 }
 
-function hasHeader(headers: Record<string, string>, name: string): boolean {
-  const lower = name.toLowerCase()
-  return Object.keys(headers).some((key) => key.toLowerCase() === lower)
-}
-
 /**
- * Write a matched variant to the Fastify reply, mirroring the server's
- * `writeResponse`: a string body passes through; an object/array body is
- * JSON-stringified with `content-type: application/json` inferred unless the variant
- * set one; a null/undefined body sends no payload. Serializing here (rather than
- * handing Fastify the raw object) keeps the bytes identical to the standalone server.
+ * Send a transport-neutral {@link ResponsePlan} (already serialized by `@decoy/core`)
+ * through a Fastify reply. The plan's headers (including the inferred content type)
+ * are applied before `send`, so Fastify writes the bytes verbatim — identical to the
+ * standalone server — rather than re-serializing a raw object.
  */
-function writeMatched(reply: FastifyMockReply, response: MockResponse): void {
-  reply.code(response.status)
-  for (const [key, value] of Object.entries(response.headers)) {
+function sendPlan(reply: FastifyMockReply, plan: ResponsePlan): void {
+  reply.code(plan.status)
+  for (const [key, value] of Object.entries(plan.headers)) {
     reply.header(key, value)
   }
-
-  const body = response.body
-  if (body === undefined || body === null) {
-    reply.send()
-    return
-  }
-  if (typeof body === 'string') {
-    reply.send(body)
-    return
-  }
-  if (!hasHeader(response.headers, 'content-type')) {
-    reply.header('content-type', 'application/json')
-  }
-  reply.send(JSON.stringify(body))
-}
-
-/** Fail closed for a request nothing answered, mirroring the server's `writeMiss`. */
-function writeMiss(reply: FastifyMockReply, message: string, status: number): void {
-  reply.code(status)
-  reply.header('x-mock-miss', 'true')
-  reply.header('content-type', 'application/json')
-  reply.send(JSON.stringify({ error: message }))
+  reply.send(plan.body)
 }
 
 /**
@@ -108,7 +83,7 @@ export function createDecoyPlugin(options: DecoyPluginOptions): DecoyPlugin {
     instance.addHook('preHandler', async (request, reply) => {
       const result = controller.match(toEnvelope(request))
       if (result.type === 'matched') {
-        writeMatched(reply, result.response)
+        sendPlan(reply, planMatched(result.response))
         // Returning the reply after sending stops the lifecycle, so a real route
         // handler for this path is skipped — the mock wins.
         return reply
@@ -121,10 +96,10 @@ export function createDecoyPlugin(options: DecoyPluginOptions): DecoyPlugin {
     instance.setNotFoundHandler((request, reply) => {
       const result = controller.match(toEnvelope(request))
       if (result.type === 'matched') {
-        writeMatched(reply, result.response)
+        sendPlan(reply, planMatched(result.response))
         return
       }
-      writeMiss(reply, result.message, missStatus)
+      sendPlan(reply, planMiss(result.message, missStatus))
     })
 
     done()

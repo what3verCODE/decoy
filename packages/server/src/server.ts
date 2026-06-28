@@ -5,7 +5,13 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { LoadedService } from '@decoy/config'
-import type { Controller, Definitions, MockResponse } from '@decoy/core'
+import {
+  type Controller,
+  type Definitions,
+  planMatched,
+  planMiss,
+  type ResponsePlan,
+} from '@decoy/core'
 import { handleControl, isUnderPrefix, type RequestResolution } from './control'
 import { envelopeFrom, readRawBody } from './envelope'
 import { consoleLogger, type Logger, type RequestLog } from './logger'
@@ -112,37 +118,13 @@ function closeServer(server: Server): Promise<void> {
   })
 }
 
-function hasHeader(headers: Record<string, string>, name: string): boolean {
-  const lower = name.toLowerCase()
-  return Object.keys(headers).some((key) => key.toLowerCase() === lower)
-}
-
-function writeResponse(res: ServerResponse, response: MockResponse): void {
-  res.statusCode = response.status
-  for (const [key, value] of Object.entries(response.headers)) {
+/** Write a transport-neutral {@link ResponsePlan} (already serialized by `@decoy/core`) to a Node response. */
+function writePlan(res: ServerResponse, plan: ResponsePlan): void {
+  res.statusCode = plan.status
+  for (const [key, value] of Object.entries(plan.headers)) {
     res.setHeader(key, value)
   }
-
-  const body = response.body
-  if (body === undefined || body === null) {
-    res.end()
-    return
-  }
-  if (typeof body === 'string') {
-    res.end(body)
-    return
-  }
-  if (!hasHeader(response.headers, 'content-type')) {
-    res.setHeader('content-type', 'application/json')
-  }
-  res.end(JSON.stringify(body))
-}
-
-function writeMiss(res: ServerResponse, message: string, status: number): void {
-  res.statusCode = status
-  res.setHeader('x-mock-miss', 'true')
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify({ error: message }))
+  res.end(plan.body)
 }
 
 /**
@@ -231,7 +213,7 @@ export function createServer(
         const result = control.match(envelope)
 
         if (result.type === 'matched') {
-          writeResponse(res, result.response)
+          writePlan(res, planMatched(result.response))
           record({
             method: envelope.method,
             path: envelope.path,
@@ -257,7 +239,7 @@ export function createServer(
           return
         }
 
-        writeMiss(res, result.message, missStatus)
+        writePlan(res, planMiss(result.message, missStatus))
         record({
           method: envelope.method,
           path: envelope.path,

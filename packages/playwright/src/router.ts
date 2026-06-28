@@ -4,7 +4,7 @@ import {
   type Controller,
   createController,
   type MatchResult,
-  type MockResponse,
+  planResponse,
   type Selection,
 } from '@decoy/core'
 import { toEnvelope } from './envelope'
@@ -46,50 +46,16 @@ export interface PlaywrightRouterOptions {
   url?: string | RegExp
 }
 
-function hasHeader(headers: Record<string, string>, name: string): boolean {
-  const lower = name.toLowerCase()
-  return Object.keys(headers).some((key) => key.toLowerCase() === lower)
-}
-
 /**
- * Serialize an engine response into Playwright `fulfill` options, mirroring the
- * server's `writeResponse`: a string body passes through; an object/array body is
- * JSON-stringified with `content-type: application/json` inferred unless set; a
- * null/undefined body sends no payload.
+ * Map a transport-neutral {@link import('@decoy/core').ResponsePlan} (serialized by
+ * the shared core module) to Playwright `fulfill` options, omitting `body` entirely
+ * when the plan carries no payload.
  */
-function fulfillMatched(response: MockResponse): FulfillOptions {
-  const headers = { ...response.headers }
-  const body = response.body
-
-  if (body === undefined || body === null) {
-    return { status: response.status, headers }
-  }
-  if (typeof body === 'string') {
-    return { status: response.status, headers, body }
-  }
-  if (!hasHeader(headers, 'content-type')) {
-    headers['content-type'] = 'application/json'
-  }
-  return { status: response.status, headers, body: JSON.stringify(body) }
-}
-
-/**
- * Serialize a fail-closed miss, mirroring the server's `writeMiss`: the configured
- * status, an `x-mock-miss: true` header an app/test can hard-assert, and a JSON
- * diagnostic body.
- */
-function fulfillMiss(message: string, status: number): FulfillOptions {
-  return {
-    status,
-    headers: { 'x-mock-miss': 'true', 'content-type': 'application/json' },
-    body: JSON.stringify({ error: message }),
-  }
-}
-
 function toFulfill(result: MatchResult, missStatus: number): FulfillOptions {
-  return result.type === 'matched'
-    ? fulfillMatched(result.response)
-    : fulfillMiss(result.message, missStatus)
+  const plan = planResponse(result, missStatus)
+  return plan.body === undefined
+    ? { status: plan.status, headers: plan.headers }
+    : { status: plan.status, headers: plan.headers, body: plan.body }
 }
 
 /**
