@@ -6,11 +6,13 @@ import { compileTemplate, hasTemplates, type Renderer } from './template'
 import type {
   Definitions,
   Engine,
+  ExplainResult,
   MatchResult,
   Preset,
   RequestEnvelope,
   RouteOverride,
   Selection,
+  TraceStep,
   TriedPreset,
   Variant,
 } from './types'
@@ -276,76 +278,189 @@ export function createEngine(definitions: Definitions): Engine {
   }
   const effective = resolveCollections(definitions.collections)
 
-  return {
-    match(request: RequestEnvelope, selection: Selection): MatchResult {
-      const entries = effective.get(selection.collection)
-      if (!entries) {
-        return {
-          type: 'miss',
-          reason: { kind: 'no-collection', collection: selection.collection },
-          message: `collection "${selection.collection}" is not defined`,
-        }
-      }
+  /**
+   * The single resolution walk shared by {@link Engine.match} and
+   * {@link Engine.explain}: when `steps` is provided, each decision the engine
+   * makes is recorded into it — so the trace is the *same* code path as a plain
+   * match and can never drift from real behavior.
+   */
+  function resolve(
+    request: RequestEnvelope,
+    selection: Selection,
+    steps?: TraceStep[],
+  ): MatchResult {
+    const record = (step: TraceStep): void => {
+      steps?.push(step)
+    }
+    const method = request.method.toUpperCase()
+    record({
+      kind: 'request',
+      ok: true,
+      method,
+      path: request.path,
+      detail: `${method} ${request.path}`,
+    })
 
-      const method = request.method.toUpperCase()
-      // Entries whose route matched by method+path but whose preset (or variant)
-      // did not yield a response — the basis for the no-preset miss diagnostic.
-      const tried: TriedPreset[] = []
-      for (const entry of applyOverrides(entries, selection.overrides)) {
-        const address = parseAddress(entry)
-        if (!address) {
-          continue
-        }
-        const route = definitions.routes.get(address.route)
-        if (!route || route.method.toUpperCase() !== method) {
-          continue
-        }
-        const path = compiled.get(address.route)
-        if (!path) {
-          continue
-        }
-        const pathParams = matchPath(path, request.path)
-        if (!pathParams) {
-          continue
-        }
-        // The route matched by method+path: from here, any failure to serve is a
-        // no-preset miss, not a no-route miss. Templating roots at the request
-        // envelope with the now-known pathParams folded in.
-        const env = { ...request, pathParams } as unknown as JSONValue
-        const preset = route.presets[address.preset]
-        const fields = preset && presets.get(preset)
-        if (!preset || !fields || !presetMatches(fields, request, env)) {
-          tried.push({ route: address.route, preset: address.preset })
-          continue
-        }
-        const variant = route.variants[address.variant]
-        if (!variant) {
-          tried.push({ route: address.route, preset: address.preset })
-          continue
-        }
-        const renderer = variantRenderers.get(variant)
-        const rendered = renderer ? (renderer(env) as Variant) : variant
-        return {
-          type: 'matched',
-          address,
-          pathParams,
-          response: buildResponse(rendered),
-        }
-      }
-
-      if (tried.length > 0) {
-        return {
-          type: 'miss',
-          reason: { kind: 'no-preset', method, path: request.path, tried },
-          message: describeNoPresetMiss(method, request, tried),
-        }
-      }
-
+    const entries = effective.get(selection.collection)
+    if (!entries) {
+      const message = `collection "${selection.collection}" is not defined`
+      record({
+        kind: 'collection',
+        ok: false,
+        collection: selection.collection,
+        entries: [],
+        detail: message,
+      })
+      record({ kind: 'outcome', ok: false, resolution: 'MISS(no-collection)', detail: message })
       return {
         type: 'miss',
-        reason: { kind: 'no-route', method, path: request.path },
-        message: `no route matched ${method} ${request.path}`,
+        reason: { kind: 'no-collection', collection: selection.collection },
+        message,
       }
+    }
+    const active = applyOverrides(entries, selection.overrides)
+    record({
+      kind: 'collection',
+      ok: true,
+      collection: selection.collection,
+      entries: active,
+      detail: `${active.length} active entr${active.length === 1 ? 'y' : 'ies'} to scan in order`,
+    })
+
+    // Entries whose route matched by method+path but whose preset (or variant)
+    // did not yield a response — the basis for the no-preset miss diagnostic.
+    const tried: TriedPreset[] = []
+    for (const entry of active) {
+      const address = parseAddress(entry)
+      if (!address) {
+        record({ kind: 'route-skip', ok: false, entry, detail: 'unparseable entry' })
+        continue
+      }
+      const route = definitions.routes.get(address.route)
+      if (!route) {
+        record({ kind: 'route-skip', ok: false, entry, detail: `no route "${address.route}"` })
+        continue
+      }
+      if (route.method.toUpperCase() !== method) {
+        record({
+          kind: 'route-skip',
+          ok: false,
+          entry,
+          detail: `method ${route.method.toUpperCase()} ≠ ${method}`,
+        })
+        continue
+      }
+      const path = compiled.get(address.route)
+      if (!path) {
+        record({ kind: 'route-skip', ok: false, entry, detail: 'route has no compiled path' })
+        continue
+      }
+      const pathParams = matchPath(path, request.path)
+      if (!pathParams) {
+        record({
+          kind: 'route-skip',
+          ok: false,
+          entry,
+          detail: `path ${route.path} ≠ ${request.path}`,
+        })
+        continue
+      }
+      record({
+        kind: 'route-match',
+        ok: true,
+        route: address.route,
+        pathParams,
+        detail: `${method} ${route.path} matched`,
+      })
+      // The route matched by method+path: from here, any failure to serve is a
+      // no-preset miss, not a no-route miss. Templating roots at the request
+      // envelope with the now-known pathParams folded in.
+      const env = { ...request, pathParams } as unknown as JSONValue
+      const preset = route.presets[address.preset]
+      const fields = preset && presets.get(preset)
+      if (!preset || !fields) {
+        record({
+          kind: 'preset',
+          ok: false,
+          route: address.route,
+          preset: address.preset,
+          detail: `preset "${address.preset}" not found`,
+        })
+        tried.push({ route: address.route, preset: address.preset })
+        continue
+      }
+      if (!presetMatches(fields, request, env)) {
+        record({
+          kind: 'preset',
+          ok: false,
+          route: address.route,
+          preset: address.preset,
+          detail: `${fields.length} field condition(s) did not all match`,
+        })
+        tried.push({ route: address.route, preset: address.preset })
+        continue
+      }
+      record({
+        kind: 'preset',
+        ok: true,
+        route: address.route,
+        preset: address.preset,
+        detail:
+          fields.length === 0
+            ? 'catch-all (no conditions)'
+            : `all ${fields.length} field condition(s) matched`,
+      })
+      const variant = route.variants[address.variant]
+      if (!variant) {
+        record({
+          kind: 'variant',
+          ok: false,
+          route: address.route,
+          preset: address.preset,
+          variant: address.variant,
+          detail: `variant "${address.variant}" not found`,
+        })
+        tried.push({ route: address.route, preset: address.preset })
+        continue
+      }
+      const renderer = variantRenderers.get(variant)
+      record({
+        kind: 'variant',
+        ok: true,
+        route: address.route,
+        preset: address.preset,
+        variant: address.variant,
+        detail: renderer ? 'rendered ${ } templates' : 'served verbatim (no templates)',
+      })
+      const rendered = renderer ? (renderer(env) as Variant) : variant
+      const resolution = `${address.route}:${address.preset}:${address.variant}`
+      record({ kind: 'outcome', ok: true, resolution, detail: resolution })
+      return { type: 'matched', address, pathParams, response: buildResponse(rendered) }
+    }
+
+    if (tried.length > 0) {
+      const message = describeNoPresetMiss(method, request, tried)
+      record({ kind: 'outcome', ok: false, resolution: 'MISS(no-preset)', detail: message })
+      return {
+        type: 'miss',
+        reason: { kind: 'no-preset', method, path: request.path, tried },
+        message,
+      }
+    }
+
+    const message = `no route matched ${method} ${request.path}`
+    record({ kind: 'outcome', ok: false, resolution: 'MISS(no-route)', detail: message })
+    return { type: 'miss', reason: { kind: 'no-route', method, path: request.path }, message }
+  }
+
+  return {
+    match(request: RequestEnvelope, selection: Selection): MatchResult {
+      return resolve(request, selection)
+    },
+    explain(request: RequestEnvelope, selection: Selection): ExplainResult {
+      const steps: TraceStep[] = []
+      const result = resolve(request, selection, steps)
+      return { steps, result }
     },
   }
 }
