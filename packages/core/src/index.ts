@@ -28,6 +28,7 @@ export type {
   MissReason,
   MockResponse,
   Preset,
+  PresetFieldTrace,
   RequestEnvelope,
   Route,
   RouteOverride,

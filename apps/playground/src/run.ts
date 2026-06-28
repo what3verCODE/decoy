@@ -10,9 +10,18 @@ import {
 } from '@decoy/core'
 import { parse as parseYaml } from 'yaml'
 
-/** The single document the editor holds: a Decoy mock (routes + collections) plus a request to try. */
+/**
+ * The single document the editor holds: route definitions, the active scenario, and a
+ * request to try. The active scenario is a minimal `collection` array of
+ * `route:preset:variant` strings — a decoy collection's routes list — so switching a
+ * variant is a one-line edit (`:ada` → `:boom`). `collection` is optional: omit it and
+ * each route's first variant is served. (`collections` + `defaultCollection`, the full
+ * decoy form, are also accepted.)
+ */
 interface PlaygroundDoc {
   routes?: Route[]
+  /** The active scenario, minimal: a list of `route:preset:variant` activations. */
+  collection?: string[]
   collections?: Collection[]
   defaultCollection?: string
   missStatus?: number
@@ -67,14 +76,32 @@ export function run(text: string): RunResult {
   }
 
   const routes = doc.routes ?? []
-  const collections = doc.collections ?? []
   if (routes.length === 0) {
     return { ok: false, error: 'no routes defined' }
   }
-  if (collections.length === 0) {
-    return { ok: false, error: 'no collections defined' }
+
+  // Resolve the active scenario, in precedence order:
+  //  1. the minimal `collection` array (a collection's routes list) — the common form;
+  //  2. an explicit `collections` + `defaultCollection` (full decoy form);
+  //  3. neither → synthesize, activating each route's first preset + first variant.
+  let collections = doc.collections ?? []
+  let defaultCollection = doc.defaultCollection
+  if (doc.collection) {
+    collections = [{ id: 'playground', routes: doc.collection }]
+    defaultCollection = 'playground'
+  } else if (collections.length === 0) {
+    const entries: string[] = []
+    for (const route of routes) {
+      const preset = Object.keys(route.presets ?? {})[0]
+      const variant = Object.keys(route.variants ?? {})[0]
+      if (preset && variant) {
+        entries.push(`${route.id}:${preset}:${variant}`)
+      }
+    }
+    collections = [{ id: 'playground', routes: entries }]
+    defaultCollection = 'playground'
   }
-  const defaultCollection = doc.defaultCollection ?? collections[0]?.id
+  defaultCollection = defaultCollection ?? collections[0]?.id
   if (!defaultCollection) {
     return { ok: false, error: 'no defaultCollection and the first collection has no id' }
   }
@@ -107,8 +134,9 @@ export function run(text: string): RunResult {
   }
 }
 
-/** The starter document — a mock with a templated variant and a request that matches it. */
-export const EXAMPLE = `# Author a Decoy mock (routes + collections), then a request to try.
+/** The starter document — route defs, a minimal active collection, and a request. */
+export const EXAMPLE = `# Author the routes, pick the active variant in 'collection'
+# (edit :ada -> :boom to switch), then a request to try.
 routes:
   - id: users-by-id
     method: GET
@@ -118,16 +146,13 @@ routes:
     variants:
       ada:
         status: 200
-        body: { id: 42, name: Ada, greeting: "Hi \${ pathParams.id }" }
+        body: { id: 42, name: Ada, greeting: "Hi \${ params.id }" }
       boom:
         status: 500
         body: { error: upstream exploded }
 
-collections:
-  - id: happy-path
-    routes: [users-by-id:default:ada]
-
-defaultCollection: happy-path
+collection:
+  - users-by-id:default:ada
 
 request:
   method: GET

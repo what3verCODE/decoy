@@ -74,7 +74,7 @@ describe('createTui — the interactive runtime', () => {
       method: 'GET',
       url: '/users/1',
       path: '/users/1',
-      pathParams: { id: '1' },
+      params: { id: '1' },
       query: {},
       headers: {},
       cookies: {},

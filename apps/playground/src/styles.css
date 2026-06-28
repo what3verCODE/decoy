@@ -188,12 +188,15 @@ body {
 }
 
 .pg-step {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pg-step__row {
   display: grid;
   grid-template-columns: 16px 88px 1fr;
   gap: 8px;
   align-items: baseline;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--border);
 }
 
 .pg-step__glyph {
@@ -218,6 +221,51 @@ body {
 .pg-step__detail {
   font-size: 13px;
   color: var(--text);
+}
+
+.pg-fields {
+  list-style: none;
+  margin: 4px 0 2px;
+  padding: 0 0 0 24px;
+}
+
+.pg-field {
+  display: grid;
+  grid-template-columns: 14px 64px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.pg-field__glyph {
+  font-family: var(--mono);
+  text-align: center;
+}
+
+.pg-field--ok .pg-field__glyph {
+  color: var(--ok);
+}
+
+.pg-field--no .pg-field__glyph {
+  color: var(--miss);
+}
+
+.pg-field__name {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+.pg-field__detail {
+  color: var(--text);
+}
+
+.pg-field__detail code {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #1b232e;
 }
 
 @media (max-width: 760px) {

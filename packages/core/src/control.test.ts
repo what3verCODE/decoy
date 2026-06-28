@@ -7,7 +7,7 @@ function envelope(
 ): RequestEnvelope {
   return {
     url: partial.path,
-    pathParams: {},
+    params: {},
     query: {},
     headers: {},
     cookies: {},

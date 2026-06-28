@@ -4,7 +4,7 @@ import { compileTemplate, hasTemplates, scanTemplateExpressions } from './templa
 const env = (overrides: Record<string, unknown> = {}) => ({
   method: 'GET',
   path: '/users/42',
-  pathParams: { id: '42' },
+  params: { id: '42' },
   query: {},
   headers: {},
   cookies: {},
@@ -29,7 +29,7 @@ describe('compileTemplate — whole-string yields the raw typed value', () => {
   })
 
   test('a path param renders as its raw (string) value', () => {
-    expect(compileTemplate('${ pathParams.id }')(env())).toBe('42')
+    expect(compileTemplate('${ params.id }')(env())).toBe('42')
   })
 
   test('a missing path renders as null (lenient)', () => {
@@ -37,7 +37,7 @@ describe('compileTemplate — whole-string yields the raw typed value', () => {
   })
 
   test('surrounding whitespace inside the braces is ignored', () => {
-    expect(compileTemplate('${pathParams.id}')(env())).toBe('42')
+    expect(compileTemplate('${params.id}')(env())).toBe('42')
   })
 })
 
@@ -63,7 +63,7 @@ describe('compileTemplate — embedded expressions interpolate as a string', () 
   })
 
   test('two back-to-back expressions interpolate (not whole-string)', () => {
-    expect(compileTemplate('${ pathParams.id }${ pathParams.id }')(env())).toBe('4242')
+    expect(compileTemplate('${ params.id }${ params.id }')(env())).toBe('4242')
   })
 })
 
@@ -77,9 +77,7 @@ describe('compileTemplate — literals, escapes, and the no-template fast path',
   })
 
   test('an escaped delimiter alongside a real one renders both', () => {
-    expect(compileTemplate('\\${ literal } and ${ pathParams.id }')(env())).toBe(
-      '${ literal } and 42',
-    )
+    expect(compileTemplate('\\${ literal } and ${ params.id }')(env())).toBe('${ literal } and 42')
   })
 
   test('an empty string stays empty', () => {
@@ -90,11 +88,11 @@ describe('compileTemplate — literals, escapes, and the no-template fast path',
 describe('compileTemplate — deep rendering; keys are never templated', () => {
   test('renders nested object and array leaves, preserving non-string leaves', () => {
     const render = compileTemplate({
-      id: '${ pathParams.id }',
+      id: '${ params.id }',
       count: '${ length(body.items) }',
       greeting: 'Hi ${ body.name }!',
       label: 'static',
-      nested: { ids: ['${ pathParams.id }', 2] },
+      nested: { ids: ['${ params.id }', 2] },
       flag: true,
     })
     expect(render(env({ body: { items: [1, 2], name: 'Ada' } }))).toEqual({
@@ -108,22 +106,22 @@ describe('compileTemplate — deep rendering; keys are never templated', () => {
   })
 
   test('keys that look like templates are left untouched', () => {
-    const render = compileTemplate({ '${ pathParams.id }': 'value' })
-    expect(render(env())).toEqual({ '${ pathParams.id }': 'value' })
+    const render = compileTemplate({ '${ params.id }': 'value' })
+    expect(render(env())).toEqual({ '${ params.id }': 'value' })
   })
 })
 
 describe('scanTemplateExpressions — extracts every ${ } expression source', () => {
   test('returns the trimmed inner JMESPath of each occurrence', () => {
-    expect(scanTemplateExpressions('a ${ body.x } b ${ pathParams.id }')).toEqual([
+    expect(scanTemplateExpressions('a ${ body.x } b ${ params.id }')).toEqual([
       'body.x',
-      'pathParams.id',
+      'params.id',
     ])
   })
 
   test('brace-balanced scan supports }-containing expressions', () => {
-    expect(scanTemplateExpressions('${ {id: pathParams.id, n: length(body.items)} }')).toEqual([
-      '{id: pathParams.id, n: length(body.items)}',
+    expect(scanTemplateExpressions('${ {id: params.id, n: length(body.items)} }')).toEqual([
+      '{id: params.id, n: length(body.items)}',
     ])
   })
 
@@ -138,7 +136,7 @@ describe('scanTemplateExpressions — extracts every ${ } expression source', ()
 
 describe('compileTemplate — brace-balanced multiselect-hash', () => {
   test('a }-containing expression renders as a typed value', () => {
-    const render = compileTemplate('${ {id: pathParams.id, n: length(body.items)} }')
+    const render = compileTemplate('${ {id: params.id, n: length(body.items)} }')
     expect(render(env({ body: { items: [1, 2] } }))).toEqual({ id: '42', n: 2 })
   })
 })

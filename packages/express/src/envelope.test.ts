@@ -13,13 +13,13 @@ function req(init: Partial<ExpressRequest>): ExpressRequest {
 }
 
 describe('toEnvelope', () => {
-  test('splits path and query from the URL, leaving pathParams to the engine', () => {
+  test('splits path and query from the URL, leaving params to the engine', () => {
     const envelope = toEnvelope(req({ originalUrl: '/users/42?expand=true' }))
     expect(envelope.method).toBe('GET')
     expect(envelope.path).toBe('/users/42')
     expect(envelope.url).toBe('/users/42?expand=true')
     expect(envelope.query).toEqual({ expand: 'true' })
-    expect(envelope.pathParams).toEqual({})
+    expect(envelope.params).toEqual({})
   })
 
   test('repeated query keys become arrays; single keys stay scalar', () => {

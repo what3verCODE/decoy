@@ -101,7 +101,7 @@ export function buildEnvelope(input: EnvelopeInput): RequestEnvelope {
     method: input.method,
     url: input.url,
     path: decodeURIComponent(url.pathname),
-    pathParams: {},
+    params: {},
     query: queryToObject(url.searchParams),
     headers: input.headers,
     cookies: parseCookies(input.headers.cookie),

@@ -11,7 +11,7 @@ import { compileTemplate } from './template'
 const env = (overrides: Record<string, unknown> = {}) => ({
   method: 'GET',
   path: '/users/42',
-  pathParams: { id: '42' },
+  params: { id: '42' },
   query: {},
   headers: {},
   cookies: {},

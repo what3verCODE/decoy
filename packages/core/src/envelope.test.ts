@@ -14,7 +14,7 @@ describe('buildEnvelope', () => {
     expect(envelope.url).toBe('/users?page=2&tag=a&tag=b')
     expect(envelope.path).toBe('/users')
     expect(envelope.query).toEqual({ page: '2', tag: ['a', 'b'] })
-    expect(envelope.pathParams).toEqual({})
+    expect(envelope.params).toEqual({})
   })
 
   test('parses an absolute URL the same way (base is ignored)', () => {

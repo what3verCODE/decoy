@@ -59,7 +59,7 @@ describe('planResponse', () => {
     const result: MatchResult = {
       type: 'matched',
       address: { route: 'r', preset: 'default', variant: 'ada' },
-      pathParams: {},
+      params: {},
       response: response({ status: 201, body: { ok: true } }),
     }
 
