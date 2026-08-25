@@ -11,6 +11,20 @@ Operating manual for agents working in the **decoy** monorepo.
 - `docs/adr/` holds accepted architectural decisions. Read ADRs before reversing or replacing a
   recorded decision.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked in GitHub Issues for `what3verCODE/decoy`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses a single-context domain model: root `CONTEXT.md` plus root `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Toolchain
 
 pnpm@11 · Node ≥24. Install with `pnpm install` (use `--frozen-lockfile` in CI).
