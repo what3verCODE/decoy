@@ -166,7 +166,7 @@ pub enum ValidationError {
     EmptyBehaviors { route: String, case: String },
 }
 
-fn validate_id(kind: &'static str, id: &str) -> Result<(), ValidationError> {
+pub(crate) fn validate_id(kind: &'static str, id: &str) -> Result<(), ValidationError> {
     if id.trim().is_empty() {
         return Err(ValidationError::EmptyId {
             kind,
