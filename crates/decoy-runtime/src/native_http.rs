@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 
-use crate::control_api::{self, CONTROL_PREFIX, ControlApiRequest, session_id};
+use crate::control_api::{self, ControlApiRequest, session_id};
 use crate::engine::{Controller, HttpRequest, ResolveOutcome};
 use crate::http::{BodyPlan, ResponsePlan};
 use crate::schema::HttpMethod;
@@ -108,7 +108,7 @@ fn serve_stream(
 }
 
 fn handle_request(controller: &Arc<Mutex<Controller>>, request: WireRequest) -> WireResponse {
-    if request.path.starts_with(CONTROL_PREFIX) {
+    if control_api::is_control_path(&request.path) {
         let mut controller = controller.lock().expect("controller lock is not poisoned");
         let response = control_api::handle_control_request(
             &mut controller,
@@ -453,6 +453,16 @@ cases:
             request(addr, "GET", "/users/123", Some("b"), "").status,
             200
         );
+    }
+
+    #[test]
+    fn decoy_like_application_paths_are_not_captured_by_control_namespace() {
+        let server = server();
+        let addr = server.addr();
+
+        let response = request(addr, "GET", "/__decoy__foo", None, "");
+
+        assert_eq!(response.status, 501);
     }
 
     #[test]

@@ -138,8 +138,16 @@ pub fn try_handle_control_request(
 }
 
 fn route_key(method: &str, path: &str) -> Option<String> {
+    if !is_control_path(path) {
+        return None;
+    }
     let path = path.strip_prefix(CONTROL_PREFIX)?;
     Some(format!("{} {}", method.to_ascii_uppercase(), path))
+}
+
+pub fn is_control_path(path: &str) -> bool {
+    path.strip_prefix(CONTROL_PREFIX)
+        .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with('/'))
 }
 
 fn parse_body<T: for<'de> Deserialize<'de>>(body: Option<String>) -> Result<T, serde_json::Error> {
