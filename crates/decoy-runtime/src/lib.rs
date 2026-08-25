@@ -4,11 +4,19 @@
 //! TypeScript implementation is prior art, not the semantic source of truth.
 
 pub mod collections;
+pub mod control_api;
 pub mod engine;
 pub mod http;
 pub mod schema;
 
 pub use collections::{Activation, Collection, CollectionRouteRef, CollectionsFile};
-pub use engine::{Catalog, Controller, HttpRequest, MissDiagnostic, ResolveOutcome, Selection};
+pub use control_api::{
+    CONTROL_PREFIX, ControlApiRequest, ControlApiResponse, DEFAULT_SESSION, SESSION_HEADER,
+    handle_control_request, try_handle_control_request,
+};
+pub use engine::{
+    Catalog, ControlError, Controller, HttpRequest, MissDiagnostic, ResolveOutcome,
+    RouteOverrideSnapshot, Selection, SelectionSnapshot,
+};
 pub use http::{HttpResponsePlan, PassthroughPlan, RequestMetadata, ResponsePlan, RuntimeConfig};
 pub use schema::{Behavior, BehaviorKind, Case, HttpRouteMatch, Route, Transport, ValidationError};
