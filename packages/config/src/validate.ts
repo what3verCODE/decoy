@@ -73,7 +73,7 @@ function asRouteView(data: unknown): RouteView | undefined {
 
 interface CollectionView {
   id?: string
-  extends?: string
+  from?: string
   routes: string[]
 }
 
@@ -83,11 +83,35 @@ function asCollectionView(data: unknown): CollectionView | undefined {
   }
   return {
     id: typeof data.id === 'string' ? data.id : undefined,
-    extends: typeof data.extends === 'string' ? data.extends : undefined,
+    from:
+      typeof data.from === 'string'
+        ? data.from
+        : typeof data.extends === 'string'
+          ? data.extends
+          : undefined,
     routes: Array.isArray(data.routes)
       ? data.routes.filter((r): r is string => typeof r === 'string')
       : [],
   }
+}
+
+function addressIdIssues(
+  kind: string,
+  ids: Iterable<[string, ValuePath]>,
+  source: { file: string; lineAt: LineAt },
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  for (const [id, path] of ids) {
+    if (id.includes(':')) {
+      issues.push({
+        severity: 'error',
+        message: `${kind} id "${id}" must not contain ":"`,
+        file: source.file,
+        line: source.lineAt(path) ?? source.lineAt([]),
+      })
+    }
+  }
+  return issues
 }
 
 function pathSegments(p: string): string[] {
@@ -159,7 +183,7 @@ function jmespathError(expression: string): string | undefined {
 /**
  * Run the full load-time validation suite over the collected sources and return
  * **all** issues together (never bailing on the first): schema, cross-reference
- * of every `route:preset:variant` address, `extends` resolution and cycles,
+ * of every `route:preset:variant` address, `from` resolution and cycles,
  * duplicate route ids (error) and overlapping `method`+`path` (warning), and
  * JMESPath parse of every `${ }` expression in every preset field and variant.
  * Pure: it does no IO, operating only on the already-read, line-aware
@@ -193,7 +217,27 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     )
   }
 
-  // 2. Duplicate route ids — error on the second and later definition.
+  // 2. Address ids cannot contain ':' because collection routes use route:preset:variant.
+  for (const route of input.routes) {
+    const view = asRouteView(route.data)
+    if (!view) {
+      continue
+    }
+    issues.push(
+      ...addressIdIssues(
+        'preset',
+        Object.keys(view.presets).map((id) => [id, ['presets', id]]),
+        route,
+      ),
+      ...addressIdIssues(
+        'variant',
+        Object.keys(view.variants).map((id) => [id, ['variants', id]]),
+        route,
+      ),
+    )
+  }
+
+  // 3. Duplicate route ids — error on the second and later definition.
   const firstById = new Map<string, { file: string; line?: number }>()
   for (const route of input.routes) {
     const view = asRouteView(route.data)
@@ -214,7 +258,7 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     }
   }
 
-  // 3. Overlapping method+path — warning on each colliding pair.
+  // 4. Overlapping method+path — warning on each colliding pair.
   const located = input.routes
     .map((route) => ({ route, view: asRouteView(route.data) }))
     .filter((r): r is { route: RawRoute; view: RouteView } =>
@@ -255,18 +299,19 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     }
   }
 
-  // 4. `extends` resolution and cycle detection.
+  // 5. `from` resolution and cycle detection.
   for (const collection of input.collections) {
     const view = asCollectionView(collection.data)
-    if (!view?.extends) {
+    if (!view?.from) {
       continue
     }
-    if (!collectionViews.has(view.extends)) {
+    if (!collectionViews.has(view.from)) {
       issues.push({
         severity: 'error',
-        message: `collection "${view.id ?? '?'}" extends undefined collection "${view.extends}"`,
+        message: `collection "${view.id ?? '?'}" from undefined collection "${view.from}"`,
         file: collection.file,
-        line: collection.lineAt(['extends']) ?? collection.lineAt([]),
+        line:
+          collection.lineAt(['from']) ?? collection.lineAt(['extends']) ?? collection.lineAt([]),
       })
       continue
     }
@@ -277,18 +322,19 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
       if (seen.has(cursor)) {
         issues.push({
           severity: 'error',
-          message: `collection "${view.id ?? '?'}" has a cyclic "extends" chain`,
+          message: `collection "${view.id ?? '?'}" has a cyclic "from" chain`,
           file: collection.file,
-          line: collection.lineAt(['extends']) ?? collection.lineAt([]),
+          line:
+            collection.lineAt(['from']) ?? collection.lineAt(['extends']) ?? collection.lineAt([]),
         })
         break
       }
       seen.add(cursor)
-      cursor = collectionViews.get(cursor)?.extends
+      cursor = collectionViews.get(cursor)?.from
     }
   }
 
-  // 5. Cross-reference: every declared `route:preset:variant` address resolves.
+  // 6. Cross-reference: every declared `route:preset:variant` address resolves.
   for (const collection of input.collections) {
     const view = asCollectionView(collection.data)
     if (!view) {
@@ -336,7 +382,7 @@ export function validateSources(input: ValidationInput): ValidationIssue[] {
     })
   }
 
-  // 6. JMESPath parse — every `${ }` expression in every preset field (string
+  // 7. JMESPath parse — every `${ }` expression in every preset field (string
   // predicate or pattern leaf) and every variant string.
   for (const route of input.routes) {
     const view = asRouteView(route.data)

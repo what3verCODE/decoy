@@ -96,10 +96,6 @@ impl Activation {
     pub fn address(&self) -> String {
         format!("{}:{}:{}", self.route, self.case, self.behavior)
     }
-
-    fn selection_key(&self) -> (&str, &str) {
-        (&self.route, &self.case)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,9 +153,7 @@ impl CollectionsFile {
         };
 
         for route_ref in &collection.routes {
-            let activation = route_ref.activation()?;
-            resolved.retain(|existing| existing.selection_key() != activation.selection_key());
-            resolved.push(activation);
+            resolved.push(route_ref.activation()?);
         }
 
         visiting.remove(id);
@@ -211,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn child_collection_overrides_parent_by_route_and_case() {
+    fn child_collection_appends_after_parent_so_bottom_to_top_matching_can_select_it() {
         let collections = CollectionsFile::from_yaml(
             r#"
 - id: base
@@ -233,6 +227,7 @@ mod tests {
             resolved.iter().map(Activation::address).collect::<Vec<_>>(),
             vec![
                 "get-user:any:success",
+                "get-user:user-123:success",
                 "list-users:any:success",
                 "get-user:user-123:not-found"
             ]
@@ -240,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn local_duplicate_keeps_last_activation_at_bottom() {
+    fn local_duplicates_are_preserved_in_authored_order() {
         let collections = CollectionsFile::from_yaml(
             r#"
 - id: local
@@ -254,7 +249,7 @@ mod tests {
         let resolved = collections.resolve("local").unwrap();
         assert_eq!(
             resolved.iter().map(Activation::address).collect::<Vec<_>>(),
-            vec!["get-user:user-123:not-found"]
+            vec!["get-user:user-123:success", "get-user:user-123:not-found"]
         );
     }
 

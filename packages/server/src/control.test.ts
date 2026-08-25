@@ -363,11 +363,11 @@ describe('HTTP control API', () => {
     ])
   })
 
-  test('GET /__decoy__/collections/{name} returns the resolved ordered entries after extends', async () => {
+  test('GET /__decoy__/collections/{name} returns the resolved ordered entries after from', async () => {
     const base2: Collection = { id: 'base', routes: ['users-by-id:default:success'] }
     const checkout: Collection = {
       id: 'checkout',
-      extends: 'base',
+      from: 'base',
       routes: ['users-by-id:default:error'],
     }
     const local = createServer(
@@ -392,12 +392,15 @@ describe('HTTP control API', () => {
     try {
       const response = await fetch(`http://localhost:${port}/__decoy__/collections/checkout`)
       expect(response.status).toBe(200)
-      // The inherited users-by-id slot is overridden in place to the `error` variant.
+      // The inherited entry remains before the child entry; bottom-to-top matching lets child win.
       expect(await response.json()).toEqual({
         name: 'checkout',
-        extends: 'base',
+        from: 'base',
         active: false,
-        entries: [{ route: 'users-by-id', preset: 'default', variant: 'error' }],
+        entries: [
+          { route: 'users-by-id', preset: 'default', variant: 'success' },
+          { route: 'users-by-id', preset: 'default', variant: 'error' },
+        ],
       })
     } finally {
       await local.close()

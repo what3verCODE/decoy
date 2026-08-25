@@ -94,9 +94,9 @@ error (caught by `decoy check`); use distinct ports, or `0` for an ephemeral one
 multiplexing on one port is explicitly out of scope (v2).
 
 `decoy check` runs the full aggregate validation (schema, `route:preset:variant` cross-reference,
-`extends` resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue with its
-`file:line`. It exits non-zero on any **error** and zero otherwise (warnings are reported but do not
-fail), so it can gate a CI merge:
+`from` inheritance resolution, duplicate/overlapping routes, JMESPath parse) and prints every issue
+with its `file:line`. It exits non-zero on any **error** and zero otherwise (warnings are reported
+but do not fail), so it can gate a CI merge:
 
 ```yaml
 - run: pnpm decoy check

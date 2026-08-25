@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from '@rstest/core'
@@ -40,7 +40,7 @@ describe('checkPurity (over a real tree)', () => {
 describe('run (against the actual @decoy/core)', () => {
   test('resolves the repo root from this module location', () => {
     const root = repoRootFrom(import.meta.url)
-    expect(root.endsWith('decoy')).toBe(true)
+    expect(existsSync(join(root, 'packages', 'core', 'src'))).toBe(true)
   })
 
   test('the shipped @decoy/core passes the purity guard', () => {

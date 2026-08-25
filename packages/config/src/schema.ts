@@ -33,9 +33,16 @@ export const PresetSchema = v.object({
   body: v.optional(v.unknown()),
 })
 
+const AddressId = (kind: string) =>
+  v.pipe(
+    v.string(),
+    v.nonEmpty(`${kind} id must not be empty`),
+    v.check((id) => !id.includes(':'), `${kind} id must not contain ":"`),
+  )
+
 /** The coarse matcher + namespace: id + method + path, with presets and variants. */
 export const RouteSchema = v.object({
-  id: v.pipe(v.string(), v.nonEmpty('route id must not be empty')),
+  id: AddressId('route'),
   method: v.pipe(
     v.string(),
     v.transform((s) => s.toUpperCase()),
@@ -46,10 +53,11 @@ export const RouteSchema = v.object({
   variants: v.record(v.string(), VariantSchema),
 })
 
-/** An ordered list of `route:preset:variant` activations; `extends` inherits another. */
+/** An ordered list of `route:preset:variant` activations; `from` inherits another. */
 export const CollectionSchema = v.object({
-  id: v.pipe(v.string(), v.nonEmpty('collection id must not be empty')),
-  extends: v.optional(v.string()),
+  id: AddressId('collection'),
+  from: v.optional(AddressId('collection parent')),
+  extends: v.optional(AddressId('collection parent')),
   routes: v.array(v.string()),
 })
 
