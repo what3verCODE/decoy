@@ -54,23 +54,27 @@ function routesCatalog(definitions: Definitions): RouteCatalogEntry[] {
 /** One collections-catalog entry: a scenario's identity, whether it's active, and its size. */
 export interface CollectionCatalogEntry {
   name: string
-  /** The parent collection this one `extends`, if any. */
-  extends?: string
+  /** The parent collection this one inherits `from`, if any. */
+  from?: string
   /** True for the collection the controlling session currently has active. */
   active: boolean
-  /** Number of resolved `route:preset:variant` entries (post-`extends`). */
+  /** Number of resolved `route:preset:variant` entries (post-`from`). */
   entryCount: number
 }
 
 /**
  * Summarize the definitions' collections into the catalog served by
  * `GET {prefix}/collections`, marking the session's `active` collection and
- * counting each scenario's resolved (post-`extends`) entries.
+ * counting each scenario's resolved (post-`from`) entries.
  */
+function collectionParent(collection: { from?: string; extends?: string }): string | undefined {
+  return collection.from ?? collection.extends
+}
+
 function collectionsCatalog(definitions: Definitions, active: string): CollectionCatalogEntry[] {
   return [...definitions.collections.values()].map((collection) => ({
     name: collection.id,
-    ...(collection.extends ? { extends: collection.extends } : {}),
+    ...(collectionParent(collection) ? { from: collectionParent(collection) } : {}),
     active: collection.id === active,
     entryCount: resolveCollection(definitions, collection.id).length,
   }))
@@ -355,7 +359,7 @@ export async function handleControl(
       }
       sendJson(res, 200, {
         name: collection.id,
-        ...(collection.extends ? { extends: collection.extends } : {}),
+        ...(collectionParent(collection) ? { from: collectionParent(collection) } : {}),
         active: collection.id === control.selection.collection,
         entries: resolveCollection(definitions, name),
       })

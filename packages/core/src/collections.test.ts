@@ -42,20 +42,19 @@ describe('resolveCollection', () => {
     ])
   })
 
-  test('resolves extends — inherited entries first, child overrides in place, new slots appended', () => {
+  test('resolves from — inherited entries first, child entries later', () => {
     const base: Collection = {
       id: 'base',
       routes: ['users-list-api:default:success'],
     }
     const child: Collection = {
       id: 'checkout-fails',
-      extends: 'base',
+      from: 'base',
       routes: ['users-list-api:default:error', 'orders-api:default:success'],
     }
     expect(resolveCollection(definitions([base, child]), 'checkout-fails')).toEqual([
-      // overridden in place, keeping the parent's order position
+      { route: 'users-list-api', preset: 'default', variant: 'success' },
       { route: 'users-list-api', preset: 'default', variant: 'error' },
-      // new slot appended in child order
       { route: 'orders-api', preset: 'default', variant: 'success' },
     ])
   })
@@ -68,14 +67,14 @@ describe('resolveCollection', () => {
     expect(() => resolveCollection(definitions([]), 'ghost')).toThrow(/not defined/)
   })
 
-  test('throws when an extended collection is not defined', () => {
-    const child: Collection = { id: 'child', extends: 'ghost', routes: [] }
+  test('throws when a parent collection is not defined', () => {
+    const child: Collection = { id: 'child', from: 'ghost', routes: [] }
     expect(() => resolveCollection(definitions([child]), 'child')).toThrow(/not defined/)
   })
 
-  test('throws on a cyclic extends chain', () => {
-    const a: Collection = { id: 'a', extends: 'b', routes: [] }
-    const b: Collection = { id: 'b', extends: 'a', routes: [] }
+  test('throws on a cyclic from chain', () => {
+    const a: Collection = { id: 'a', from: 'b', routes: [] }
+    const b: Collection = { id: 'b', from: 'a', routes: [] }
     expect(() => resolveCollection(definitions([a, b]), 'a')).toThrow(/cyclic/)
   })
 })

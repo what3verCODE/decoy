@@ -152,24 +152,49 @@ describe('validateSources — cross-reference', () => {
 
     expect(issues).toEqual([])
   })
-})
 
-describe('validateSources — extends', () => {
-  test('extends an undefined collection is an error', () => {
+  test('ids used in addresses cannot contain colons', () => {
     const issues = validateSources({
-      routes: [],
-      collections: [collection({ id: 'child', extends: 'nope', routes: [] })],
+      routes: [
+        route({
+          id: 'users:api',
+          method: 'GET',
+          path: '/users',
+          presets: { 'default:case': {} },
+          variants: { 'success:ok': {} },
+        }),
+      ],
+      collections: [collection({ id: 'happy:path', from: 'base:path', routes: [] })],
     })
 
-    expect(issues.some((i) => i.message.includes('extends undefined collection "nope"'))).toBe(true)
+    expect(messages(issues)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('route id must not contain ":"'),
+        expect.stringContaining('preset id "default:case" must not contain ":"'),
+        expect.stringContaining('variant id "success:ok" must not contain ":"'),
+        expect.stringContaining('collection id must not contain ":"'),
+        expect.stringContaining('collection parent id must not contain ":"'),
+      ]),
+    )
+  })
+})
+
+describe('validateSources — collection inheritance', () => {
+  test('from an undefined collection is an error', () => {
+    const issues = validateSources({
+      routes: [],
+      collections: [collection({ id: 'child', from: 'nope', routes: [] })],
+    })
+
+    expect(issues.some((i) => i.message.includes('from undefined collection "nope"'))).toBe(true)
   })
 
-  test('a cyclic extends chain is an error', () => {
+  test('a cyclic from chain is an error', () => {
     const issues = validateSources({
       routes: [],
       collections: [
-        collection({ id: 'a', extends: 'b', routes: [] }),
-        collection({ id: 'b', extends: 'a', routes: [] }),
+        collection({ id: 'a', from: 'b', routes: [] }),
+        collection({ id: 'b', from: 'a', routes: [] }),
       ],
     })
 
