@@ -18,6 +18,8 @@ pub struct Route {
     pub route_match: HttpRouteMatch,
     #[serde(default)]
     pub cases: BTreeMap<String, Case>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passthrough: Option<PassthroughTarget>,
 }
 
 impl Route {
@@ -85,12 +87,14 @@ pub struct Case {
 #[serde(try_from = "RawBehavior", into = "RawBehavior")]
 pub enum Behavior {
     Response(ResponseBehavior),
+    Passthrough(PassthroughBehavior),
 }
 
 impl Behavior {
     pub fn kind(&self) -> BehaviorKind {
         match self {
             Self::Response(_) => BehaviorKind::Response,
+            Self::Passthrough(_) => BehaviorKind::Passthrough,
         }
     }
 }
@@ -99,6 +103,7 @@ impl Behavior {
 #[serde(rename_all = "lowercase")]
 pub enum BehaviorKind {
     Response,
+    Passthrough,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +117,18 @@ pub struct ResponseBehavior {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PassthroughBehavior {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<PassthroughTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PassthroughTarget {
+    #[serde(rename = "baseUrl")]
+    pub base_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct RawBehavior {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     kind: Option<BehaviorKind>,
@@ -121,6 +138,8 @@ struct RawBehavior {
     headers: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     body: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<PassthroughTarget>,
 }
 
 impl TryFrom<RawBehavior> for Behavior {
@@ -132,6 +151,9 @@ impl TryFrom<RawBehavior> for Behavior {
                 status: raw.status,
                 headers: raw.headers,
                 body: raw.body,
+            })),
+            BehaviorKind::Passthrough => Ok(Self::Passthrough(PassthroughBehavior {
+                target: raw.target,
             })),
         }
     }
@@ -145,6 +167,14 @@ impl From<Behavior> for RawBehavior {
                 status: response.status,
                 headers: response.headers,
                 body: response.body,
+                target: None,
+            },
+            Behavior::Passthrough(passthrough) => Self {
+                kind: Some(BehaviorKind::Passthrough),
+                status: None,
+                headers: BTreeMap::new(),
+                body: None,
+                target: passthrough.target,
             },
         }
     }
@@ -166,7 +196,7 @@ pub enum ValidationError {
     EmptyBehaviors { route: String, case: String },
 }
 
-fn validate_id(kind: &'static str, id: &str) -> Result<(), ValidationError> {
+pub(crate) fn validate_id(kind: &'static str, id: &str) -> Result<(), ValidationError> {
     if id.trim().is_empty() {
         return Err(ValidationError::EmptyId {
             kind,
@@ -246,6 +276,32 @@ cases:
             route.cases["user-123"].behaviors["success"],
             Behavior::Response(_)
         ));
+    }
+
+    #[test]
+    fn parses_explicit_passthrough_behavior() {
+        let route = Route::from_yaml(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+cases:
+  any:
+    behaviors:
+      real:
+        kind: passthrough
+        target:
+          baseUrl: https://api.example.test
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            route.cases["any"].behaviors["real"].kind(),
+            BehaviorKind::Passthrough
+        );
     }
 
     #[test]
