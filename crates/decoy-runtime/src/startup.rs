@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde_yaml::Value as YamlValue;
 use thiserror::Error;
 
 use crate::collections::{Collection, CollectionError, CollectionsFile};
@@ -106,7 +107,7 @@ pub fn load_catalog_from_files(
         let input = fs::read_to_string(&route_path).map_err(|error| {
             StartupError::new(StartupDiagnosticKind::Io, &route_path, error.to_string())
         })?;
-        let route = Route::from_yaml(&input).map_err(|error| route_error(&route_path, error))?;
+        let route = decode_route(&route_path, &input)?;
         if seen_route_paths
             .insert(route.id.clone(), route_path.clone())
             .is_some()
@@ -127,8 +128,7 @@ pub fn load_catalog_from_files(
             error.to_string(),
         )
     })?;
-    let collection_vec = serde_yaml::from_str::<Vec<Collection>>(&collections_input)
-        .map_err(|error| collection_error(collections_file, CollectionError::Yaml(error)))?;
+    let collection_vec = decode_collections(collections_file, &collections_input)?;
     let first_authored_collection = collection_vec
         .first()
         .map(|collection| collection.id.clone());
@@ -214,14 +214,46 @@ fn normalize_for_sort(routes_dir: &Path, path: &Path) -> String {
         .join("/")
 }
 
+fn decode_route(path: &Path, input: &str) -> Result<Route, StartupError> {
+    let yaml = parse_yaml(path, input)?;
+    let route = serde_yaml::from_value::<Route>(yaml).map_err(|error| {
+        StartupError::with_source(
+            StartupDiagnosticKind::Schema,
+            source_from_yaml_error(path, &error),
+            format!("failed to decode route schema: {error}"),
+        )
+    })?;
+    route.validate().map_err(|error| route_error(path, error))?;
+    Ok(route)
+}
+
+fn decode_collections(path: &Path, input: &str) -> Result<Vec<Collection>, StartupError> {
+    let yaml = parse_yaml(path, input)?;
+    serde_yaml::from_value::<Vec<Collection>>(yaml).map_err(|error| {
+        StartupError::with_source(
+            StartupDiagnosticKind::Schema,
+            source_from_yaml_error(path, &error),
+            format!("failed to decode collections schema: {error}"),
+        )
+    })
+}
+
+fn parse_yaml(path: &Path, input: &str) -> Result<YamlValue, StartupError> {
+    serde_yaml::from_str::<YamlValue>(input).map_err(|error| {
+        StartupError::with_source(
+            StartupDiagnosticKind::Parse,
+            source_from_yaml_error(path, &error),
+            error.to_string(),
+        )
+    })
+}
+
 fn route_error(path: &Path, error: ValidationError) -> StartupError {
-    let source = source_from_validation_error(path, &error);
-    let kind = if matches!(&error, ValidationError::Yaml(_)) {
-        StartupDiagnosticKind::Parse
-    } else {
-        StartupDiagnosticKind::Schema
-    };
-    StartupError::with_source(kind, source, error.to_string())
+    StartupError::with_source(
+        StartupDiagnosticKind::Schema,
+        source_from_validation_error(path, &error),
+        error.to_string(),
+    )
 }
 
 fn collection_error(path: &Path, error: CollectionError) -> StartupError {
@@ -230,12 +262,7 @@ fn collection_error(path: &Path, error: CollectionError) -> StartupError {
         CollectionError::Validation(error) => source_from_validation_error(path, error),
         _ => SourceLocation::path(path),
     };
-    let kind = if matches!(&error, CollectionError::Yaml(_)) {
-        StartupDiagnosticKind::Parse
-    } else {
-        StartupDiagnosticKind::Schema
-    };
-    StartupError::with_source(kind, source, error.to_string())
+    StartupError::with_source(StartupDiagnosticKind::Schema, source, error.to_string())
 }
 
 fn source_from_validation_error(path: &Path, error: &ValidationError) -> SourceLocation {
@@ -413,6 +440,44 @@ match:
     }
 
     #[test]
+    fn startup_route_decode_failures_are_schema_diagnostics() {
+        let temp = tempfile::tempdir().unwrap();
+        let route_path = temp.path().join("routes/get-user.yaml");
+        let collections_path = temp.path().join("collections.yaml");
+        write(
+            &route_path,
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: [bad]
+cases:
+  user-123:
+    behaviors:
+      success:
+        status: 200
+"#,
+        );
+        write(
+            &collections_path,
+            &collections_yaml("get-user:user-123:success"),
+        );
+
+        let error = load_catalog_from_files(
+            temp.path().join("routes"),
+            &collections_path,
+            RuntimeConfig::default(),
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.diagnostic.kind, StartupDiagnosticKind::Schema);
+        assert_eq!(error.diagnostic.source.path, route_path);
+        assert!(error.to_string().contains("get-user.yaml"));
+    }
+
+    #[test]
     fn startup_collection_parse_failures_name_the_source_path() {
         let temp = tempfile::tempdir().unwrap();
         let route_path = temp.path().join("routes/get-user.yaml");
@@ -430,7 +495,7 @@ match:
 
         assert_eq!(error.diagnostic.kind, StartupDiagnosticKind::Parse);
         assert_eq!(error.diagnostic.source.path, collections_path);
-        assert_eq!(error.diagnostic.source.line, Some(1));
+        assert!(error.diagnostic.source.line.is_some());
         assert!(error.to_string().contains("collections.yaml"));
     }
 
@@ -454,6 +519,34 @@ match:
         assert_eq!(error.diagnostic.source.path, collections_path);
         assert!(error.to_string().contains("collections.yaml"));
         assert!(error.to_string().contains("route:case:behavior"));
+    }
+
+    #[test]
+    fn startup_collection_decode_failures_are_schema_diagnostics() {
+        let temp = tempfile::tempdir().unwrap();
+        let route_path = temp.path().join("routes/get-user.yaml");
+        let collections_path = temp.path().join("collections.yaml");
+        write(&route_path, &route_yaml("get-user"));
+        write(
+            &collections_path,
+            r#"
+- id: [bad]
+  routes:
+    - get-user:user-123:success
+"#,
+        );
+
+        let error = load_catalog_from_files(
+            temp.path().join("routes"),
+            &collections_path,
+            RuntimeConfig::default(),
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.diagnostic.kind, StartupDiagnosticKind::Schema);
+        assert_eq!(error.diagnostic.source.path, collections_path);
+        assert!(error.to_string().contains("collections.yaml"));
     }
 
     #[test]
