@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "A fast, contract-first HTTP mock you point a base URL at.",
+  "description": "A portable local mock tool.",
   "packageManager": "pnpm@11.6.0",
   "engines": {
     "node": ">=24",
@@ -15,8 +15,6 @@
     "test": "pnpm -r run test",
     "test:e2e": "pnpm -r --if-present run test:e2e",
     "typecheck": "pnpm -r run typecheck",
-    "docs:build": "pnpm --filter @decoy/docs run build",
-    "docs:dev": "pnpm --filter @decoy/docs run dev",
     "check": "biome check . && pnpm --filter @decoy/core-purity run guard",
     "fix": "biome check --write .",
     "changeset": "changeset",

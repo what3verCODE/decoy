@@ -1,9 +1,5 @@
-# --- local planning docs (kept out of the repo by request) ---
 /.agents
 /.claude
-/docs
-/DESIGN.md
-/REFERENCES.md
 
 # --- dependencies ---
 node_modules/

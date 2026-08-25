@@ -2,102 +2,136 @@
 
 The normative dictionary for Decoy. When a term below is used in code, docs, or discussion, it
 means *exactly* this — one line per term, plus the synonyms to avoid. The prose explanation of how
-the terms fit together lives in the docs site (**Guide → Core Concepts**,
-`apps/docs/docs/en/guide/basic/core-concepts.md`); this file is the dictionary that page points
-back to. Name = `decoy`; packages publish scoped as `@decoy/*`, CLI bin `decoy`.
+the terms fit together lives in the docs site. Name = `decoy`; packages publish scoped as
+`@decoy/*`, CLI bin `decoy`.
 
 ## Language
 
 ### Core concepts
 
-**Route**:
-A coarse request matcher and namespace — an HTTP `method` + `path` (OpenAPI `{id}` params) under a
-stable `id` like `users-by-id`. Belongs to one upstream service via its path/host.
-_Avoid_: "endpoint" (ambiguous with the upstream's own routes), "handler" (a Route serves no code).
-
-**Preset**:
-Additional request-match conditions layered on a **Route** — `query`/`headers`/`body` object
-patterns or `${ }` predicates, ANDed; `{}` is a catch-all. A reusable *case* for the request shape.
-_Avoid_: "case"/"when" (provisional alternates, not the term), "matcher" (the **Route** matches too).
-
-**Variant**:
-One response for a **Route** — `status` · `headers` · `delay` · `body`, every field `${ }`-templated.
-A Route names one Variant per distinct outcome.
-_Avoid_: "response" (a Variant is an addressable named outcome, not the raw response), "mock".
-
 **Collection**:
-An ordered list of `route:preset:variant` activations — the unit you switch to change the whole
-**Scenario** atomically. Supports `extends` (inherit + override).
-_Avoid_: "scenario" (that's the behavior, this is the artifact encoding it), "set", "group".
+An ordered list of `route:case:behavior` activations — the unit switched to change the whole
+**Scenario** atomically. Collections live in one collections YAML file and may inherit from another
+Collection with `from`; child/local activations override parent activations by `route+case`.
+_Avoid_: "preset" for this concept unless the product vocabulary is intentionally changed later,
+"set", "group".
+
+**Route**:
+A coarse interaction matcher and namespace with a stable `id` and exactly one `transport`. For HTTP,
+the Route match is the method + OpenAPI-style path such as `GET /users/{id}`. Route match answers
+*where* the interaction happens.
+_Avoid_: "handler" (a Route serves no code), "endpoint" when it hides transport/case/behavior.
+
+**Case**:
+A named input-shape matcher inside a **Route**. Case match answers *which request/message shape* is
+active for that Route, such as HTTP `pathParams`, `query`, `headers`, or `body` constraints. Cases
+own their Behaviors.
+_Avoid_: "preset" (retired/provisional for this layer), "matcher" as the user-facing noun unless
+precision is more important than beginner UX.
+
+**Behavior**:
+A named action/outcome inside a **Case**. A Behavior may be a static HTTP response, explicit
+Passthrough, and later a flow, WebSocket send/script, file response, or replay behavior. Behaviors
+have a canonical `kind`; simple HTTP responses may infer `kind: response`.
+_Avoid_: "variant" (retired/provisional), "response" (a Behavior is addressable and may not be a
+plain response), "mock".
 
 **Scenario**:
 Informal — the behavior a **Collection** encodes (`happy-path`, `checkout-fails`, `empty-state`).
-_Avoid_: using interchangeably with **Collection** (the Collection is the thing; the Scenario is what it means).
+_Avoid_: using interchangeably with **Collection** (the Collection is the artifact; the Scenario is
+what it means).
 
-**Variant address**:
-The `route:preset:variant` triple, e.g. `users-by-id:default:ada` — how Collections and overrides
-name a **Variant**.
-_Avoid_: "path" (collides with a Route's HTTP path), "key".
+**Behavior address**:
+The `route:case:behavior` triple, e.g. `users-by-id:user-123:success` — how Collections and runtime
+overrides name a Behavior. IDs in the triple must not contain `:`.
+_Avoid_: "path" (collides with a Route's HTTP path), "key", "variant address".
 
-### The two axes
+### Axes
 
 **Service axis**:
-*Which upstream?* Encoded in a **Route**'s `path`/host. One Decoy instance impersonates one service.
-_Avoid_: conflating with the **Scenario axis** — naming Collections like `users-ok-orders-error`.
+*Which upstream or transport address?* Encoded by **Route** identity and route-level match.
+_Avoid_: conflating with the **Scenario axis**.
 
 **Scenario axis**:
-*Which behavior now?* Encoded in the active **Collection**, switched at runtime.
-_Avoid_: encoding behavior in **Route** ids (that fixes it to the Service axis).
+*Which behavior now?* Encoded in the active **Collection** plus per-route overrides.
+_Avoid_: encoding scenario behavior in **Route** ids.
 
 ### Selection & sessions
 
 **Selection**:
-The *only* mutable state — the active **Collection** (by name) + per-route overrides. Held per **Session**.
-_Avoid_: "state" (too broad — matching itself is stateless), "config" (the Selection is runtime, not authored).
+The mutable runtime choice — the active **Collection** plus per-`route+case` Behavior overrides.
+Held per **Session**.
+_Avoid_: "config" (Selection is runtime, not authored), broad "state" unless discussing flows later.
 
 **Session**:
-An isolated **Selection** scope keyed by the `x-mock-session` header. "Global" is the default
-(dev); created Sessions isolate parallel e2e tests on a shared server. A tests-only concept.
-_Avoid_: "tenant", "context", "user" (it scopes a Selection, nothing else).
+An isolated **Selection** scope keyed canonically by the `x-mock-session` header. The default/global
+Session is for local dev; explicit Sessions isolate parallel e2e tests on a shared runtime.
+_Avoid_: "tenant", "context", "user".
 
 ### Matching & templating
 
 **Request envelope**:
-The fixed shape every preset predicate and `${ }` template evaluates against —
-`{ method, url, path, params, query, headers, cookies, body }`. A missing path is `null`.
-_Avoid_: "context", "request object" (it is this exact shape, not an arbitrary bag).
+The fixed shape case matchers and templates evaluate against. For HTTP it includes method, URL,
+path, `pathParams`, query, headers, cookies, and body. Future transports provide transport-specific
+message/connection data through the same semantic contract.
+_Avoid_: "context", "request object".
+
+**Template context**:
+The stable data available to response/message templates: request or message data, Session/Selection
+identity, and bindings captured while matching the Route and Case.
+_Avoid_: exposing arbitrary internals such as logs, route definitions, environment, or server state.
 
 **Standard function**:
-A built-in JMESPath function (v1: `uuid()`) registered so `${ }` expressions can fabricate data the
-query language can't. Part of the cross-language contract; custom functions register through the same seam.
-_Avoid_: "helper", "builtin" alone (it is a named, contract-versioned function).
+A built-in portable function available to matching/template expressions. Custom functions are not
+part of the initial portable model; future plugins may add extension points.
+_Avoid_: "helper", "custom JS function" for portable semantics.
 
 ### Invariants
 
 **Fail-closed**:
-A miss returns `501` + `x-mock-miss` + a diagnostic body; it never reaches the real API unless
-**Passthrough** is explicitly on.
-_Avoid_: "strict mode" (it is the default, not a mode you turn on).
+A miss returns a diagnostic mock-miss response; it never reaches the real upstream unless
+**Passthrough** is explicitly selected.
+_Avoid_: "strict mode" (it is the default).
 
 **Passthrough**:
-The explicit opt-in that lets an unmatched request reach the real upstream instead of failing closed.
-_Avoid_: "proxy" (Passthrough is the opt-in escape hatch, not Decoy's normal operation).
+An explicit Behavior that lets a matched request reach an upstream instead of being mocked.
+Passthrough target resolution is behavior override → route override → global/runtime config →
+request metadata/original host.
+_Avoid_: "proxy" as Decoy's normal operation.
+
+**Order-based matching**:
+After Collection inheritance and overrides are resolved, active route entries are checked
+bottom-to-top; the last matching selected Case wins. This supports fallback/override behavior.
+Future validation should warn or error when broad later cases shadow specific earlier cases.
+_Avoid_: pretending matching order is incidental.
 
 ### Control surfaces
 
 **Controller**:
-The canonical JS control API — `useCollection`, `useRoute`, `reset`. One `use*` verb set; every
-other control surface wraps it.
-_Avoid_: "admin" (retired as a concept), "manager".
+The control verbs for runtime Selection: `useCollection`, `useRoute`, and `reset`. One-shot/temp
+behavior is roadmap.
+_Avoid_: "admin", "manager".
 
 **Control API**:
-The HTTP mirror of the **Controller** for cross-process control, mounted under `/__decoy__`
-(configurable). One handler, two mounts: the cross-process mount on the mock port (Sessions live
-here) and the same-origin `--ui` panel mount.
-_Avoid_: "admin API" (the admin concept was retired), "/\_\_admin\_\_".
+The cross-process mirror of the **Controller** plus catalog/read-model inspection. Resolution,
+recording, WebSocket, and plugin capabilities are roadmap/experimental until intentionally frozen.
+_Avoid_: letting UI-only endpoints become the public adapter contract accidentally.
 
 **Router**:
-A first-class **Session** handle — `useCollection`/`useRoute`/`reset` plus `id`/`headers`/`stampOn`/
-`destroy`. `createControlClient(...).createSession()` returns one over HTTP; `PlaywrightRouter`
-drives the in-process engine. Same methods, different transports.
-_Avoid_: "client" (the client creates Routers; a Router is the per-Session handle).
+A first-class **Session** handle that exposes Controller verbs plus session identity/header helpers.
+Different integrations may implement it in-process, through a sidecar runtime, or over HTTP, but
+must preserve the same semantic contract.
+_Avoid_: "client" when referring to the per-Session handle.
+
+### Future extension concepts
+
+**Plugin**:
+An advanced extension package for edge cases such as codecs, data transforms, recording import/export,
+or protocol support. Decoy is a mock tool with plugins for advanced cases, not a plugin framework
+first.
+_Avoid_: using plugins to redefine core matching/session semantics before those semantics are stable.
+
+**Codec plugin**:
+The first likely plugin seam: convert wire bytes to logical messages and logical messages back to
+wire bytes, especially for WebSocket/gRPC/custom protocol envelopes.
+_Avoid_: putting protocol plumbing into every Route YAML.
