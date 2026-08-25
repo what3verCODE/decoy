@@ -130,12 +130,7 @@ impl Catalog {
             return ResolveOutcome::Matched {
                 activation: activation.clone(),
                 path_params,
-                plan: ResponsePlan::from_behavior(
-                    route,
-                    behavior,
-                    &self.runtime,
-                    metadata,
-                ),
+                plan: ResponsePlan::from_behavior(route, behavior, &self.runtime, metadata),
             };
         }
 
@@ -479,21 +474,24 @@ cases:
         };
 
         controller.use_collection("session", "not-found");
-        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        let ResolveOutcome::Matched { activation, .. } =
+            controller.resolve_http("session", &request)
         else {
             panic!("expected useCollection match")
         };
         assert_eq!(activation.address(), "get-user:user-123:missing");
 
         controller.use_route("session", "get-user", "user-123", "success");
-        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        let ResolveOutcome::Matched { activation, .. } =
+            controller.resolve_http("session", &request)
         else {
             panic!("expected useRoute match")
         };
         assert_eq!(activation.address(), "get-user:user-123:success");
 
         controller.reset("session");
-        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        let ResolveOutcome::Matched { activation, .. } =
+            controller.resolve_http("session", &request)
         else {
             panic!("expected reset match")
         };
