@@ -63,6 +63,44 @@ impl Catalog {
         self.resolve_http_with_metadata(collection_id, request, &RequestMetadata::default())
     }
 
+    pub fn validate_collection(&self, collection_id: &str) -> Result<(), ControlError> {
+        self.collections
+            .get(collection_id)
+            .map(|_| ())
+            .ok_or_else(|| ControlError::UnknownCollection {
+                id: collection_id.to_owned(),
+            })
+    }
+
+    pub fn validate_behavior_address(
+        &self,
+        route_id: &str,
+        case_id: &str,
+        behavior_id: &str,
+    ) -> Result<(), ControlError> {
+        let route = self
+            .routes
+            .get(route_id)
+            .ok_or_else(|| ControlError::UnknownRoute {
+                route: route_id.to_owned(),
+            })?;
+        let case = route
+            .cases
+            .get(case_id)
+            .ok_or_else(|| ControlError::UnknownCase {
+                route: route_id.to_owned(),
+                case: case_id.to_owned(),
+            })?;
+        case.behaviors
+            .get(behavior_id)
+            .map(|_| ())
+            .ok_or_else(|| ControlError::UnknownBehavior {
+                route: route_id.to_owned(),
+                case: case_id.to_owned(),
+                behavior: behavior_id.to_owned(),
+            })
+    }
+
     pub fn resolve_http_with_metadata(
         &self,
         collection_id: &str,
@@ -213,6 +251,51 @@ impl Selection {
             route_overrides: BTreeMap::new(),
         }
     }
+
+    pub fn snapshot(&self) -> SelectionSnapshot {
+        SelectionSnapshot {
+            collection: self.collection.clone(),
+            overrides: self
+                .route_overrides
+                .iter()
+                .map(|((route, case_id), behavior)| RouteOverrideSnapshot {
+                    route: route.clone(),
+                    case_id: case_id.clone(),
+                    behavior: behavior.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SelectionSnapshot {
+    pub collection: String,
+    pub overrides: Vec<RouteOverrideSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct RouteOverrideSnapshot {
+    pub route: String,
+    #[serde(rename = "case")]
+    pub case_id: String,
+    pub behavior: String,
+}
+
+#[derive(Debug, Error)]
+pub enum ControlError {
+    #[error("unknown collection `{id}`")]
+    UnknownCollection { id: String },
+    #[error("unknown route `{route}`")]
+    UnknownRoute { route: String },
+    #[error("unknown case `{route}:{case}`")]
+    UnknownCase { route: String, case: String },
+    #[error("unknown behavior `{route}:{case}:{behavior}`")]
+    UnknownBehavior {
+        route: String,
+        case: String,
+        behavior: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -235,6 +318,17 @@ impl Controller {
         self.selection_mut(session).collection = collection.into();
     }
 
+    pub fn try_use_collection(
+        &mut self,
+        session: &str,
+        collection: impl Into<String>,
+    ) -> Result<SelectionSnapshot, ControlError> {
+        let collection = collection.into();
+        self.catalog.validate_collection(&collection)?;
+        self.selection_mut(session).collection = collection;
+        Ok(self.selection(session).snapshot())
+    }
+
     pub fn use_route(
         &mut self,
         session: &str,
@@ -247,8 +341,27 @@ impl Controller {
             .insert((route.into(), case.into()), behavior.into());
     }
 
-    pub fn reset(&mut self, session: &str) {
+    pub fn try_use_route(
+        &mut self,
+        session: &str,
+        route: impl Into<String>,
+        case: impl Into<String>,
+        behavior: impl Into<String>,
+    ) -> Result<SelectionSnapshot, ControlError> {
+        let route = route.into();
+        let case = case.into();
+        let behavior = behavior.into();
+        self.catalog
+            .validate_behavior_address(&route, &case, &behavior)?;
+        self.selection_mut(session)
+            .route_overrides
+            .insert((route, case), behavior);
+        Ok(self.selection(session).snapshot())
+    }
+
+    pub fn reset(&mut self, session: &str) -> SelectionSnapshot {
         self.selection_mut(session).route_overrides.clear();
+        self.selection(session).snapshot()
     }
 
     pub fn resolve_http(&self, session: &str, request: &HttpRequest) -> ResolveOutcome {
