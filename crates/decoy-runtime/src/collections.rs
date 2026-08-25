@@ -101,6 +101,7 @@ impl Activation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CollectionsFile {
     collections: BTreeMap<String, Collection>,
+    order: Vec<String>,
 }
 
 impl CollectionsFile {
@@ -111,20 +112,30 @@ impl CollectionsFile {
 
     pub fn new(collections: Vec<Collection>) -> Result<Self, CollectionError> {
         let mut by_id = BTreeMap::new();
+        let mut order = Vec::new();
 
         for collection in collections {
             collection.validate()?;
+            let id = collection.id.clone();
 
-            if by_id.insert(collection.id.clone(), collection).is_some() {
+            if by_id.insert(id.clone(), collection).is_some() {
                 return Err(CollectionError::DuplicateCollection);
             }
+            order.push(id);
         }
 
-        Ok(Self { collections: by_id })
+        Ok(Self {
+            collections: by_id,
+            order,
+        })
     }
 
     pub fn get(&self, id: &str) -> Option<&Collection> {
         self.collections.get(id)
+    }
+
+    pub fn first_id(&self) -> Option<&str> {
+        self.order.first().map(String::as_str)
     }
 
     pub fn resolve(&self, id: &str) -> Result<Vec<Activation>, CollectionError> {
