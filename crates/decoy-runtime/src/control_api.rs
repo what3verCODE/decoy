@@ -90,6 +90,7 @@ impl ControlApiError {
 
 /// Handle the native HTTP Control API shape for the prototype runtime.
 ///
+/// The endpoint decision is recorded in `docs/design/native-control-api-shape.md`.
 /// Endpoints are command-shaped Controller verbs below [`CONTROL_PREFIX`]:
 ///
 /// - `POST /__decoy__/control/useCollection` with `{ "collection": "..." }`
