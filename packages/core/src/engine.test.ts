@@ -82,7 +82,7 @@ describe('createEngine().match', () => {
     expect(result.reason).toEqual({ kind: 'no-collection', collection: 'ghost' })
   })
 
-  test('walks the collection in array order — first match wins', () => {
+  test('checks resolved collection entries bottom-to-top — last matching case wins', () => {
     const me: Route = {
       id: 'users-me',
       method: 'GET',
@@ -99,7 +99,7 @@ describe('createEngine().match', () => {
     }
     const collection: Collection = {
       id: 'c',
-      routes: ['users-me:default:success', 'users-by-id:default:success'],
+      routes: ['users-by-id:default:success', 'users-me:default:success'],
     }
     const engine = createEngine(definitions([me, byId], [collection]))
     const result = engine.match(envelope({ method: 'GET', path: '/users/me' }), { collection: 'c' })
@@ -119,7 +119,7 @@ describe('createEngine().match', () => {
   })
 })
 
-describe('createEngine().match — collection extends', () => {
+describe('createEngine().match — collection inheritance', () => {
   const route: Route = {
     id: 'users-list-api',
     method: 'GET',
@@ -142,7 +142,7 @@ describe('createEngine().match — collection extends', () => {
     const base: Collection = { id: 'base', routes: ['users-list-api:default:success'] }
     const child: Collection = {
       id: 'child',
-      extends: 'base',
+      from: 'base',
       routes: ['orders-api:default:success'],
     }
     const engine = createEngine(definitions([route, orders], [base, child]))
@@ -158,11 +158,11 @@ describe('createEngine().match — collection extends', () => {
     expect(own.type).toBe('matched')
   })
 
-  test('a child overrides an inherited entry on the same route:preset slot', () => {
+  test('a child entry for the same route:preset wins because it is later in resolved order', () => {
     const base: Collection = { id: 'base', routes: ['users-list-api:default:success'] }
     const child: Collection = {
       id: 'child',
-      extends: 'base',
+      from: 'base',
       routes: ['users-list-api:default:error'],
     }
     const engine = createEngine(definitions([route], [base, child]))
@@ -176,10 +176,10 @@ describe('createEngine().match — collection extends', () => {
     expect(result.address.variant).toBe('error')
   })
 
-  test('extends chains resolve transitively', () => {
+  test('from chains resolve transitively', () => {
     const a: Collection = { id: 'a', routes: ['users-list-api:default:success'] }
-    const b: Collection = { id: 'b', extends: 'a', routes: ['orders-api:default:success'] }
-    const c: Collection = { id: 'c', extends: 'b', routes: ['users-list-api:default:error'] }
+    const b: Collection = { id: 'b', from: 'a', routes: ['orders-api:default:success'] }
+    const c: Collection = { id: 'c', from: 'b', routes: ['users-list-api:default:error'] }
     const engine = createEngine(definitions([route, orders], [a, b, c]))
 
     const users = engine.match(envelope({ method: 'GET', path: '/users/42' }), { collection: 'c' })
@@ -193,14 +193,14 @@ describe('createEngine().match — collection extends', () => {
     expect(ordersResult.type).toBe('matched')
   })
 
-  test('a cyclic extends chain throws at engine creation', () => {
-    const a: Collection = { id: 'a', extends: 'b', routes: [] }
-    const b: Collection = { id: 'b', extends: 'a', routes: [] }
+  test('a cyclic from chain throws at engine creation', () => {
+    const a: Collection = { id: 'a', from: 'b', routes: [] }
+    const b: Collection = { id: 'b', from: 'a', routes: [] }
     expect(() => createEngine(definitions([route], [a, b]))).toThrow(/cyclic/)
   })
 
-  test('extending an undefined collection throws at engine creation', () => {
-    const child: Collection = { id: 'child', extends: 'ghost', routes: [] }
+  test('inheriting from an undefined collection throws at engine creation', () => {
+    const child: Collection = { id: 'child', from: 'ghost', routes: [] }
     expect(() => createEngine(definitions([route], [child]))).toThrow(/not defined/)
   })
 })
@@ -280,7 +280,7 @@ describe('createEngine().match — literal preset matching', () => {
   }
   const collection: Collection = {
     id: 'c',
-    routes: ['users:with-query:q', 'users:with-headers:h', 'users:with-body:b', 'users:default:d'],
+    routes: ['users:default:d', 'users:with-query:q', 'users:with-headers:h', 'users:with-body:b'],
   }
   // a collection with no catch-all preset active — used to exercise the no-preset miss
   const qonly: Collection = { id: 'qonly', routes: ['users:with-query:q'] }
@@ -346,15 +346,15 @@ describe('createEngine().match — literal preset matching', () => {
     expect(result.address.preset).toBe('default')
   })
 
-  test('first matching preset wins in collection-array order', () => {
-    // satisfies both with-query and with-headers; with-query is listed first
+  test('last matching preset wins in bottom-to-top collection order', () => {
+    // satisfies both with-query and with-headers; with-headers is later, so checked first
     const result = matched({
       method: 'GET',
       path: '/users',
       query: { page: '2' },
       headers: { 'x-tenant': 'acme' },
     })
-    expect(result.address.preset).toBe('with-query')
+    expect(result.address.preset).toBe('with-headers')
   })
 
   test('body deep-partial matches array elements by index, ignoring extras', () => {
@@ -367,7 +367,7 @@ describe('createEngine().match — literal preset matching', () => {
     }
     const arrCol: Collection = {
       id: 'a',
-      routes: ['orders:first-active:ok', 'orders:default:d'],
+      routes: ['orders:default:d', 'orders:first-active:ok'],
     }
     const arrEngine = createEngine(definitions([arrRoute], [arrCol]))
     const hit = arrEngine.match(
@@ -408,7 +408,7 @@ describe('createEngine().match — literal preset matching', () => {
     expect(result.message).toContain('with-query')
   })
 
-  test('the no-preset diagnostic lists every active preset tried, in array order', () => {
+  test('the no-preset diagnostic lists every active preset tried, in scan order', () => {
     const result = engine.match(envelope({ method: 'GET', path: '/users', query: { page: '9' } }), {
       collection: 'noCatchAll',
     })
@@ -416,9 +416,9 @@ describe('createEngine().match — literal preset matching', () => {
     if (result.type !== 'miss') return
     if (result.reason.kind !== 'no-preset') throw new Error('expected no-preset miss')
     expect(result.reason.tried).toEqual([
-      { route: 'users', preset: 'with-query' },
-      { route: 'users', preset: 'with-headers' },
       { route: 'users', preset: 'with-body' },
+      { route: 'users', preset: 'with-headers' },
+      { route: 'users', preset: 'with-query' },
     ])
     expect(result.message).toContain('with-query')
     expect(result.message).toContain('with-headers')
@@ -461,7 +461,7 @@ describe('createEngine().match — ${ } string predicates', () => {
   }
   const collection: Collection = {
     id: 'c',
-    routes: ['orders:has-active:active', 'orders:default:d'],
+    routes: ['orders:default:d', 'orders:has-active:active'],
   }
   const engine = createEngine(definitions([orders], [collection]))
   const sel: Selection = { collection: 'c' }
@@ -502,7 +502,7 @@ describe('createEngine().match — ${ } string predicates', () => {
       },
       variants: { ok: { status: 200, body: { matched: 'both' } }, d: { status: 200, body: {} } },
     }
-    const col: Collection = { id: 's', routes: ['search:both:ok', 'search:default:d'] }
+    const col: Collection = { id: 's', routes: ['search:default:d', 'search:both:ok'] }
     const e = createEngine(definitions([route], [col]))
 
     // both literal + predicate satisfied
@@ -597,7 +597,7 @@ describe('createEngine().match — ${ } string predicates', () => {
       presets: { 'has-flag': { body: '${ body.flag }' }, default: {} },
       variants: { y: { status: 200, body: { matched: 'has-flag' } }, d: { status: 200, body: {} } },
     }
-    const col: Collection = { id: 'f', routes: ['flagged:has-flag:y', 'flagged:default:d'] }
+    const col: Collection = { id: 'f', routes: ['flagged:default:d', 'flagged:has-flag:y'] }
     const e = createEngine(definitions([route], [col]))
 
     const present = e.match(envelope({ method: 'GET', path: '/flagged', body: { flag: 'on' } }), {
@@ -870,7 +870,7 @@ describe('createEngine().match — params preset matching', () => {
   }
   const collection: Collection = {
     id: 'c',
-    routes: ['users-by-id:ada:ada', 'users-by-id:default:other'],
+    routes: ['users-by-id:default:other', 'users-by-id:ada:ada'],
   }
   const engine = createEngine(definitions([route], [collection]))
   const sel: Selection = { collection: 'c' }

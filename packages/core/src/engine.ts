@@ -55,9 +55,9 @@ function isTruthy(value: unknown): boolean {
 
 /**
  * Apply selection overrides to a collection's resolved entries: an override pins
- * a `route:preset` slot to a variant — swapping the variant of an active slot in
- * place, or appending a synthesized entry for a slot the collection omits. Later
- * overrides for the same slot win.
+ * every active `route:preset` slot occurrence to a variant, or appends a
+ * synthesized entry for a slot the collection omits. Later overrides for the same
+ * slot win.
  */
 function applyOverrides(entries: string[], overrides: RouteOverride[] | undefined): string[] {
   if (!overrides || overrides.length === 0) {
@@ -326,7 +326,7 @@ function describePresetFail(traces: PresetFieldTrace[]): string {
 
 /**
  * Build the human diagnostic for a "route matched but no active preset matched"
- * miss. It names the matched route(s) and lists, in array order, the presets the
+ * miss. It names the matched route(s) and lists, in scan order, the presets the
  * engine tried — the second miss type distinguishing a misfiring matcher from a
  * route that simply isn't activated.
  */
@@ -349,18 +349,18 @@ function describeNoPresetMiss(
 /**
  * Create the pure matching engine over an immutable set of definitions. The
  * returned `match(request, selection)` performs zero IO and is deterministic:
- * it walks the active collection's entries in array order and serves the first
- * whose route (method + path) and preset match — first match wins,
- * with no specificity scoring. A miss is one of three kinds: the collection is
- * undefined, no entry's route matched by method+path (`no-route`), or a route
- * matched but none of its active presets passed (`no-preset`, listing the
- * presets tried).
+ * it walks the active collection's resolved entries bottom-to-top and serves the
+ * first whose route (method + path) and preset match — the last matching selected
+ * case wins, with no specificity scoring. A miss is one of three kinds: the
+ * collection is undefined, no entry's route matched by method+path (`no-route`),
+ * or a route matched but none of its active presets passed (`no-preset`, listing
+ * the presets tried in scan order).
  */
 export function createEngine(definitions: Definitions): Engine {
   const compiled = new Map<string, CompiledPath>()
   // Pre-compile every preset's field matchers and every variant's `${ }` renderer
   // once, keyed by identity (no per-request compile). A malformed
-  // expression throws here (fail-fast at creation, like a cyclic extends) — config
+  // expression throws here (fail-fast at creation, like a cyclic from) — config
   // validation catches it earlier at load with file:line; this is the engine's own
   // backstop for programmatic definitions. A variant with no templates is stored as
   // `null` (the no-template fast path: served verbatim, no per-request render).
@@ -433,13 +433,13 @@ export function createEngine(definitions: Definitions): Engine {
       ok: true,
       collection: selection.collection,
       entries: active,
-      detail: `${active.length} active entr${active.length === 1 ? 'y' : 'ies'} to scan in order`,
+      detail: `${active.length} active entr${active.length === 1 ? 'y' : 'ies'} to scan bottom-to-top`,
     })
 
     // Entries whose route matched by method+path but whose preset (or variant)
     // did not yield a response — the basis for the no-preset miss diagnostic.
     const tried: TriedPreset[] = []
-    for (const entry of active) {
+    for (const entry of active.toReversed()) {
       const address = parseAddress(entry)
       if (!address) {
         record({ kind: 'route-skip', ok: false, entry, detail: 'unparseable entry' })

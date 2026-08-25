@@ -60,9 +60,12 @@ export interface Route {
   variants: Record<string, Variant>
 }
 
-/** An ordered list of `route:preset:variant` activations. `extends` is resolved in #27. */
+/** An ordered list of `route:preset:variant` activations. `from` names an optional parent collection. */
 export interface Collection {
   id: string
+  /** Parent collection to resolve before this collection's local routes. */
+  from?: string
+  /** @deprecated Use `from`; accepted for older callers during the vocabulary migration. */
   extends?: string
   routes: string[]
 }
@@ -149,7 +152,7 @@ export interface PresetFieldTrace {
 export type TraceStep =
   /** The request as the engine sees it (method, path, parsed query/body). */
   | { kind: 'request'; ok: true; method: string; path: string; detail: string }
-  /** The active collection lookup and its resolved (post-`extends`, post-override) entries. */
+  /** The active collection lookup and its resolved (post-`from`, post-override) entries. */
   | { kind: 'collection'; ok: boolean; collection: string; entries: string[]; detail: string }
   /** An entry whose route was rejected before preset evaluation (unknown id, method, or path). */
   | { kind: 'route-skip'; ok: false; entry: string; detail: string }
