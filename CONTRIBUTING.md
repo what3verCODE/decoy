@@ -17,7 +17,7 @@ pnpm install            # use --frozen-lockfile in CI
 | Command | What it does |
 | --- | --- |
 | `pnpm build` | Build every workspace package (includes `apps/docs`). |
-| `pnpm check` | Biome lint/format + the `@decoy/core-purity` guard. |
+| `pnpm check` | Biome lint/format check. |
 | `pnpm typecheck` | Type-check every package. |
 | `pnpm test` | Unit/integration tests across packages. |
 | `pnpm fix` | Apply Biome autofixes. |
@@ -34,8 +34,7 @@ chromium`).
 - `@decoy/*` is the package scope; the CLI bin is `decoy`.
 - **Don't reach for the real network in tests** — Decoy is fail-closed by default; a test that
   leaks to a live upstream is a bug.
-- `@decoy/core` is **IO-free** (the `pnpm check` purity guard enforces it) — keep Node built-ins out
-  of it.
+- `@decoy/core` is **IO-free** — keep Node built-ins out of it.
 - Run `pnpm check` and `pnpm typecheck` before opening a PR.
 
 ## Where prose lives

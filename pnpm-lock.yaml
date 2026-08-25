@@ -448,22 +448,6 @@ importers:
         specifier: ^66.7.2
         version: 66.7.2(@unocss/postcss@66.7.2(postcss@8.5.15))(vite@8.0.16(@types/node@24.13.2)(jiti@2.7.0)(yaml@2.9.0))
 
-  tooling/core-purity:
-    dependencies:
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-    devDependencies:
-      '@rstest/core':
-        specifier: ^0.10.4
-        version: 0.10.4
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.13.2
-      jiti:
-        specifier: ^2.7.0
-        version: 2.7.0
-
 packages:
 
   '@antfu/install-pkg@1.1.0':
