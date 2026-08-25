@@ -7,6 +7,7 @@ pub mod collections;
 pub mod control_api;
 pub mod engine;
 pub mod http;
+pub mod native_http;
 pub mod schema;
 
 pub use collections::{Activation, Collection, CollectionRouteRef, CollectionsFile};
@@ -19,4 +20,5 @@ pub use engine::{
     RouteOverrideSnapshot, Selection, SelectionSnapshot,
 };
 pub use http::{HttpResponsePlan, PassthroughPlan, RequestMetadata, ResponsePlan, RuntimeConfig};
+pub use native_http::{NativeHttpError, NativeHttpRuntime, NativeHttpServer};
 pub use schema::{Behavior, BehaviorKind, Case, HttpRouteMatch, Route, Transport, ValidationError};
