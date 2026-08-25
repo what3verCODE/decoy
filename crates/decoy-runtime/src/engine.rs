@@ -702,6 +702,27 @@ cases:
     }
 
     #[test]
+    fn golden_global_passthrough_target_does_not_forward_unmatched_requests() {
+        let catalog = catalog(
+            r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+"#,
+        );
+
+        let outcome = catalog.resolve_http(
+            "local",
+            &HttpRequest {
+                method: HttpMethod::Get,
+                path: "/unknown".to_owned(),
+            },
+        );
+
+        assert!(matches!(outcome, ResolveOutcome::Miss(_)));
+    }
+
+    #[test]
     fn golden_fail_closed_miss_contains_checked_addresses() {
         let catalog = catalog(
             r#"
