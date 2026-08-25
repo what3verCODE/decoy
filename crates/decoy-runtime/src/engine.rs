@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::collections::{Activation, CollectionError, CollectionsFile};
 use crate::http::{RequestMetadata, ResponsePlan, RuntimeConfig};
-use crate::schema::{Behavior, Case, HttpMethod, Route};
+use crate::schema::{Case, HttpMethod, Route};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
@@ -60,7 +60,26 @@ impl Catalog {
     }
 
     pub fn resolve_http(&self, collection_id: &str, request: &HttpRequest) -> ResolveOutcome {
-        let activations = match self.collections.resolve(collection_id) {
+        self.resolve_http_with_metadata(collection_id, request, &RequestMetadata::default())
+    }
+
+    pub fn resolve_http_with_metadata(
+        &self,
+        collection_id: &str,
+        request: &HttpRequest,
+        metadata: &RequestMetadata,
+    ) -> ResolveOutcome {
+        self.resolve_http_with_overrides(collection_id, request, &BTreeMap::new(), metadata)
+    }
+
+    fn resolve_http_with_overrides(
+        &self,
+        collection_id: &str,
+        request: &HttpRequest,
+        overrides: &BTreeMap<(String, String), String>,
+        metadata: &RequestMetadata,
+    ) -> ResolveOutcome {
+        let mut activations = match self.collections.resolve(collection_id) {
             Ok(activations) => activations,
             Err(error) => {
                 return ResolveOutcome::Miss(MissDiagnostic {
@@ -70,6 +89,14 @@ impl Catalog {
                 });
             }
         };
+
+        for ((route, case), behavior) in overrides {
+            activations.push(Activation {
+                route: route.clone(),
+                case: case.clone(),
+                behavior: behavior.clone(),
+            });
+        }
 
         let mut checked = Vec::new();
 
@@ -107,7 +134,7 @@ impl Catalog {
                     route,
                     behavior,
                     &self.runtime,
-                    &RequestMetadata::default(),
+                    metadata,
                 ),
             };
         }
@@ -178,8 +205,80 @@ pub enum CatalogError {
     Collection(#[from] CollectionError),
 }
 
-#[allow(dead_code)]
-fn _assert_behavior_is_used(_: &Behavior) {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    collection: String,
+    route_overrides: BTreeMap<(String, String), String>,
+}
+
+impl Selection {
+    fn new(collection: impl Into<String>) -> Self {
+        Self {
+            collection: collection.into(),
+            route_overrides: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Controller {
+    catalog: Catalog,
+    default_collection: String,
+    sessions: BTreeMap<String, Selection>,
+}
+
+impl Controller {
+    pub fn new(catalog: Catalog, default_collection: impl Into<String>) -> Self {
+        Self {
+            catalog,
+            default_collection: default_collection.into(),
+            sessions: BTreeMap::new(),
+        }
+    }
+
+    pub fn use_collection(&mut self, session: &str, collection: impl Into<String>) {
+        self.selection_mut(session).collection = collection.into();
+    }
+
+    pub fn use_route(
+        &mut self,
+        session: &str,
+        route: impl Into<String>,
+        case: impl Into<String>,
+        behavior: impl Into<String>,
+    ) {
+        self.selection_mut(session)
+            .route_overrides
+            .insert((route.into(), case.into()), behavior.into());
+    }
+
+    pub fn reset(&mut self, session: &str) {
+        self.sessions.remove(session);
+    }
+
+    pub fn resolve_http(&self, session: &str, request: &HttpRequest) -> ResolveOutcome {
+        let selection = self.selection(session);
+        self.catalog.resolve_http_with_overrides(
+            &selection.collection,
+            request,
+            &selection.route_overrides,
+            &RequestMetadata::default(),
+        )
+    }
+
+    fn selection(&self, session: &str) -> Selection {
+        self.sessions
+            .get(session)
+            .cloned()
+            .unwrap_or_else(|| Selection::new(self.default_collection.clone()))
+    }
+
+    fn selection_mut(&mut self, session: &str) -> &mut Selection {
+        self.sessions
+            .entry(session.to_owned())
+            .or_insert_with(|| Selection::new(self.default_collection.clone()))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -316,6 +415,92 @@ cases:
     }
 
     #[test]
+    fn golden_per_session_selection_is_isolated() {
+        let mut controller = Controller::new(
+            catalog(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+
+- id: not-found
+  routes:
+    - get-user:user-123:missing
+"#,
+            ),
+            "local",
+        );
+
+        controller.use_collection("session-a", "not-found");
+
+        let request = HttpRequest {
+            method: HttpMethod::Get,
+            path: "/users/123".to_owned(),
+        };
+
+        let ResolveOutcome::Matched {
+            activation: session_a,
+            ..
+        } = controller.resolve_http("session-a", &request)
+        else {
+            panic!("expected session-a match")
+        };
+        let ResolveOutcome::Matched {
+            activation: session_b,
+            ..
+        } = controller.resolve_http("session-b", &request)
+        else {
+            panic!("expected session-b match")
+        };
+
+        assert_eq!(session_a.address(), "get-user:user-123:missing");
+        assert_eq!(session_b.address(), "get-user:user-123:success");
+    }
+
+    #[test]
+    fn golden_control_verbs_use_collection_use_route_and_reset() {
+        let mut controller = Controller::new(
+            catalog(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+
+- id: not-found
+  routes:
+    - get-user:user-123:missing
+"#,
+            ),
+            "local",
+        );
+        let request = HttpRequest {
+            method: HttpMethod::Get,
+            path: "/users/123".to_owned(),
+        };
+
+        controller.use_collection("session", "not-found");
+        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        else {
+            panic!("expected useCollection match")
+        };
+        assert_eq!(activation.address(), "get-user:user-123:missing");
+
+        controller.use_route("session", "get-user", "user-123", "success");
+        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        else {
+            panic!("expected useRoute match")
+        };
+        assert_eq!(activation.address(), "get-user:user-123:success");
+
+        controller.reset("session");
+        let ResolveOutcome::Matched { activation, .. } = controller.resolve_http("session", &request)
+        else {
+            panic!("expected reset match")
+        };
+        assert_eq!(activation.address(), "get-user:user-123:success");
+    }
+
+    #[test]
     fn golden_passthrough_plan_uses_route_target_before_runtime_target() {
         let catalog = catalog(
             r#"
@@ -345,6 +530,180 @@ cases:
     }
 
     #[test]
+    fn golden_passthrough_plan_uses_behavior_target_before_route_target() {
+        let route = Route::from_yaml(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+passthrough:
+  baseUrl: https://route.example.test
+cases:
+  user-123:
+    match:
+      pathParams:
+        id: "123"
+    behaviors:
+      real:
+        kind: passthrough
+        target:
+          baseUrl: https://behavior.example.test
+"#,
+        )
+        .unwrap();
+        let catalog = Catalog::new(
+            vec![route],
+            CollectionsFile::from_yaml(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:real
+"#,
+            )
+            .unwrap(),
+            RuntimeConfig {
+                passthrough: Some(PassthroughTarget {
+                    base_url: "https://runtime.example.test".to_owned(),
+                }),
+            },
+        )
+        .unwrap();
+
+        let ResolveOutcome::Matched { plan, .. } = catalog.resolve_http(
+            "local",
+            &HttpRequest {
+                method: HttpMethod::Get,
+                path: "/users/123".to_owned(),
+            },
+        ) else {
+            panic!("expected match")
+        };
+
+        assert_eq!(
+            plan,
+            ResponsePlan::Passthrough(PassthroughPlan {
+                base_url: Some("https://behavior.example.test".to_owned())
+            })
+        );
+    }
+
+    #[test]
+    fn golden_passthrough_plan_uses_runtime_before_request_metadata() {
+        let route = Route::from_yaml(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+cases:
+  user-123:
+    match:
+      pathParams:
+        id: "123"
+    behaviors:
+      real:
+        kind: passthrough
+"#,
+        )
+        .unwrap();
+        let catalog = Catalog::new(
+            vec![route],
+            CollectionsFile::from_yaml(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:real
+"#,
+            )
+            .unwrap(),
+            RuntimeConfig {
+                passthrough: Some(PassthroughTarget {
+                    base_url: "https://runtime.example.test".to_owned(),
+                }),
+            },
+        )
+        .unwrap();
+
+        let ResolveOutcome::Matched { plan, .. } = catalog.resolve_http_with_metadata(
+            "local",
+            &HttpRequest {
+                method: HttpMethod::Get,
+                path: "/users/123".to_owned(),
+            },
+            &RequestMetadata {
+                original_base_url: Some("https://request.example.test".to_owned()),
+            },
+        ) else {
+            panic!("expected match")
+        };
+
+        assert_eq!(
+            plan,
+            ResponsePlan::Passthrough(PassthroughPlan {
+                base_url: Some("https://runtime.example.test".to_owned())
+            })
+        );
+    }
+
+    #[test]
+    fn golden_passthrough_plan_falls_back_to_request_metadata() {
+        let route = Route::from_yaml(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+cases:
+  user-123:
+    match:
+      pathParams:
+        id: "123"
+    behaviors:
+      real:
+        kind: passthrough
+"#,
+        )
+        .unwrap();
+        let catalog = Catalog::new(
+            vec![route],
+            CollectionsFile::from_yaml(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:real
+"#,
+            )
+            .unwrap(),
+            RuntimeConfig::default(),
+        )
+        .unwrap();
+
+        let ResolveOutcome::Matched { plan, .. } = catalog.resolve_http_with_metadata(
+            "local",
+            &HttpRequest {
+                method: HttpMethod::Get,
+                path: "/users/123".to_owned(),
+            },
+            &RequestMetadata {
+                original_base_url: Some("https://request.example.test".to_owned()),
+            },
+        ) else {
+            panic!("expected match")
+        };
+
+        assert_eq!(
+            plan,
+            ResponsePlan::Passthrough(PassthroughPlan {
+                base_url: Some("https://request.example.test".to_owned())
+            })
+        );
+    }
+
+    #[test]
     fn golden_fail_closed_miss_contains_checked_addresses() {
         let catalog = catalog(
             r#"
@@ -368,6 +727,23 @@ cases:
                 collection: "local".to_owned(),
                 reason: "no active route case matched request".to_owned(),
                 checked: vec!["get-user:user-123:success".to_owned()],
+            })
+        );
+
+        let ResolveOutcome::Miss(miss) = outcome else {
+            panic!("expected miss")
+        };
+        assert_eq!(
+            ResponsePlan::fail_closed_miss(miss.reason),
+            ResponsePlan::Response(HttpResponsePlan {
+                status: 501,
+                headers: BTreeMap::from([
+                    ("x-mock-miss".to_owned(), "true".to_owned()),
+                    ("content-type".to_owned(), "application/json".to_owned()),
+                ]),
+                body: Some(BodyPlan::Json(serde_json::json!({
+                    "error": "no active route case matched request"
+                }))),
             })
         );
     }

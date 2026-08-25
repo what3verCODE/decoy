@@ -9,6 +9,6 @@ pub mod http;
 pub mod schema;
 
 pub use collections::{Activation, Collection, CollectionRouteRef, CollectionsFile};
-pub use engine::{Catalog, HttpRequest, MissDiagnostic, ResolveOutcome};
+pub use engine::{Catalog, Controller, HttpRequest, MissDiagnostic, ResolveOutcome, Selection};
 pub use http::{HttpResponsePlan, PassthroughPlan, RequestMetadata, ResponsePlan, RuntimeConfig};
 pub use schema::{Behavior, BehaviorKind, Case, HttpRouteMatch, Route, Transport, ValidationError};
