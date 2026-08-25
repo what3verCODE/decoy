@@ -138,6 +138,10 @@ impl CollectionsFile {
         self.order.first().map(String::as_str)
     }
 
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.collections.keys().map(String::as_str)
+    }
+
     pub fn resolve(&self, id: &str) -> Result<Vec<Activation>, CollectionError> {
         let mut visiting = BTreeSet::new();
         self.resolve_inner(id, &mut visiting)
