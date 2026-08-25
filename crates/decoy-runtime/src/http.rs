@@ -38,7 +38,26 @@ pub struct PassthroughPlan {
     pub base_url: Option<String>,
 }
 
+pub const DEFAULT_MISS_STATUS: u16 = 501;
+
 impl ResponsePlan {
+    pub fn fail_closed_miss(message: impl Into<String>) -> Self {
+        Self::fail_closed_miss_with_status(message, DEFAULT_MISS_STATUS)
+    }
+
+    pub fn fail_closed_miss_with_status(message: impl Into<String>, status: u16) -> Self {
+        Self::Response(HttpResponsePlan {
+            status,
+            headers: BTreeMap::from([
+                ("x-mock-miss".to_owned(), "true".to_owned()),
+                ("content-type".to_owned(), "application/json".to_owned()),
+            ]),
+            body: Some(BodyPlan::Json(serde_json::json!({
+                "error": message.into()
+            }))),
+        })
+    }
+
     pub fn from_behavior(
         route: &Route,
         behavior: &Behavior,
@@ -205,6 +224,25 @@ cases:
                 "Content-Type".to_owned(),
                 "application/problem+json".to_owned()
             )])
+        );
+    }
+
+    #[test]
+    fn fail_closed_miss_has_diagnostic_status_header_and_body() {
+        let plan = ResponsePlan::fail_closed_miss("no active route case matched request");
+
+        assert_eq!(
+            plan,
+            ResponsePlan::Response(HttpResponsePlan {
+                status: 501,
+                headers: BTreeMap::from([
+                    ("x-mock-miss".to_owned(), "true".to_owned()),
+                    ("content-type".to_owned(), "application/json".to_owned()),
+                ]),
+                body: Some(BodyPlan::Json(serde_json::json!({
+                    "error": "no active route case matched request"
+                }))),
+            })
         );
     }
 
