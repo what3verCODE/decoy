@@ -81,7 +81,9 @@ pub async fn forward_passthrough(
     };
 
     let url = target_url(base_url, &request.path_and_query)?;
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
     let response = client
         .request(reqwest_method(&request.method), url)
         .headers(forwardable_request_headers(&request.headers)?)
@@ -358,5 +360,42 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(error, ForwardingError::Request(_)));
+    }
+
+    #[tokio::test]
+    async fn redirects_are_returned_instead_of_followed() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0; 1024];
+            let _ = stream.read(&mut buffer).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nlocation: http://127.0.0.1:9/elsewhere\r\ncontent-length: 0\r\n\r\n",
+                )
+                .unwrap();
+        });
+
+        let response = forward_passthrough(
+            &PassthroughPlan {
+                base_url: Some(format!("http://{addr}")),
+            },
+            ForwardRequest {
+                method: HttpMethod::Get,
+                path_and_query: "/users/123".to_owned(),
+                headers: BTreeMap::new(),
+                body: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+
+        handle.join().unwrap();
+        assert_eq!(response.status, 302);
+        assert_eq!(
+            response.headers.get("location"),
+            Some(&"http://127.0.0.1:9/elsewhere".to_owned())
+        );
     }
 }
