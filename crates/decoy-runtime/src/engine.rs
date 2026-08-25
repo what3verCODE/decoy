@@ -248,7 +248,7 @@ impl Controller {
     }
 
     pub fn reset(&mut self, session: &str) {
-        self.sessions.remove(session);
+        self.selection_mut(session).route_overrides.clear();
     }
 
     pub fn resolve_http(&self, session: &str, request: &HttpRequest) -> ResolveOutcome {
@@ -495,7 +495,7 @@ cases:
         else {
             panic!("expected reset match")
         };
-        assert_eq!(activation.address(), "get-user:user-123:success");
+        assert_eq!(activation.address(), "get-user:user-123:missing");
     }
 
     #[test]

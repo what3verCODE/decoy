@@ -34,7 +34,7 @@ pnpm@11 · Node ≥24. Install with `pnpm install` (use `--frozen-lockfile` in C
 | command | what it does |
 | --- | --- |
 | `pnpm build` | build every workspace package |
-| `pnpm check` | Biome lint/format + project guards |
+| `pnpm check` | Biome lint/format |
 | `pnpm typecheck` | type-check every package |
 | `pnpm test` | unit/integration tests across packages |
 | `pnpm fix` | apply Biome autofixes |

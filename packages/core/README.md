@@ -1,7 +1,7 @@
 # @decoy/core
 
 The pure engine: `match(request, selection) → response`, plus the domain types, path matching, and
-`${ }` templating. **Zero IO** — a guard (`pnpm check`) enforces no Node built-ins.
+`${ }` templating. **Zero IO** — keep this package free of Node built-ins.
 
 **Role** · the heart every other package wraps with a transport.
 **Exports** · `createEngine`, `createController`, `matchPath`/`compilePath`, `buildResponse`,
