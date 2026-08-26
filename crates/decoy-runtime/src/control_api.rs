@@ -130,7 +130,10 @@ pub fn try_handle_control_request(
             let body: UseRouteBody = parse_body(request.body)?;
             Ok(controller.try_use_route(&session, body.route, body.case_id, body.behavior)?)
         }
-        Some("POST /control/reset") => Ok(controller.reset(&session)),
+        Some("POST /control/reset") => {
+            parse_optional_body_json(request.body)?;
+            Ok(controller.reset(&session))
+        }
         _ => Err(ControlApiError::UnknownEndpoint {
             method: request.method,
             path: request.path,
@@ -153,6 +156,18 @@ pub fn is_control_path(path: &str) -> bool {
 
 fn parse_body<T: for<'de> Deserialize<'de>>(body: Option<String>) -> Result<T, serde_json::Error> {
     serde_json::from_str(body.as_deref().unwrap_or("{}"))
+}
+
+fn parse_optional_body_json(body: Option<String>) -> Result<(), serde_json::Error> {
+    let Some(body) = body else {
+        return Ok(());
+    };
+
+    if body.trim().is_empty() {
+        return Ok(());
+    }
+
+    serde_json::from_str::<serde_json::Value>(&body).map(|_| ())
 }
 
 pub fn session_id(headers: &BTreeMap<String, String>) -> String {
@@ -273,6 +288,36 @@ cases:
         assert_eq!(reset_b.status, 200);
         assert_eq!(selected(&controller, "a"), "get-user:user-123:missing");
         assert_eq!(selected(&controller, "b"), "get-user:user-123:success");
+    }
+
+    #[test]
+    fn native_control_api_rejects_malformed_reset_json_without_mutating_selection() {
+        let mut controller = controller();
+
+        let use_route = handle_control_request(
+            &mut controller,
+            ControlApiRequest::post(
+                "/__decoy__/control/useRoute",
+                r#"{"route":"get-user","case":"user-123","behavior":"missing"}"#,
+            ),
+        );
+        assert_eq!(use_route.status, 200);
+        assert_eq!(
+            selected(&controller, DEFAULT_SESSION),
+            "get-user:user-123:missing"
+        );
+
+        let reset = handle_control_request(
+            &mut controller,
+            ControlApiRequest::post("/__decoy__/control/reset", "{"),
+        );
+
+        assert_eq!(reset.status, 400);
+        assert!(reset.body.contains("failed to parse control JSON body"));
+        assert_eq!(
+            selected(&controller, DEFAULT_SESSION),
+            "get-user:user-123:missing"
+        );
     }
 
     #[test]
