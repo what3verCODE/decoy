@@ -649,6 +649,28 @@ cases:
     }
 
     #[test]
+    fn http_control_rejects_malformed_reset_json_without_mutating_selection() {
+        let server = server();
+        let addr = server.addr();
+
+        let use_route = request(
+            addr,
+            "POST",
+            "/__decoy__/control/useRoute",
+            None,
+            r#"{"route":"get-user","case":"user-123","behavior":"broken"}"#,
+        );
+        assert_eq!(use_route.status, 200);
+        assert_eq!(request(addr, "GET", "/users/123", None, "").status, 500);
+
+        let reset = request(addr, "POST", "/__decoy__/control/reset", None, "{");
+
+        assert_eq!(reset.status, 400);
+        assert!(reset.body.contains("failed to parse control JSON body"));
+        assert_eq!(request(addr, "GET", "/users/123", None, "").status, 500);
+    }
+
+    #[test]
     fn http_control_returns_clear_errors_for_invalid_addresses() {
         let server = server();
         let addr = server.addr();
