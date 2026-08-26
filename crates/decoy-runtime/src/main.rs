@@ -1,7 +1,5 @@
-use std::collections::BTreeMap;
-use std::fs;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
@@ -10,14 +8,13 @@ use axum::extract::{OriginalUri, State};
 use axum::http::{HeaderName, HeaderValue, Request, Response, StatusCode};
 use axum::routing::any;
 use clap::{Parser, Subcommand};
-use decoy_runtime::collections::CollectionsFile;
-use decoy_runtime::engine::{Catalog, Controller, HttpRequest, ResolveOutcome};
+use decoy_runtime::config::{ServeCliOptions, ServeConfig};
+use decoy_runtime::engine::{Controller, HttpRequest, ResolveOutcome};
 use decoy_runtime::http::{BodyPlan, HttpResponsePlan, ResponsePlan, RuntimeConfig};
-use decoy_runtime::schema::{HttpMethod, Route};
-use thiserror::Error;
+use decoy_runtime::schema::HttpMethod;
+use decoy_runtime::startup::load_catalog_from_files;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
-use walkdir::WalkDir;
 
 const DEFAULT_SESSION: &str = "__decoy_default_session__";
 const SESSION_HEADER: &str = "x-mock-session";
@@ -38,11 +35,13 @@ enum Command {
 #[derive(Debug, Parser)]
 struct ServeArgs {
     #[arg(long)]
-    routes: PathBuf,
+    config: Option<PathBuf>,
     #[arg(long)]
-    collections: PathBuf,
-    #[arg(long, default_value_t = 8080)]
-    port: u16,
+    routes: Option<PathBuf>,
+    #[arg(long)]
+    collections: Option<PathBuf>,
+    #[arg(long)]
+    port: Option<u16>,
     #[arg(long)]
     collection: Option<String>,
 }
@@ -55,33 +54,41 @@ async fn main() {
     }
 }
 
-async fn run() -> Result<(), CliError> {
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
-        Command::Serve(args) => serve(args).await,
+        Command::Serve(args) => serve(args).await?,
     }
+
+    Ok(())
 }
 
-async fn serve(args: ServeArgs) -> Result<(), CliError> {
-    let routes = load_routes(&args.routes)?;
-    let collections = CollectionsFile::from_yaml(&fs::read_to_string(&args.collections)?)?;
-    let startup_collection = match args.collection {
-        Some(collection) => collection,
-        None => collections
-            .first_id()
-            .ok_or(CliError::NoCollections)?
-            .to_owned(),
-    };
+async fn serve(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let cwd = std::env::current_dir()?;
+    let config = ServeConfig::from_options(
+        ServeCliOptions {
+            config_file: args.config,
+            routes: args.routes,
+            collections: args.collections,
+            port: args.port,
+            collection: args.collection,
+        },
+        &cwd,
+    )?;
+    let startup = load_catalog_from_files(
+        &config.routes,
+        &config.collections,
+        RuntimeConfig::default(),
+        config.collection.as_deref(),
+    )?;
 
-    if collections.get(&startup_collection).is_none() {
-        return Err(CliError::MissingStartupCollection(startup_collection));
-    }
-
-    let catalog = Catalog::new(routes, collections, RuntimeConfig::default())?;
-    let controller = Arc::new(RwLock::new(Controller::new(catalog, startup_collection)));
+    let controller = Arc::new(RwLock::new(Controller::new(
+        startup.catalog,
+        startup.default_collection,
+    )));
     let app = Router::new()
         .fallback(any(handle_request))
         .with_state(controller);
-    let addr = SocketAddr::from(([127, 0, 0, 1], args.port));
+    let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
     let listener = TcpListener::bind(addr).await?;
     eprintln!("decoy serve listening on http://{}", listener.local_addr()?);
 
@@ -167,81 +174,4 @@ fn http_method(method: &axum::http::Method) -> Option<HttpMethod> {
         axum::http::Method::OPTIONS => Some(HttpMethod::Options),
         _ => None,
     }
-}
-
-fn load_routes(root: &Path) -> Result<Vec<Route>, CliError> {
-    let mut files = Vec::new();
-
-    for entry in WalkDir::new(root) {
-        let entry = entry?;
-        if !entry.file_type().is_file() || !is_yaml(entry.path()) {
-            continue;
-        }
-        let relative = entry
-            .path()
-            .strip_prefix(root)
-            .expect("walkdir entry under root")
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("/");
-        files.push((relative, entry.path().to_owned()));
-    }
-
-    files.sort_by(|left, right| left.0.cmp(&right.0));
-
-    let mut routes = Vec::new();
-    let mut route_sources = BTreeMap::new();
-
-    for (relative, path) in files {
-        let route = Route::from_yaml(&fs::read_to_string(&path)?).map_err(|source| {
-            CliError::RouteLoad {
-                path: path.clone(),
-                source,
-            }
-        })?;
-        if let Some(first_path) = route_sources.insert(route.id.clone(), relative.clone()) {
-            return Err(CliError::DuplicateRoute {
-                id: route.id,
-                first_path,
-                second_path: relative,
-            });
-        }
-        routes.push(route);
-    }
-
-    Ok(routes)
-}
-
-fn is_yaml(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| matches!(extension, "yaml" | "yml"))
-}
-
-#[derive(Debug, Error)]
-enum CliError {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Walkdir(#[from] walkdir::Error),
-    #[error(transparent)]
-    Collections(#[from] decoy_runtime::collections::CollectionError),
-    #[error(transparent)]
-    Catalog(#[from] decoy_runtime::engine::CatalogError),
-    #[error("failed to load route `{}`: {source}", path.display())]
-    RouteLoad {
-        path: PathBuf,
-        source: decoy_runtime::schema::ValidationError,
-    },
-    #[error("duplicate route id `{id}` in `{first_path}` and `{second_path}`")]
-    DuplicateRoute {
-        id: String,
-        first_path: String,
-        second_path: String,
-    },
-    #[error("collections file does not define any collections")]
-    NoCollections,
-    #[error("startup collection `{0}` was not found")]
-    MissingStartupCollection(String),
 }

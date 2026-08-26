@@ -108,14 +108,16 @@ pub fn load_catalog_from_files(
             StartupError::new(StartupDiagnosticKind::Io, &route_path, error.to_string())
         })?;
         let route = decode_route(&route_path, &input)?;
-        if seen_route_paths
-            .insert(route.id.clone(), route_path.clone())
-            .is_some()
-        {
+        if let Some(first_path) = seen_route_paths.insert(route.id.clone(), route_path.clone()) {
             return Err(StartupError::new(
                 StartupDiagnosticKind::Schema,
                 &route_path,
-                format!("duplicate route id `{}`", route.id),
+                format!(
+                    "duplicate route id `{}` in `{}` and `{}`",
+                    route.id,
+                    normalize_for_sort(routes_dir, &first_path),
+                    normalize_for_sort(routes_dir, &route_path)
+                ),
             ));
         }
         routes.push(route);
