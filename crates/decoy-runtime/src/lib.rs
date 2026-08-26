@@ -4,6 +4,7 @@
 //! TypeScript implementation is prior art, not the semantic source of truth.
 
 pub mod collections;
+pub mod config;
 pub mod control_api;
 pub mod engine;
 pub mod http;
@@ -20,9 +21,13 @@ pub use engine::{
     Catalog, ControlError, Controller, HttpRequest, MissDiagnostic, ResolveOutcome,
     RouteOverrideSnapshot, Selection, SelectionSnapshot,
 };
-pub use http::{HttpResponsePlan, PassthroughPlan, RequestMetadata, ResponsePlan, RuntimeConfig};
+pub use http::{
+    BodyPlan, HttpResponsePlan, PassthroughPlan, RequestMetadata, ResponsePlan, RuntimeConfig,
+};
 pub use native_http::{NativeHttpError, NativeHttpRuntime, NativeHttpServer};
-pub use schema::{Behavior, BehaviorKind, Case, HttpRouteMatch, Route, Transport, ValidationError};
+pub use schema::{
+    Behavior, BehaviorKind, Case, HttpMethod, HttpRouteMatch, Route, Transport, ValidationError,
+};
 pub use startup::{
     SourceLocation, Startup, StartupDiagnostic, StartupDiagnosticKind, StartupError,
     load_catalog_from_files,
