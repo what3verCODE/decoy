@@ -4,13 +4,36 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::collections::{Activation, CollectionError, CollectionsFile};
-use crate::http::{RequestMetadata, ResponsePlan, RuntimeConfig};
+use crate::http::{BodyPlan, RequestMetadata, ResponsePlan, RuntimeConfig};
+use crate::http_forward::{ForwardRequest, ForwardResponse, ForwardingError, forward_passthrough};
 use crate::schema::{Case, HttpMethod, Route};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     pub method: HttpMethod,
     pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpExecutionRequest {
+    pub method: HttpMethod,
+    pub path: String,
+    pub path_and_query: String,
+    pub headers: BTreeMap<String, String>,
+    pub body: Vec<u8>,
+    pub metadata: RequestMetadata,
+}
+
+#[derive(Debug)]
+pub enum HttpExecutionOutcome {
+    Response {
+        activation: Option<Activation>,
+        response: ForwardResponse,
+    },
+    ForwardingError {
+        activation: Activation,
+        source: ForwardingError,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,6 +131,70 @@ impl Catalog {
         metadata: &RequestMetadata,
     ) -> ResolveOutcome {
         self.resolve_http_with_overrides(collection_id, request, &BTreeMap::new(), metadata)
+    }
+
+    pub async fn execute_http(
+        &self,
+        collection_id: &str,
+        request: HttpExecutionRequest,
+    ) -> HttpExecutionOutcome {
+        self.execute_http_with_overrides(collection_id, &BTreeMap::new(), request)
+            .await
+    }
+
+    async fn execute_http_with_overrides(
+        &self,
+        collection_id: &str,
+        overrides: &BTreeMap<(String, String), String>,
+        request: HttpExecutionRequest,
+    ) -> HttpExecutionOutcome {
+        let resolve_request = HttpRequest {
+            method: request.method.clone(),
+            path: request.path.clone(),
+        };
+
+        match self.resolve_http_with_overrides(
+            collection_id,
+            &resolve_request,
+            overrides,
+            &request.metadata,
+        ) {
+            ResolveOutcome::Matched {
+                activation, plan, ..
+            } => match plan {
+                ResponsePlan::Response(response) => HttpExecutionOutcome::Response {
+                    activation: Some(activation),
+                    response: response.into(),
+                },
+                ResponsePlan::Passthrough(plan) => {
+                    let source = forward_passthrough(
+                        &plan,
+                        ForwardRequest {
+                            method: request.method,
+                            path_and_query: request.path_and_query,
+                            headers: request.headers,
+                            body: request.body,
+                        },
+                    )
+                    .await;
+
+                    match source {
+                        Ok(response) => HttpExecutionOutcome::Response {
+                            activation: Some(activation),
+                            response,
+                        },
+                        Err(source) => HttpExecutionOutcome::ForwardingError { activation, source },
+                    }
+                }
+            },
+            ResolveOutcome::Miss(miss) => HttpExecutionOutcome::Response {
+                activation: None,
+                response: match ResponsePlan::fail_closed_miss(miss.reason) {
+                    ResponsePlan::Response(response) => response.into(),
+                    ResponsePlan::Passthrough(_) => unreachable!("fail-closed miss is a response"),
+                },
+            },
+        }
     }
 
     fn resolve_http_with_overrides(
@@ -226,6 +313,24 @@ fn split_path(path: &str) -> Vec<&str> {
         .split('/')
         .filter(|part| !part.is_empty())
         .collect()
+}
+
+impl From<crate::http::HttpResponsePlan> for ForwardResponse {
+    fn from(response: crate::http::HttpResponsePlan) -> Self {
+        let body = response.body.map(response_body_bytes).unwrap_or_default();
+        Self {
+            status: response.status,
+            headers: response.headers,
+            body,
+        }
+    }
+}
+
+fn response_body_bytes(body: BodyPlan) -> Vec<u8> {
+    match body {
+        BodyPlan::Json(value) => serde_json::to_vec(&value).expect("JSON response body serializes"),
+        BodyPlan::Text(text) => text.into_bytes(),
+    }
 }
 
 #[derive(Debug, Error)]
@@ -374,6 +479,17 @@ impl Controller {
         )
     }
 
+    pub async fn execute_http(
+        &self,
+        session: &str,
+        request: HttpExecutionRequest,
+    ) -> HttpExecutionOutcome {
+        let selection = self.selection(session);
+        self.catalog
+            .execute_http_with_overrides(&selection.collection, &selection.route_overrides, request)
+            .await
+    }
+
     fn selection(&self, session: &str) -> Selection {
         self.sessions
             .get(session)
@@ -390,12 +506,103 @@ impl Controller {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
+
     use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::collections::CollectionsFile;
     use crate::http::{BodyPlan, HttpResponsePlan, PassthroughPlan};
     use crate::schema::PassthroughTarget;
+
+    #[derive(Debug)]
+    struct CapturedRequest {
+        request_line: String,
+        headers: BTreeMap<String, String>,
+        body: String,
+    }
+
+    fn spawn_upstream() -> (
+        String,
+        mpsc::Receiver<CapturedRequest>,
+        thread::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = Vec::new();
+            let mut chunk = [0; 1024];
+            loop {
+                let read = stream.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+                if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let text = String::from_utf8_lossy(&buffer);
+                    let headers_end = text.find("\r\n\r\n").unwrap();
+                    let head = &text[..headers_end];
+                    let content_length = head
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
+                    let body_start = headers_end + 4;
+                    if buffer.len() >= body_start + content_length {
+                        break;
+                    }
+                }
+            }
+
+            let header_end = buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .unwrap();
+            let head = String::from_utf8_lossy(&buffer[..header_end]);
+            let mut lines = head.lines();
+            let request_line = lines.next().unwrap().to_owned();
+            let mut headers = BTreeMap::new();
+            for line in lines {
+                let (name, value) = line.split_once(':').unwrap();
+                headers.insert(name.to_ascii_lowercase(), value.trim().to_owned());
+            }
+            let body = String::from_utf8_lossy(&buffer[header_end + 4..]).to_string();
+            tx.send(CapturedRequest {
+                request_line,
+                headers,
+                body,
+            })
+            .unwrap();
+
+            stream
+                .write_all(
+                    b"HTTP/1.1 202 Accepted\r\ncontent-type: text/plain\r\nx-upstream: yes\r\ncontent-length: 8\r\n\r\naccepted",
+                )
+                .unwrap();
+        });
+
+        (format!("http://{addr}"), rx, handle)
+    }
+
+    fn execution_request(path: &str, path_and_query: &str) -> HttpExecutionRequest {
+        HttpExecutionRequest {
+            method: HttpMethod::Get,
+            path: path.to_owned(),
+            path_and_query: path_and_query.to_owned(),
+            headers: BTreeMap::new(),
+            body: Vec::new(),
+            metadata: RequestMetadata::default(),
+        }
+    }
 
     fn get_user_route() -> Route {
         Route::from_yaml(
@@ -811,6 +1018,202 @@ cases:
             ResponsePlan::Passthrough(PassthroughPlan {
                 base_url: Some("https://request.example.test".to_owned())
             })
+        );
+    }
+
+    #[test]
+    fn golden_global_passthrough_target_does_not_forward_unmatched_requests() {
+        let catalog = catalog(
+            r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+"#,
+        );
+
+        let outcome = catalog.resolve_http(
+            "local",
+            &HttpRequest {
+                method: HttpMethod::Get,
+                path: "/unknown".to_owned(),
+            },
+        );
+
+        assert!(matches!(outcome, ResolveOutcome::Miss(_)));
+    }
+
+    #[tokio::test]
+    async fn execution_forwards_only_when_selected_behavior_is_passthrough() {
+        let (target, received, handle) = spawn_upstream();
+        let route = Route::from_yaml(&format!(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{{id}}
+cases:
+  user-123:
+    match:
+      pathParams:
+        id: "123"
+    behaviors:
+      success:
+        status: 200
+        body:
+          ok: true
+      real:
+        kind: passthrough
+        target:
+          baseUrl: {target}
+"#
+        ))
+        .unwrap();
+        let catalog = Catalog::new(
+            vec![route],
+            CollectionsFile::from_yaml(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:real
+"#,
+            )
+            .unwrap(),
+            RuntimeConfig::default(),
+        )
+        .unwrap();
+
+        let mut request = execution_request("/users/123", "/users/123?expand=true");
+        request.headers = BTreeMap::from([("x-keep".to_owned(), "yes".to_owned())]);
+        request.body = b"body-from-caller".to_vec();
+        let outcome = catalog.execute_http("local", request).await;
+
+        let HttpExecutionOutcome::Response {
+            activation,
+            response,
+        } = outcome
+        else {
+            panic!("expected forwarded response")
+        };
+        assert_eq!(
+            activation.map(|activation| activation.address()),
+            Some("get-user:user-123:real".to_owned())
+        );
+        assert_eq!(response.status, 202);
+        assert_eq!(response.headers.get("x-upstream"), Some(&"yes".to_owned()));
+        assert_eq!(response.body, b"accepted");
+
+        let request = received.recv().unwrap();
+        handle.join().unwrap();
+        assert_eq!(request.request_line, "GET /users/123?expand=true HTTP/1.1");
+        assert_eq!(request.headers.get("x-keep"), Some(&"yes".to_owned()));
+        assert_eq!(request.body, "body-from-caller");
+    }
+
+    #[tokio::test]
+    async fn execution_returns_mock_response_without_forwarding_when_response_behavior_selected() {
+        let catalog = catalog(
+            r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+"#,
+        );
+
+        let outcome = catalog
+            .execute_http("local", execution_request("/users/123", "/users/123"))
+            .await;
+
+        let HttpExecutionOutcome::Response {
+            activation,
+            response,
+        } = outcome
+        else {
+            panic!("expected mock response")
+        };
+        assert_eq!(
+            activation.map(|activation| activation.address()),
+            Some("get-user:user-123:success".to_owned())
+        );
+        assert_eq!(response.status, 200);
+        assert_eq!(
+            response.headers.get("content-type"),
+            Some(&"application/json".to_owned())
+        );
+        assert_eq!(response.body, br#"{"id":"123"}"#);
+    }
+
+    #[tokio::test]
+    async fn execution_surfaces_forwarding_errors_instead_of_mock_misses() {
+        let route = Route::from_yaml(
+            r#"
+id: get-user
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+cases:
+  user-123:
+    match:
+      pathParams:
+        id: "123"
+    behaviors:
+      real:
+        kind: passthrough
+"#,
+        )
+        .unwrap();
+        let catalog = Catalog::new(
+            vec![route],
+            CollectionsFile::from_yaml(
+                r#"
+- id: local
+  routes:
+    - get-user:user-123:real
+"#,
+            )
+            .unwrap(),
+            RuntimeConfig::default(),
+        )
+        .unwrap();
+
+        let outcome = catalog
+            .execute_http("local", execution_request("/users/123", "/users/123"))
+            .await;
+
+        let HttpExecutionOutcome::ForwardingError { activation, source } = outcome else {
+            panic!("expected forwarding error")
+        };
+        assert_eq!(activation.address(), "get-user:user-123:real");
+        assert!(matches!(source, ForwardingError::MissingTarget));
+    }
+
+    #[tokio::test]
+    async fn execution_keeps_unmatched_requests_fail_closed() {
+        let catalog = catalog(
+            r#"
+- id: local
+  routes:
+    - get-user:user-123:success
+"#,
+        );
+
+        let outcome = catalog
+            .execute_http("local", execution_request("/unknown", "/unknown"))
+            .await;
+
+        let HttpExecutionOutcome::Response {
+            activation,
+            response,
+        } = outcome
+        else {
+            panic!("expected fail-closed response")
+        };
+        assert_eq!(activation, None);
+        assert_eq!(response.status, 501);
+        assert_eq!(
+            response.headers.get("x-mock-miss"),
+            Some(&"true".to_owned())
         );
     }
 

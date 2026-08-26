@@ -13,6 +13,7 @@ pub struct ServeCliOptions {
     pub collections: Option<PathBuf>,
     pub port: Option<u16>,
     pub collection: Option<String>,
+    pub passthrough_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +22,7 @@ pub struct ServeConfig {
     pub collections: PathBuf,
     pub port: u16,
     pub collection: Option<String>,
+    pub passthrough_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
@@ -33,6 +35,8 @@ struct NativeConfigFile {
     port: Option<u16>,
     #[serde(alias = "startupCollection")]
     collection: Option<String>,
+    #[serde(alias = "passthroughBaseUrl")]
+    passthrough_base_url: Option<String>,
 }
 
 impl ServeConfig {
@@ -75,12 +79,18 @@ impl ServeConfig {
                 .as_ref()
                 .and_then(|config| config.collection.clone())
         });
+        let passthrough_base_url = options.passthrough_base_url.or_else(|| {
+            file_config
+                .as_ref()
+                .and_then(|config| config.passthrough_base_url.clone())
+        });
 
         Ok(Self {
             routes,
             collections,
             port,
             collection,
+            passthrough_base_url,
         })
     }
 }
@@ -227,6 +237,7 @@ collection: config-collection
                 collections: Some(PathBuf::from("flag/collections.yaml")),
                 port: Some(4200),
                 collection: Some("flag-collection".to_owned()),
+                passthrough_base_url: Some("http://flag.example".to_owned()),
             },
             base,
         )
@@ -236,6 +247,10 @@ collection: config-collection
         assert_eq!(config.collections, base.join("flag/collections.yaml"));
         assert_eq!(config.port, 4200);
         assert_eq!(config.collection.as_deref(), Some("flag-collection"));
+        assert_eq!(
+            config.passthrough_base_url.as_deref(),
+            Some("http://flag.example")
+        );
     }
 
     #[test]

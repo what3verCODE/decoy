@@ -1,17 +1,21 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::body::Body;
+use axum::body::{Body, to_bytes};
 use axum::extract::{OriginalUri, State};
 use axum::http::{HeaderName, HeaderValue, Request, Response, StatusCode};
 use axum::routing::any;
 use clap::{Parser, Subcommand};
 use decoy_runtime::config::{ServeCliOptions, ServeConfig};
-use decoy_runtime::engine::{Controller, HttpRequest, ResolveOutcome};
-use decoy_runtime::http::{BodyPlan, HttpResponsePlan, ResponsePlan, RuntimeConfig};
-use decoy_runtime::schema::HttpMethod;
+use decoy_runtime::engine::{Controller, HttpExecutionOutcome, HttpExecutionRequest};
+use decoy_runtime::http::{
+    BodyPlan, HttpResponsePlan, RequestMetadata, ResponsePlan, RuntimeConfig,
+};
+use decoy_runtime::http_forward::ForwardResponse;
+use decoy_runtime::schema::{HttpMethod, PassthroughTarget};
 use decoy_runtime::startup::load_catalog_from_files;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -44,6 +48,8 @@ struct ServeArgs {
     port: Option<u16>,
     #[arg(long)]
     collection: Option<String>,
+    #[arg(long, value_name = "URL")]
+    passthrough_base_url: Option<String>,
 }
 
 #[tokio::main]
@@ -71,13 +77,18 @@ async fn serve(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>> {
             collections: args.collections,
             port: args.port,
             collection: args.collection,
+            passthrough_base_url: args.passthrough_base_url,
         },
         &cwd,
     )?;
     let startup = load_catalog_from_files(
         &config.routes,
         &config.collections,
-        RuntimeConfig::default(),
+        RuntimeConfig {
+            passthrough: config
+                .passthrough_base_url
+                .map(|base_url| PassthroughTarget { base_url }),
+        },
         config.collection.as_deref(),
     )?;
 
@@ -119,17 +130,50 @@ async fn handle_request(
             return response_from_plan(ResponsePlan::fail_closed_miss("unsupported http method"));
         }
     };
-    let path = uri.path().to_owned();
-    let outcome = controller
-        .read()
-        .await
-        .resolve_http(&session, &HttpRequest { method, path });
-
-    match outcome {
-        ResolveOutcome::Matched { plan, .. } => response_from_plan(plan),
-        ResolveOutcome::Miss(miss) => {
-            response_from_plan(ResponsePlan::fail_closed_miss(miss.reason))
+    let headers = request_headers(request.headers());
+    let metadata = RequestMetadata {
+        original_base_url: original_base_url(&headers),
+    };
+    let body = match to_bytes(request.into_body(), usize::MAX).await {
+        Ok(body) => body.to_vec(),
+        Err(error) => {
+            return json_response(
+                StatusCode::BAD_REQUEST,
+                serde_json::json!({ "error": format!("failed to read request body: {error}") }),
+            );
         }
+    };
+    let controller = controller.read().await.clone();
+    let outcome = controller
+        .execute_http(
+            &session,
+            HttpExecutionRequest {
+                method,
+                path: uri.path().to_owned(),
+                path_and_query: uri
+                    .path_and_query()
+                    .map(|path| path.as_str().to_owned())
+                    .unwrap_or_else(|| uri.path().to_owned()),
+                headers,
+                body,
+                metadata,
+            },
+        )
+        .await;
+
+    response_from_execution_outcome(outcome)
+}
+
+fn response_from_execution_outcome(outcome: HttpExecutionOutcome) -> Response<Body> {
+    match outcome {
+        HttpExecutionOutcome::Response { response, .. } => response_from_forward_response(response),
+        HttpExecutionOutcome::ForwardingError { source, .. } => json_response(
+            StatusCode::BAD_GATEWAY,
+            serde_json::json!({
+                "error": "passthrough forwarding failed",
+                "detail": source.to_string(),
+            }),
+        ),
     }
 }
 
@@ -140,6 +184,34 @@ fn response_from_plan(plan: ResponsePlan) -> Response<Body> {
             "passthrough behavior is not implemented by native serve yet",
         )),
     }
+}
+
+fn response_from_forward_response(plan: ForwardResponse) -> Response<Body> {
+    let mut response = Response::new(Body::from(plan.body));
+    *response.status_mut() = StatusCode::from_u16(plan.status).unwrap_or(StatusCode::OK);
+
+    for (name, value) in plan.headers {
+        if let (Ok(name), Ok(value)) = (
+            HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(&value),
+        ) {
+            response.headers_mut().insert(name, value);
+        }
+    }
+
+    response
+}
+
+fn json_response(status: StatusCode, value: serde_json::Value) -> Response<Body> {
+    let mut response = Response::new(Body::from(
+        serde_json::to_vec(&value).expect("JSON response serializes"),
+    ));
+    *response.status_mut() = status;
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    response
 }
 
 fn http_response(plan: HttpResponsePlan) -> Response<Body> {
@@ -161,6 +233,22 @@ fn http_response(plan: HttpResponsePlan) -> Response<Body> {
     }
 
     response
+}
+
+fn request_headers(headers: &axum::http::HeaderMap) -> BTreeMap<String, String> {
+    headers
+        .iter()
+        .filter_map(|(name, value)| {
+            Some((name.as_str().to_owned(), value.to_str().ok()?.to_owned()))
+        })
+        .collect()
+}
+
+fn original_base_url(headers: &BTreeMap<String, String>) -> Option<String> {
+    headers
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("host"))
+        .map(|(_, value)| format!("http://{value}"))
 }
 
 fn http_method(method: &axum::http::Method) -> Option<HttpMethod> {

@@ -11,8 +11,8 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::control_api::{self, ControlApiRequest, session_id};
-use crate::engine::{Controller, HttpRequest, ResolveOutcome};
-use crate::http::{BodyPlan, ResponsePlan};
+use crate::engine::{Controller, HttpExecutionOutcome, HttpExecutionRequest};
+use crate::http::RequestMetadata;
 use crate::schema::HttpMethod;
 
 /// A small native HTTP adapter for the Rust runtime prototype.
@@ -116,7 +116,7 @@ fn handle_request(controller: &Arc<Mutex<Controller>>, request: WireRequest) -> 
                 method: request.method,
                 path: request.path,
                 headers: request.headers,
-                body: Some(request.body),
+                body: Some(String::from_utf8_lossy(&request.body).into_owned()),
             },
         );
         return WireResponse {
@@ -134,24 +134,31 @@ fn handle_request(controller: &Arc<Mutex<Controller>>, request: WireRequest) -> 
         );
     };
 
-    let path = request
-        .path
-        .split_once('?')
-        .map(|(path, _)| path)
-        .unwrap_or(&request.path)
-        .to_owned();
-
-    let outcome = controller
+    let path = request_path(&request.path);
+    let metadata = RequestMetadata {
+        original_base_url: original_base_url(&request.headers),
+    };
+    let controller = controller
         .lock()
         .expect("controller lock is not poisoned")
-        .resolve_http(&session, &HttpRequest { method, path });
+        .clone();
+    let outcome = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime builds")
+        .block_on(controller.execute_http(
+            &session,
+            HttpExecutionRequest {
+                method,
+                path,
+                path_and_query: request.path,
+                headers: request.headers,
+                body: request.body,
+                metadata,
+            },
+        ));
 
-    match outcome {
-        ResolveOutcome::Matched { plan, .. } => response_from_plan(plan),
-        ResolveOutcome::Miss(miss) => {
-            response_from_plan(ResponsePlan::fail_closed_miss(miss.reason))
-        }
-    }
+    response_from_execution_outcome(outcome)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,7 +166,7 @@ struct WireRequest {
     method: String,
     path: String,
     headers: BTreeMap<String, String>,
-    body: String,
+    body: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,7 +218,7 @@ fn read_request(stream: &mut TcpStream) -> Result<WireRequest, NativeHttpError> 
         method,
         path,
         headers,
-        body: String::from_utf8_lossy(&body).into_owned(),
+        body,
     })
 }
 
@@ -229,27 +236,18 @@ fn write_response(stream: &mut TcpStream, response: WireResponse) -> Result<(), 
     stream.write_all(&response.body)
 }
 
-fn response_from_plan(plan: ResponsePlan) -> WireResponse {
-    match plan {
-        ResponsePlan::Response(response) => {
-            let body = match response.body {
-                Some(BodyPlan::Json(value)) => {
-                    serde_json::to_vec(&value).expect("JSON body serializes")
-                }
-                Some(BodyPlan::Text(text)) => text.into_bytes(),
-                None => Vec::new(),
-            };
-            WireResponse {
-                status: response.status,
-                headers: response.headers,
-                body,
-            }
-        }
-        ResponsePlan::Passthrough(plan) => json_response(
-            501,
+fn response_from_execution_outcome(outcome: HttpExecutionOutcome) -> WireResponse {
+    match outcome {
+        HttpExecutionOutcome::Response { response, .. } => WireResponse {
+            status: response.status,
+            headers: response.headers,
+            body: response.body,
+        },
+        HttpExecutionOutcome::ForwardingError { source, .. } => json_response(
+            502,
             serde_json::json!({
-                "error": "passthrough is not implemented by the native prototype HTTP adapter",
-                "baseUrl": plan.base_url,
+                "error": "passthrough forwarding failed",
+                "detail": source.to_string(),
             }),
         ),
     }
@@ -261,6 +259,21 @@ fn json_response(status: u16, value: serde_json::Value) -> WireResponse {
         headers: BTreeMap::from([("content-type".to_owned(), "application/json".to_owned())]),
         body: serde_json::to_vec(&value).expect("JSON response serializes"),
     }
+}
+
+fn request_path(path_and_query: &str) -> String {
+    path_and_query
+        .split_once('?')
+        .map(|(path, _)| path)
+        .unwrap_or(path_and_query)
+        .to_owned()
+}
+
+fn original_base_url(headers: &BTreeMap<String, String>) -> Option<String> {
+    headers
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("host"))
+        .map(|(_, value)| format!("http://{value}"))
 }
 
 fn parse_method(method: &str) -> Option<HttpMethod> {
@@ -282,6 +295,7 @@ fn reason_phrase(status: u16) -> &'static str {
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        502 => "Bad Gateway",
         501 => "Not Implemented",
         _ => "OK",
     }
@@ -289,7 +303,9 @@ fn reason_phrase(status: u16) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{SocketAddr, TcpStream};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::mpsc;
+    use std::thread;
 
     use pretty_assertions::assert_eq;
 
@@ -356,6 +372,7 @@ cases:
 
     struct TestResponse {
         status: u16,
+        headers: BTreeMap<String, String>,
         body: String,
     }
 
@@ -366,13 +383,28 @@ cases:
         session: Option<&str>,
         body: &str,
     ) -> TestResponse {
+        request_with_headers(addr, method, path, session, &[], body)
+    }
+
+    fn request_with_headers(
+        addr: SocketAddr,
+        method: &str,
+        path: &str,
+        session: Option<&str>,
+        extra_headers: &[(&str, &str)],
+        body: &str,
+    ) -> TestResponse {
         let mut stream = TcpStream::connect(addr).unwrap();
         let session_header = session
             .map(|session| format!("x-mock-session: {session}\r\n"))
             .unwrap_or_default();
+        let extra_headers = extra_headers
+            .iter()
+            .map(|(key, value)| format!("{key}: {value}\r\n"))
+            .collect::<String>();
         write!(
             stream,
-            "{method} {path} HTTP/1.1\r\nhost: localhost\r\n{session_header}content-length: {}\r\nconnection: close\r\n\r\n{body}",
+            "{method} {path} HTTP/1.1\r\nhost: localhost\r\n{session_header}{extra_headers}content-length: {}\r\nconnection: close\r\n\r\n{body}",
             body.len()
         )
         .unwrap();
@@ -380,8 +412,8 @@ cases:
         let mut raw = String::new();
         stream.read_to_string(&mut raw).unwrap();
         let (head, body) = raw.split_once("\r\n\r\n").unwrap();
-        let status = head
-            .lines()
+        let mut lines = head.lines();
+        let status = lines
             .next()
             .unwrap()
             .split_whitespace()
@@ -389,10 +421,93 @@ cases:
             .unwrap()
             .parse()
             .unwrap();
+        let headers = lines
+            .filter_map(|line| {
+                let (key, value) = line.split_once(':')?;
+                Some((key.to_ascii_lowercase(), value.trim().to_owned()))
+            })
+            .collect();
         TestResponse {
             status,
+            headers,
             body: body.to_owned(),
         }
+    }
+
+    #[derive(Debug)]
+    struct CapturedRequest {
+        request_line: String,
+        headers: BTreeMap<String, String>,
+        body: String,
+    }
+
+    fn spawn_upstream() -> (
+        String,
+        mpsc::Receiver<CapturedRequest>,
+        thread::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = Vec::new();
+            let mut chunk = [0; 1024];
+            loop {
+                let read = stream.read(&mut chunk).unwrap();
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+                if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let text = String::from_utf8_lossy(&buffer);
+                    let headers_end = text.find("\r\n\r\n").unwrap();
+                    let head = &text[..headers_end];
+                    let content_length = head
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
+                    let body_start = headers_end + 4;
+                    if buffer.len() >= body_start + content_length {
+                        break;
+                    }
+                }
+            }
+
+            let header_end = buffer
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .unwrap();
+            let head = String::from_utf8_lossy(&buffer[..header_end]);
+            let mut lines = head.lines();
+            let request_line = lines.next().unwrap().to_owned();
+            let headers = lines
+                .filter_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    Some((name.to_ascii_lowercase(), value.trim().to_owned()))
+                })
+                .collect();
+            let body = String::from_utf8_lossy(&buffer[header_end + 4..]).to_string();
+            tx.send(CapturedRequest {
+                request_line,
+                headers,
+                body,
+            })
+            .unwrap();
+
+            stream
+                .write_all(
+                    b"HTTP/1.1 202 Accepted\r\ncontent-type: text/plain\r\nx-upstream: yes\r\ncontent-length: 8\r\n\r\naccepted",
+                )
+                .unwrap();
+        });
+
+        (format!("http://{addr}"), rx, handle)
     }
 
     #[test]
@@ -453,6 +568,74 @@ cases:
             request(addr, "GET", "/users/123", Some("b"), "").status,
             200
         );
+    }
+
+    #[test]
+    fn selected_passthrough_is_forwarded_by_the_native_http_request_path() {
+        let (upstream_url, captured, upstream) = spawn_upstream();
+        let route = Route::from_yaml(&format!(
+            r#"
+id: create-user
+transport: http
+match:
+  method: POST
+  path: /users
+cases:
+  any:
+    match: {{}}
+    behaviors:
+      forward:
+        kind: passthrough
+        target:
+          baseUrl: {upstream_url}
+"#
+        ))
+        .unwrap();
+        let server = NativeHttpRuntime::new(Controller::new(
+            Catalog::new(
+                vec![route],
+                CollectionsFile::from_yaml(
+                    r#"
+- id: forward
+  routes:
+    - create-user:any:forward
+"#,
+                )
+                .unwrap(),
+                RuntimeConfig::default(),
+            )
+            .unwrap(),
+            "forward",
+        ))
+        .bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+        .unwrap();
+
+        let response = request_with_headers(
+            server.addr(),
+            "POST",
+            "/users?verbose=true",
+            None,
+            &[
+                ("x-decoy-test", "yes"),
+                ("Connection", "x-strip"),
+                ("x-strip", "no"),
+            ],
+            r#"{"name":"Ada"}"#,
+        );
+
+        assert_eq!(response.status, 202);
+        assert_eq!(response.headers.get("x-upstream"), Some(&"yes".to_owned()));
+        assert_eq!(response.body, "accepted");
+        let captured = captured.recv().unwrap();
+        assert_eq!(captured.request_line, "POST /users?verbose=true HTTP/1.1");
+        assert_eq!(
+            captured.headers.get("x-decoy-test"),
+            Some(&"yes".to_owned())
+        );
+        assert!(!captured.headers.contains_key("connection"));
+        assert!(!captured.headers.contains_key("x-strip"));
+        assert_eq!(captured.body, r#"{"name":"Ada"}"#);
+        upstream.join().unwrap();
     }
 
     #[test]
