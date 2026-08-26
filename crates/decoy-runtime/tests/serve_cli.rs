@@ -219,6 +219,51 @@ cases:
     upstream.join().unwrap();
 }
 
+#[tokio::test]
+async fn serve_uses_cli_global_passthrough_target_for_selected_passthrough() {
+    let (upstream_url, captured, upstream) = spawn_upstream();
+    let fixture = Fixture::new();
+    fixture.write_route(
+        "users.yml",
+        r#"
+id: users
+transport: http
+match:
+  method: GET
+  path: /users/{id}
+cases:
+  any:
+    match:
+      pathParams:
+        id: "*"
+    behaviors:
+      forward:
+        kind: passthrough
+"#,
+    );
+    fixture.write_collections(
+        r#"
+- id: default
+  routes:
+    - users:any:forward
+"#,
+    );
+
+    let port = unused_port();
+    let _server = fixture.spawn(port, &["--passthrough-base-url", &upstream_url]);
+    wait_for_server(port).await;
+
+    let response = reqwest::get(format!("http://127.0.0.1:{port}/users/456?source=cli"))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 202);
+    assert_eq!(response.text().await.unwrap(), "accepted");
+    let captured = captured.recv().unwrap();
+    assert_eq!(captured.request_line, "GET /users/456?source=cli HTTP/1.1");
+    upstream.join().unwrap();
+}
+
 #[test]
 fn duplicate_route_ids_fail_startup_with_diagnostic() {
     let fixture = Fixture::new();

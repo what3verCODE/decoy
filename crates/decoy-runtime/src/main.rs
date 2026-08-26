@@ -16,7 +16,7 @@ use decoy_runtime::http::{
     BodyPlan, HttpResponsePlan, RequestMetadata, ResponsePlan, RuntimeConfig,
 };
 use decoy_runtime::http_forward::ForwardResponse;
-use decoy_runtime::schema::{HttpMethod, Route};
+use decoy_runtime::schema::{HttpMethod, PassthroughTarget, Route};
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -48,6 +48,8 @@ struct ServeArgs {
     port: u16,
     #[arg(long)]
     collection: Option<String>,
+    #[arg(long, value_name = "URL")]
+    passthrough_base_url: Option<String>,
 }
 
 #[tokio::main]
@@ -79,7 +81,15 @@ async fn serve(args: ServeArgs) -> Result<(), CliError> {
         return Err(CliError::MissingStartupCollection(startup_collection));
     }
 
-    let catalog = Catalog::new(routes, collections, RuntimeConfig::default())?;
+    let catalog = Catalog::new(
+        routes,
+        collections,
+        RuntimeConfig {
+            passthrough: args
+                .passthrough_base_url
+                .map(|base_url| PassthroughTarget { base_url }),
+        },
+    )?;
     let controller = Arc::new(RwLock::new(Controller::new(catalog, startup_collection)));
     let app = Router::new()
         .fallback(any(handle_request))
