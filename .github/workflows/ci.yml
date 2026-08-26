@@ -35,6 +35,28 @@ jobs:
       - name: Test
         run: pnpm test
 
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup toolchain (proto reads .prototools)
+        uses: moonrepo/setup-toolchain@v0
+        with:
+          auto-install: true
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
   # Discover example workspaces so each gets its own e2e job (the e2e tier lives in
   # examples/*, exposed as `test:e2e`). Browser examples (those depending on
   # @playwright/test) are split out so they can install Chromium in a dedicated job;
