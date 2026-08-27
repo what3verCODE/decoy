@@ -1,10 +1,10 @@
-# Codec plugin external command hosting research
+# Plugin pipeline external command hosting research
 
 Status: research note for [#163](https://github.com/what3verCODE/decoy/issues/163). This is design evidence, not an implementation decision.
 
 ## Context
 
-Decoy's glossary defines a **Plugin** as an advanced extension package and a **Codec plugin** as the first likely seam: convert wire bytes to logical messages and logical messages back to wire bytes. ADR 0001 chooses a future Rust/native runtime and keeps plugins out of the first HTTP milestone. The current design note says Herdr-style external command plugins are attractive because they use a manifest, an executable command, and host-provided context/API while avoiding broad lifecycle hooks.
+Decoy's glossary defines a **Plugin pipeline seam** as the future extension seam where ordered plugin stages may adapt transport data before or after Decoy's core matching and behavior semantics. This note focuses on external command hosting for the first likely stage in that pipeline: the **Codec stage**, which converts wire bytes to logical messages and logical messages back to wire bytes. Message transform stages are related pipeline work, but their contract is out of scope here. ADR 0001 chooses a future Rust/native runtime and keeps plugins out of the first HTTP milestone. The current design note says Herdr-style external command plugins are attractive because they use a manifest, an executable command, and host-provided context/API while avoiding broad lifecycle hooks.
 
 ## Plausible hosting patterns
 
@@ -21,9 +21,9 @@ Evidence:
 
 Decoy fit:
 
-- Manifest discovery could search explicit config paths first, then user/global plugin dirs, then possibly project-local plugin dirs. A minimal `decoy-codec-plugin.toml` could require `id`, `name`, `version`, `min_decoy_version`, `codec_api_version`, `platforms`, and one or more codec entrypoints such as `decode` and `encode` argv arrays.
-- Executable invocation could pass a stable JSON request on stdin: `{apiVersion, pluginId, codecId, operation, routeId, mediaType, bytesBase64, config}` and require JSON on stdout: `{ok, message}` or `{ok:false, diagnostic}`. Stderr should be logs only; non-zero exit means host-level failure.
-- Plugin identity should be manifest-owned, stable, and globally qualified. Route YAML should reference something like `codec: vendor.plugin/codec-id` or `{plugin: vendor.plugin, codec: msgpack-protobuf}` rather than an executable path, so routes remain portable and plugin installation stays separate.
+- Manifest discovery could search explicit config paths first, then user/global plugin dirs, then possibly project-local plugin dirs. A minimal manifest could require `id`, `name`, `version`, `min_decoy_version`, supported plugin pipeline API version, `platforms`, and one or more codec-stage entrypoints such as `decode` and `encode` argv arrays.
+- Executable invocation could pass a stable JSON request on stdin: `{apiVersion, pluginId, operation, routeId, mediaType, bytesBase64, config}` and require JSON on stdout: `{ok, message}` or `{ok:false, diagnostic}`. Stderr should be logs only; non-zero exit means host-level failure.
+- Plugin identity should be manifest-owned, stable, and globally qualified. The exact route/config syntax for addressing a plugin stage or capability is a later plugin-pipeline decision; it should not be an executable path, so routes remain portable and plugin installation stays separate.
 - Native runtime implication: Rust only needs process spawning, JSON/schema validation, timeout handling, and base64/byte limits. It does not need to load foreign code or embed Node, Python, or Go.
 
 Strengths:
@@ -52,8 +52,8 @@ Evidence:
 Decoy fit:
 
 - Manifest discovery and identity stay the same as Pattern A, but entrypoints would be `server` plus declared protocol support (`jsonrpc-stdio-v1`, `grpc-local-v1`).
-- Invocation begins with Decoy launching the server command using argv, a limited environment, plugin config/state dirs, and an optional host-supplied socket/API location. The plugin responds with a versioned handshake and advertised codec capabilities.
-- Decoy can reuse the sidecar across sessions/routes and route every encode/decode request by `(pluginId, codecId, apiVersion)`. Plugin identity must survive process restarts and should be pinned to manifest ID plus install source/revision in diagnostics.
+- Invocation begins with Decoy launching the server command using argv, a limited environment, plugin config/state dirs, and an optional host-supplied socket/API location. The plugin responds with a versioned handshake and advertised codec-stage capabilities.
+- Decoy can reuse the sidecar across sessions/routes and route every encode/decode request by stable manifest and stage/capability identity. Plugin identity must survive process restarts and should be pinned to manifest ID plus install source/revision in diagnostics.
 - Native runtime implication: Rust must own sidecar lifecycle, readiness/health checks, backpressure, cancellation, restart policy, log capture, and protocol compatibility. This is more like hosting a local service than running a converter command.
 
 Strengths:
@@ -78,34 +78,34 @@ This is plausible for expert/local use, but it is a weak default for Decoy becau
 
 Use manifest-first discovery even if the first prototype only supports one-shot commands.
 
-- **Discovery:** scan explicit project config, then user plugin directories. Validate manifests before routes are loaded far enough to accept codec references. Do not auto-discover arbitrary `PATH` executables as plugins by default.
+- **Discovery:** scan explicit project config, then user plugin directories. Validate manifests before routes are loaded far enough to accept plugin stage references. Do not auto-discover arbitrary `PATH` executables as plugins by default.
 - **Invocation:** use argv arrays, never shell strings. Start with a one-shot JSON-over-stdio protocol for prototypes; reserve a manifest field for future sidecar protocols so the manifest shape does not preclude Pattern B.
-- **Identity:** require manifest `id` and local `codec` ids. Route YAML references `plugin-id/codec-id`; Decoy diagnostics include plugin id, codec id, manifest version, source path or install source, and protocol version. Executable paths are implementation details, not route semantics.
+- **Identity:** require stable manifest-owned identity. Exact stage/capability addressing is still a plugin pipeline design question; Decoy diagnostics should include the plugin identity, selected stage/capability identity when known, manifest version, source path or install source, and protocol version. Executable paths are implementation details, not route semantics.
 
 ## Risks
 
 - **Portability:** manifest commands may depend on Node/Python/Go tools that are absent on another machine. Require `platforms` and add install hints; prefer compiled single binaries for commonly shared codecs.
 - **Installation:** GitHub or package-manager installs raise trust and repeatability questions. Pinning source revisions/checksums may be needed before a marketplace or team-shared workflow.
 - **Security:** plugins run as the user and can access files/env/network unless Decoy adds sandboxing. Default posture should be explicit install/link, visible manifest preview, argv-only execution, limited host-provided secrets, timeout/output limits, and optional allowlists for CI.
-- **Developer UX:** one-shot commands are easy but may be slow; sidecars are fast but need protocol tooling. Error messages must separate route codec-reference errors, install/discovery errors, plugin diagnostics, protocol violations, and codec failures.
-- **Native runtime complexity:** every extra lifecycle hook competes with the Rust HTTP milestone. Avoid arbitrary lifecycle hooks, UI plugins, and custom matchers until codec semantics are stable.
+- **Developer UX:** one-shot commands are easy but may be slow; sidecars are fast but need protocol tooling. Error messages must separate route plugin-stage reference errors, install/discovery errors, plugin diagnostics, protocol violations, and codec failures.
+- **Native runtime complexity:** every extra lifecycle hook competes with the Rust HTTP milestone. Avoid arbitrary lifecycle hooks, UI plugins, and custom matchers until plugin pipeline semantics are stable.
 
 ## Questions to grill next
 
-- Should Decoy route YAML reference codecs by `plugin-id/codec-id`, by a manifest-declared alias, or by a project-local logical name resolved in config?
-- What is the minimal codec API: only `decode(bytes)->message` and `encode(message)->bytes`, or does matching need metadata such as content type, frame direction, schema id, or route bindings?
+- Should Decoy route YAML reference plugin stages/capabilities by manifest identity, by a manifest-declared alias, or by a project-local logical name resolved in config?
+- What is the minimal codec-stage API: only `decode(bytes)->message` and `encode(message)->bytes`, or does matching need metadata such as content type, frame direction, schema id, or route bindings?
 - What is Decoy's trust model for CI: deny all external plugins unless allowlisted, allow project-local plugins, or allow user-installed plugins?
 - Are plugin installs global to the user, project-local, or both? Which one is portable enough for teams?
 
 ## Prototype candidates
 
 1. Prototype Pattern A with a fixture plugin that decodes base64 JSON or MessagePack through a manifest-declared argv command. Measure startup overhead and specify timeout/error/log behavior.
-2. Prototype route/config identity resolution without executing plugins: validate `plugin-id/codec-id`, missing plugin diagnostics, duplicate ID errors, and platform mismatch messages.
+2. Prototype route/config identity resolution without executing plugins: validate stable plugin/stage references, missing plugin diagnostics, duplicate ID errors, and platform mismatch messages.
 3. If Pattern A is too slow for WebSocket frames, prototype Pattern B as JSON-RPC over stdio before committing to gRPC; this keeps native dependencies lower while testing lifecycle complexity.
 
 ## Sources and local evidence
 
-- Decoy glossary: `CONTEXT.md` defines Plugin and Codec plugin.
+- Decoy glossary: `CONTEXT.md` defines Plugin, Plugin pipeline seam, Codec stage, and Message transform stage.
 - Decoy native runtime direction: `docs/adr/0001-rust-runtime-and-semantic-model.md`.
 - Decoy plugin posture: `docs/design/next-direction.md` and `docs/design/github-reset-plan.md`.
 - Herdr plugin docs: <https://github.com/herdrdev/herdr/blob/master/docs/next/website/src/content/docs/plugins.mdx>.

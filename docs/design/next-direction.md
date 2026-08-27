@@ -75,8 +75,12 @@ Ship first:
 
 Decoy is a mock tool with plugins for advanced cases, not a plugin framework first.
 
-The first likely plugin seam is codec plugins: `bytes <-> logical message`. This keeps complicated
-WebSocket/msgpack/protobuf plumbing out of route YAML while preserving simple route/case/behavior UX.
+The broad future extension seam is the plugin pipeline: ordered stages that may adapt transport data
+before or after Decoy's core matching and behavior semantics. The first likely stage is a codec
+stage: `wire bytes <-> logical message`. This keeps complicated WebSocket/msgpack/protobuf plumbing
+out of route YAML while preserving simple route/case/behavior UX. Message transform stages are also
+part of the broader pipeline model, but they must not redefine core matching/session semantics.
 
-Herdr-style external command plugins are attractive: manifest + executable command + host-provided
-context/API. Avoid broad lifecycle hooks until Decoy's own semantics are stable.
+Herdr-style external command plugins are attractive for early pipeline stages: manifest + executable
+command + host-provided context/API. Avoid broad lifecycle hooks until Decoy's own semantics are
+stable.
