@@ -1,20 +1,26 @@
-# Codec plugin JSON-over-stdio protocol research
+# Plugin pipeline codec-stage JSON-over-stdio protocol research
 
 Status: research note for #164; feeds #138 and #155. This is not an implementation design or ADR.
 
 ## Question
 
-Decoy may eventually host codec plugins as external commands. A codec plugin converts wire bytes to
-logical messages and logical messages back to wire bytes, especially for future WebSocket/gRPC/custom
-protocol envelopes. This note records constraints for a JSON-over-stdio host/plugin protocol before
-implementation tickets are safe.
+Decoy may eventually host some plugin pipeline stages through long-running external workers. The
+plugin pipeline seam is broader than external processes: in-process, WASM, or local sidecar hosting
+remain possible candidates. This note focuses only on JSON-over-stdio communication for an external
+worker that implements the codec stage: converting wire bytes to logical messages and logical
+messages back to wire bytes, especially for future WebSocket/gRPC/custom protocol envelopes.
+Message-transform stage payloads and operation contracts are related pipeline work, but out of scope
+here.
 
 Local constraints from the Decoy design reset:
 
 - Plugins are roadmap, not part of the first native HTTP runtime milestone.
 - Decoy is a mock tool with plugins for advanced cases, not a plugin framework first.
-- The first likely plugin seam is `bytes <-> logical message`; plugin design must preserve
-  Route/Case/Behavior matching semantics and keep protocol plumbing out of route YAML.
+- The broad future extension seam is the plugin pipeline; codec stages are the first likely stage
+  because they keep protocol plumbing out of Route YAML while preserving Route/Case/Behavior
+  semantics.
+- Runtime pipeline stages sit on the serving request/message path, so this note assumes a
+  long-running worker rather than a one-shot command per message.
 
 ## Viable framing choices
 
@@ -44,7 +50,7 @@ Cons:
 - The host must require compact JSON records or otherwise reject embedded newlines.
 - Large base64 payloads create long lines and add size overhead.
 - Resynchronization after a truncated or partial line is poor; the safest recovery is usually to
-  terminate the plugin process.
+  terminate the plugin worker.
 
 Use this when simplicity and debuggability are more important than preserving pretty-printed JSON on
 the wire.
@@ -78,8 +84,8 @@ Cons:
 - Less friendly for humans tailing stdout directly.
 - A bad length can desynchronize the stream; termination is still the likely safe recovery.
 
-Use this if codec traffic needs large payloads or if route/debug fixtures benefit from formatted JSON
-inside the protocol stream.
+Use this if codec-stage traffic needs large payloads or if route/debug fixtures benefit from
+formatted JSON inside the protocol stream.
 
 ### 3. JSON-RPC envelope, independent of framing
 
@@ -100,8 +106,8 @@ Cons:
   deterministic.
 
 Recommendation: if Decoy wants a familiar RPC envelope, use a small JSON-RPC-compatible subset:
-single in-flight request per plugin process at first, request ids required, no batches, no stdout log
-notifications, and Decoy-specific error `data` fields.
+single in-flight request per long-running worker at first, request ids required, no batches, no
+stdout log notifications, and Decoy-specific error `data` fields.
 
 ## Log separation
 
@@ -165,20 +171,20 @@ the plugin returns base64 wire bytes.
 Timeouts are host policy, not something stdio or JSON-RPC solves. Decoy should specify at least four
 separate budgets before implementation:
 
-1. Spawn/init timeout: how long a plugin may take to start and advertise readiness.
+1. Startup/readiness timeout: how long a managed worker may take to start and advertise readiness.
 2. Per-request decode timeout.
 3. Per-request encode timeout.
-4. Shutdown timeout before force-kill.
+4. Shutdown timeout before force-kill or unload.
 
 Recommendations:
 
-- Defaults should be conservative and fail-closed; a stuck codec must not hang the runtime.
+- Defaults should be conservative and fail-closed; a stuck codec-stage worker must not hang the runtime.
 - Timeouts should produce Decoy diagnostics that name plugin id, operation, route/message context,
   elapsed time, configured budget, and a bounded stderr tail.
-- The first implementation should avoid concurrent requests to one plugin process unless a prototype
-  proves request multiplexing is safe and useful.
-- After a timeout, treat the plugin process as tainted. Drain/restart it rather than attempting to
-  reuse a stream whose next frame may belong to the timed-out request.
+- The first implementation should avoid concurrent requests to one worker unless a prototype proves
+  request multiplexing is safe and useful.
+- After a timeout, treat a long-running external worker as tainted. Drain/restart it rather than
+  attempting to reuse a stream whose next frame may belong to the timed-out request.
 - Allow manifest/config overrides later, but keep a hard maximum to prevent accidental infinite waits.
 
 ## Error-shape considerations
@@ -187,8 +193,8 @@ There are two layers of errors:
 
 1. Transport/protocol errors detected by the host: spawn failed, invalid stdout frame, malformed JSON,
    unknown response id, EOF, stderr flood, timeout, oversized frame.
-2. Codec errors returned by the plugin: cannot decode bytes, unsupported schema, cannot encode logical
-   message, invalid plugin configuration.
+2. Codec-stage errors returned by the plugin: cannot decode bytes, unsupported schema, cannot encode
+   logical message, invalid plugin configuration.
 
 A useful error shape should be stable, small, and diagnostic:
 
@@ -215,9 +221,9 @@ failure modes.
 Later implementation tickets should include:
 
 - A trace mode that records host/plugin frames with base64 payloads redacted or size-limited.
-- A way to replay captured frames against a plugin executable without running the full Decoy runtime.
+- A way to replay captured frames against a plugin worker without running the full Decoy runtime.
 - Bounded stderr capture attached to failures.
-- Clear distinction between "plugin returned a codec error" and "host/plugin protocol broke".
+- Clear distinction between "plugin returned a codec-stage error" and "host/plugin protocol broke".
 - Max-frame-size and max-stderr-size diagnostics.
 - Tests with deliberately noisy stderr to prove logs do not corrupt stdout parsing.
 
@@ -225,7 +231,7 @@ Later implementation tickets should include:
 
 1. Newline framing vs `Content-Length` framing under realistic codec payload sizes, including invalid
    stdout bytes, truncated frames, oversized frames, and human-readable traces.
-2. Single in-flight request per process vs multiplexed request ids, especially how timeout recovery
+2. Single in-flight request per worker vs multiplexed request ids, especially how timeout recovery
    works without stream desynchronization.
 3. Base64 byte payload overhead for the target WebSocket msgpack/protobuf use case.
 4. Restart/disable policy after timeout, EOF, or invalid stdout.
@@ -233,25 +239,30 @@ Later implementation tickets should include:
    fail-closed diagnostics.
 6. Stderr capture behavior: multiline logs, high-volume logs, logs emitted during a hung request, and
    redaction/truncation.
-7. A tiny throwaway host plus two plugins: one well-behaved and one intentionally corrupt/noisy, so
-   tests prove protocol safety before real plugin work begins.
+7. A tiny throwaway host plus two long-running workers: one well-behaved and one intentionally
+   corrupt/noisy, so tests prove protocol safety before real plugin work begins.
 
 ## Recommendation for the next design step
 
-Prefer newline-delimited compact JSON for the first throwaway prototype because it is easiest to
+If Decoy prototypes an external codec-stage worker, make it long-running and Decoy-managed under
+`decoy serve`; users should not manually start worker processes for normal use. Prefer
+newline-delimited compact JSON for the first throwaway stdio prototype because it is easiest to
 inspect and matches MCP's strict stdio/log separation rules. Keep the envelope JSON-RPC-compatible
 for request ids and errors, but explicitly defer batches, notifications, and request multiplexing.
 
 If the prototype shows large-line or formatting pain, switch to LSP/DAP-style `Content-Length`
-framing before freezing the plugin protocol.
+framing before freezing the stdio protocol. If external workers prove awkward compared with
+in-process or WASM hosting, treat this note as external-hosting evidence rather than a commitment to
+make every plugin pipeline stage a separate process.
 
 ## Sources and local evidence
 
-- Issue #138, "Design codec plugin seam": codec plugin posture, target use case, and non-goals.
+- Issue #138, "Design codec plugin seam": original codec-stage posture, target use case, and non-goals.
 - Issue #155, "Spec: Codec plugin seam wayfinder": decision-map scope, no implementation tickets yet,
   and JSON-over-stdio/error/log/timeout topics.
 - Issue #164, "Research JSON-over-stdio protocol constraints": acceptance criteria for this note.
-- `CONTEXT.md`: normative definitions for Plugin and Codec plugin.
+- `CONTEXT.md`: normative definitions for Plugin, Plugin pipeline seam, Codec stage, and Message
+  transform stage.
 - `docs/design/next-direction.md`: plugin roadmap posture and Herdr-style external command interest.
 - `docs/adr/0001-rust-runtime-and-semantic-model.md`: Rust runtime direction and plugin/WebSocket
   roadmap boundary.
