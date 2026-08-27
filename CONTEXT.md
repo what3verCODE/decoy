@@ -131,7 +131,19 @@ or protocol support. Decoy is a mock tool with plugins for advanced cases, not a
 first.
 _Avoid_: using plugins to redefine core matching/session semantics before those semantics are stable.
 
-**Codec plugin**:
-The first likely plugin seam: convert wire bytes to logical messages and logical messages back to
+**Plugin pipeline seam**:
+The future extension seam where ordered plugin stages may adapt transport data before or after Decoy's
+core matching and behavior semantics. Codec stages are the first likely stage, but not the whole
+plugin model.
+_Avoid_: treating every plugin concern as a codec concern, or using plugins to bypass
+Route/Case/Behavior semantics.
+
+**Codec stage**:
+A plugin pipeline stage that converts wire bytes to logical messages and logical messages back to
 wire bytes, especially for WebSocket/gRPC/custom protocol envelopes.
-_Avoid_: putting protocol plumbing into every Route YAML.
+_Avoid_: putting protocol plumbing into every Route YAML, or using "codec" for logical message transforms.
+
+**Message transform stage**:
+A plugin pipeline stage that receives a logical message/envelope and returns a modified logical
+message/envelope without owning the wire-byte encoding.
+_Avoid_: using transforms to redefine core matching/session semantics before those semantics are stable.
